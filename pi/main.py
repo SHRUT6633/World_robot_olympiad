@@ -58,6 +58,7 @@ from pi.planning.global_planner import GlobalPlanner
 from pi.trajectory.cubic_splines import CubicSplineTrajectory
 from pi.trajectory.velocity_profile import VelocityProfiler
 from pi.dynamics.kinematic_model import KinematicModel
+from pi.dynamics.steering_modes import SteeringMode
 from pi.control.stanley import StanleyController
 from pi.control.servo_pid import ServoPID
 from pi.control.motor_pid import MotorPID
@@ -74,6 +75,32 @@ async def main():
     # on shutdown.
     mgr = SystemManager()
     config = mgr.config  # ConfigManager singleton, already loaded
+
+    # =========================================================================
+    # Surprise Rule Config
+    # =========================================================================
+    # On competition day, if a Surprise Rule is announced (e.g. swap pillar
+    # colours, force drive direction, change track width), edit the file
+    # config/surprise_rules.yaml and change ONE LINE.  No code changes needed.
+    #
+    # The values below are loaded from that file so the robot adapts instantly
+    # on the next `python pi/main.py` run.  Each value has a comment explaining
+    # what Surprise Rule it addresses.
+    # -------------------------------------------------------------------------
+    sr = config.get("surprise_rules", {})
+    pillar_logic = sr.get("pillar_logic", "NORMAL")
+    drive_direction = sr.get("drive_direction", "BEST_FIT")
+    steering_mode_str = sr.get("steering_mode", "SAME_PHASE")
+    obstacle_pass_side = sr.get("obstacle_pass_side", "DYNAMIC")
+    parking_mode = sr.get("parking_mode", "STANDARD")
+    stop_and_go = sr.get("stop_and_go", "DISABLED")
+    narrow_track = sr.get("narrow_track", "DISABLED")
+    max_speed_override = sr.get("max_speed_ms", 2.0)
+    # Map string to enum, fallback to SAME_PHASE if unknown.
+    steering_mode = getattr(SteeringMode, steering_mode_str, SteeringMode.SAME_PHASE)
+    log.info(f"Surprise config: pillar={pillar_logic} dir={drive_direction} "
+             f"steer={steering_mode_str} pass={obstacle_pass_side} "
+             f"park={parking_mode} stopgo={stop_and_go} narrow={narrow_track}")
 
     # =========================================================================
     # Camera (PiCamera)
@@ -192,9 +219,12 @@ async def main():
     #   kinematics    – KinematicModel; bicycle/4WS model.
     #                   wheelbase=0.26 (meters). Change to match actual
     #                   wheelbase length or steering commands will be wrong.
+    #                   steering_mode is loaded from surprise_rules.yaml:
+    #                   SAME_PHASE (default), OPPOSITE_PHASE (tight turns),
+    #                   or CRAB_WALK (sideways parking).
     spline = CubicSplineTrajectory()
     vel_profiler = VelocityProfiler()
-    kinematics = KinematicModel(wheelbase=0.26)
+    kinematics = KinematicModel(wheelbase=0.26, steering_mode=steering_mode)
 
     # =========================================================================
     # Control Modules

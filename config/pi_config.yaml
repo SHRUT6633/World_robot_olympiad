@@ -84,6 +84,18 @@ dynamics:
   max_speed_ms: 2.0
   servo_gear_ratio: 1.0
 
+surprise_rules:
+  config_file: "config/surprise_rules.yaml"
+  pillar_logic: "NORMAL"
+  drive_direction: "BEST_FIT"
+  steering_mode: "SAME_PHASE"
+  obstacle_pass_side: "DYNAMIC"
+  parking_mode: "STANDARD"
+  stop_and_go: "DISABLED"
+  stop_duration_s: 3.0
+  narrow_track: "DISABLED"
+  max_speed_ms: 2.0
+
 hardware:
   leds:
     green_pin: 23

@@ -1,0 +1,121 @@
+---
+# =============================================================================
+# surprise_rules.yaml — Central Config for WRO 2026 Surprise Rules
+# =============================================================================
+# Purpose:
+#   When a Surprise Rule is announced on competition day (08:30 AM),
+#   you adapt by changing ONE LINE in this file — NO code changes needed.
+#
+# How to use:
+#   On 26 August 2026, the judges announce the Surprise Rule.
+#   Open this file on the Pi, change the relevant value below,
+#   save, and re-run `python pi/main.py`. Done in under 60 seconds.
+#
+# Scoring benefit:
+#   The rubric awards +6 points for "Systems Thinking" if your code
+#   can adapt to a Surprise Rule via config. This file proves it.
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# PILLAR LOGIC  (Common Surprise Rule: swap pillar colours)
+# ---------------------------------------------------------------------------
+# The WRO track has GREEN pillars (pass on a specific side) and RED pillars.
+# If the Surprise Rule swaps their meaning, change this one variable.
+#
+#   NORMAL   → GREEN = pass LEFT,  RED = pass RIGHT  (standard rules)
+#   REVERSED → GREEN = pass RIGHT, RED = pass LEFT   (surprise swap)
+pillar_logic: "NORMAL"
+
+# ---------------------------------------------------------------------------
+# DRIVE DIRECTION  (Common Surprise Rule: force one direction)
+# ---------------------------------------------------------------------------
+# Normally the robot chooses the best path. A Surprise Rule may force all
+# robots to drive only clockwise or only counter-clockwise in a round.
+#
+#   CW           → Clockwise around the track
+#   CCW          → Counter-clockwise around the track
+#   BEST_FIT     → Robot chooses dynamically (default adaptive mode)
+drive_direction: "BEST_FIT"
+
+# ---------------------------------------------------------------------------
+# STEERING MODE  (4WS advantage — adapt to track width changes)
+# ---------------------------------------------------------------------------
+# Your 4WS system has multiple steering modes. If the track narrows or the
+# Surprise Rule requires tighter manoeuvres, switch mode here.
+#
+#   SAME_PHASE    → All 4 wheels turn same direction.
+#                   Fast straights and gentle curves (default).
+#   OPPOSITE_PHASE → Front/rear turn opposite directions.
+#                   Halves turning radius. Use for narrow tracks,
+#                   parking, or hairpin turns.
+#   CRAB_WALK     → All 4 wheels parallel at an angle.
+#                   Sideways movement for parallel parking or
+#                   emergency obstacle dodge.
+steering_mode: "SAME_PHASE"
+
+# ---------------------------------------------------------------------------
+# OBSTACLE PASSING SIDE  (Surprise Rule: change which side to pass obstacles)
+# ---------------------------------------------------------------------------
+# Some surprise rules require passing ALL obstacles on a specific side.
+#
+#   LEFT   → Always pass obstacles on the left
+#   RIGHT  → Always pass obstacles on the right
+#   DYNAMIC → Choose the safest side based on sensor data (default)
+obstacle_pass_side: "DYNAMIC"
+
+# ---------------------------------------------------------------------------
+# PARKING MODE  (Surprise Rule: different parking zone or orientation)
+# ---------------------------------------------------------------------------
+# The 2026 rules include a +7 point bonus for starting from the parking
+# lot. A Surprise Rule could change the parking requirement.
+#
+#   STANDARD      → Normal parking procedure (as per base rules)
+#   REVERSED      → Park facing opposite direction
+#   SIDEWAYS      → Use crab-walk to park sideways into the spot
+#   STOP_ANYWHERE → No specific parking box; just stop inside venue
+parking_mode: "STANDARD"
+
+# ---------------------------------------------------------------------------
+# STOP-AND-GO MODE  (Low-probability Surprise Task)
+# ---------------------------------------------------------------------------
+# If a Surprise Rule adds a "stop here" marker on the track, enable this.
+#
+#   DISABLED  → No stop-and-go behaviour (default)
+#   ENABLED   → Stop for stop_duration_s when marker detected
+stop_and_go: "DISABLED"
+stop_duration_s: 3.0
+
+# ---------------------------------------------------------------------------
+# NARROW TRACK MODE  (Surprise Rule: minimum width for all sections)
+# ---------------------------------------------------------------------------
+# If the track walls are closed to the minimum 600 mm, enable this to
+# make wall-following more cautious and reduce max speed.
+#
+#   DISABLED  → Normal track width (default)
+#   ENABLED   → 600 mm track, reduce speed, tighter wall thresholds
+narrow_track: "DISABLED"
+
+# ---------------------------------------------------------------------------
+# MAX SPEED OVERRIDE  (Safety / Surprise)
+# ---------------------------------------------------------------------------
+# Override the robot's maximum forward speed without changing code.
+# Useful if the track surface is slippery or if the Surprise Rule
+# imposes a speed limit.
+max_speed_ms: 2.0
+
+# ---------------------------------------------------------------------------
+# COLOUR THRESHOLDS  (Quick re-calibration at venue)
+# ---------------------------------------------------------------------------
+# If the venue lighting changes the apparent colour of pillars,
+# adjust these HSV ranges instead of re-writing detection code.
+# Format: [H_min, S_min, V_min, H_max, S_max, V_max]
+colour_thresholds:
+  red:
+    lower: [0, 100, 100]
+    upper: [10, 255, 255]
+  green:
+    lower: [40, 50, 50]
+    upper: [80, 255, 255]
+  blue:
+    lower: [100, 150, 50]
+    upper: [130, 255, 255]

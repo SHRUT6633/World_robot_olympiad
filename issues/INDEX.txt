@@ -7,3 +7,4 @@ during development. Format: 001-description.txt
 001-logger-init.txt  -- Logger.info() fails because .init() never called
 002-ctrl-c-not-stopping.txt -- Ctrl+C does nothing because callbacks block scheduler
 003-i2c-sensor-spam.txt -- I2C sensor errors flood console at 600 lines/sec
+004-surprise-rule-flexibility.txt -- Surprise Rule config-driven adaptation

@@ -6,10 +6,19 @@
 /* Tag used for ESP_LOG* messages to identify this module. */
 static const char *TAG = "L298N";
 
-/* Pin assignments for the L298N motor driver.
+/* Pin assignments for the L298N motor driver (SINGLE MOTOR configuration).
+ *
+ * All four wheels are driven by ONE motor via a chain/gear drivetrain.
+ * There is NO second motor — this is a single-channel L298N setup.
+ *
  * ENA (GPIO 11) : PWM enable pin – duty cycle controls motor speed.
  * IN1 (GPIO 8)  : Direction input A.
  * IN2 (GPIO 9)  : Direction input B.
+ *
+ * WRO Rule 11.3 compliance:
+ *   - Exactly one steering actuator (one servo for all 4 wheels via linkage).
+ *   - Exactly one drive motor (single L298N channel for all 4 wheels).
+ *   - No electronic differential (Rule 11.5) — mechanical AWD only.
  *
  * Changing these pins requires updating the board wiring and the
  * GPIO_OUTPUT_PIN_SEL mask below.

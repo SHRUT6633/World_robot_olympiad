@@ -1,0 +1,34 @@
+import numpy as np
+from enum import Enum
+
+
+class SteeringMode(Enum):
+    SAME_PHASE = "SAME_PHASE"
+    OPPOSITE_PHASE = "OPPOSITE_PHASE"
+    CRAB_WALK = "CRAB_WALK"
+
+
+def compute_4ws_angles(steering_input_rad, mode: SteeringMode, max_steering_rad=np.radians(30)):
+    if mode == SteeringMode.SAME_PHASE:
+        front = np.clip(steering_input_rad, -max_steering_rad, max_steering_rad)
+        rear = front
+    elif mode == SteeringMode.OPPOSITE_PHASE:
+        clipped = np.clip(steering_input_rad, -max_steering_rad, max_steering_rad)
+        front = clipped
+        rear = -clipped
+    elif mode == SteeringMode.CRAB_WALK:
+        clipped = np.clip(steering_input_rad, -max_steering_rad, max_steering_rad)
+        front = clipped
+        rear = clipped
+    else:
+        front = 0.0
+        rear = 0.0
+    turning_radius = _turning_radius(front, rear, wheelbase=0.26)
+    return front, rear, turning_radius
+
+
+def _turning_radius(front_angle_rad, rear_angle_rad, wheelbase=0.26):
+    diff = front_angle_rad - rear_angle_rad
+    if abs(diff) < 1e-6:
+        return float("inf")
+    return wheelbase / abs(np.tan(front_angle_rad) - np.tan(rear_angle_rad))
