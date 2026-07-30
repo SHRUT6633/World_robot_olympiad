@@ -1,0 +1,35 @@
+---
+system:
+  name: "WRO_4WS_ESP32"
+  version: "1.0.0"
+  watchdog_timeout_ms: 1000
+  failsafe_timeout_ms: 500
+
+uart:
+  port: "UART_NUM_1"
+  baudrate: 115200
+  rx_buffer_size: 256
+  tx_buffer_size: 128
+  data_bits: 8
+  stop_bits: 1
+  parity: false
+
+packet:
+  header: 0xA5
+  footer: 0x5A
+  max_length: 32
+  crc_poly: 0x8005
+
+pwm:
+  servo:
+    pin: 13
+    freq: 50
+    resolution: 12
+    min_pulse_us: 500
+    max_pulse_us: 2500
+    center_ns: 1500000
+
+l298n:
+  ena: 11
+  in1: 8
+  in2: 9

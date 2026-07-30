@@ -1,0 +1,21 @@
+menu "WRO 4WS Configuration"
+
+    config WRO_UART_BAUD
+        int "UART Baud Rate"
+        default 115200
+        range 9600 921600
+
+    config WRO_SERVO_PIN
+        int "Servo PWM GPIO"
+        default 13
+
+    config WRO_MOTOR_PWM_PIN
+        int "Motor PWM GPIO"
+        default 11
+
+    config WRO_WATCHDOG_TIMEOUT_MS
+        int "Watchdog Timeout (ms)"
+        default 3000
+        range 500 10000
+
+endmenu

@@ -1,0 +1,11 @@
+#!/bin/bash
+# Place this in /etc/rc.local on Raspberry Pi
+# WRO 4WS - Auto-start on boot with self-test
+
+# Wait for system ready
+sleep 5
+
+# Run as pi user
+su - pi -c "cd /home/pi/WRO_1 && python3 run_all.py --mode boot >> /home/pi/wro_boot.log 2>&1" &
+
+exit 0

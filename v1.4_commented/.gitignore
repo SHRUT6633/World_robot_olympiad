@@ -1,0 +1,9 @@
+esp/build/
+.vscode/
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+logs/
+esp/sdkconfig.old

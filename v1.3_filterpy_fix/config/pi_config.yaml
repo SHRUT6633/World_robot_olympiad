@@ -1,0 +1,97 @@
+---
+system:
+  name: "WRO_4WS_Pi"
+  version: "1.0.0"
+  log_level: "INFO"
+  loop_hz: 100
+  watchdog_timeout_s: 2
+
+sensors:
+  camera:
+    device: 0
+    width: 640
+    height: 480
+    fps: 60
+    auto_exposure: true
+    white_balance: true
+  vl53l0x_left:
+    enabled: true
+    i2c_bus: 1
+    address: 0x30
+    xshut_pin: 17
+    range_mm: 1200
+    timing_budget_ms: 20
+  vl53l0x_right:
+    enabled: true
+    i2c_bus: 1
+    address: 0x31
+    xshut_pin: 27
+    range_mm: 1200
+    timing_budget_ms: 20
+  vl53l1x_front:
+    enabled: true
+    i2c_bus: 1
+    address: 0x32
+    xshut_pin: 22
+    range_mm: 4000
+    timing_budget_ms: 20
+  mpu6050:
+    enabled: true
+    i2c_bus: 1
+    address: 0x68
+    accel_range: 4
+    gyro_range: 500
+    filter_bandwidth: 94
+  qmc5883l:
+    enabled: true
+    i2c_bus: 1
+    address: 0x0D
+    oversampling: 8
+    output_rate: 100
+
+fusion:
+  type: "ukf"
+  dt: 0.01
+  process_noise: 1e-3
+  measurement_noise: 1e-1
+
+control:
+  loop_hz: 100
+  type: "stanley"
+  stanley:
+    k: 0.5
+    k_soft: 1.0
+    max_steering_deg: 30
+  pid:
+    servo_kp: 0.8
+    servo_ki: 0.05
+    servo_kd: 0.02
+    motor_kp: 0.5
+    motor_ki: 0.1
+    motor_kd: 0.01
+
+comm:
+  uart_port: "/dev/serial0"
+  baudrate: 115200
+  packet_rate_hz: 150
+  crc_poly: 0x8005
+  timeout_ms: 50
+
+dynamics:
+  wheelbase_m: 0.26
+  track_width_m: 0.18
+  max_steering_deg: 30
+  max_speed_ms: 2.0
+  servo_gear_ratio: 1.0
+
+hardware:
+  leds:
+    green_pin: 23
+    red_pin: 24
+    blue_pin: 0
+  switch:
+    pin: 25
+    pull_up: true
+  esp_led:
+    green_pin: 2
+    red_pin: 4
