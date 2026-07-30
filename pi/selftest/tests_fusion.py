@@ -3,7 +3,19 @@ from .runner import SelfTestRunner, TestResult
 
 
 def register_fusion_tests(runner: SelfTestRunner, ukf, comp_filter):
+    # Register three sensor-fusion self-tests:
+    #   1. ukf_predict        -- run one UKF prediction step, check state dim.
+    #   2. ukf_update         -- run one UKF update with a synthetic measurement.
+    #   3. comp_filter        -- run one complementary filter update with
+    #                            synthetic accelerometer/gyro data.
+    #
+    # ukf          -- instance of pi.fusion.ukf.UnscentedKalmanFilter.
+    # comp_filter  -- instance of pi.fusion.complementary.ComplementaryFilter.
+
     def test_ukf_predict():
+        # Test: execute a single UKF prediction step.
+        # The state vector should have exactly 6 elements:
+        #   [x, y, heading, vx, vy, omega].
         if ukf is None:
             return TestResult("ukf_predict").skipped("UKF disabled")
         ukf.predict()
@@ -15,6 +27,8 @@ def register_fusion_tests(runner: SelfTestRunner, ukf, comp_filter):
         )
 
     def test_ukf_update():
+        # Test: execute a UKF update with a synthetic measurement.
+        # z = [x, y, heading, vx, vy, omega] all near zero.
         if ukf is None:
             return TestResult("ukf_update").skipped("UKF disabled")
         z = np.array([0.1, 0.2, 0.05, 0.5, 0.0, 0.0])
@@ -25,6 +39,10 @@ def register_fusion_tests(runner: SelfTestRunner, ukf, comp_filter):
         )
 
     def test_complementary():
+        # Test the complementary filter with a stationary-like input:
+        #   accel = (0, 0, 9.81) -- gravity only, no linear acceleration.
+        #   gyro  = (0.01, 0.02, 0.005) -- very slow rotation.
+        # The estimated pitch/roll should be near zero (within 0.5 rad).
         if comp_filter is None:
             return TestResult("comp_filter").skipped("Complementary filter disabled")
         accel = np.array([0.0, 0.0, 9.81])

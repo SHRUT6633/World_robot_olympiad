@@ -1,0 +1,437 @@
+{
+  "type": "excalidraw",
+  "version": 2,
+  "source": "https://excalidraw.com",
+  "elements": [
+    {
+      "id": "title-main",
+      "type": "text",
+      "x": 1750,
+      "y": -100,
+      "width": 900,
+      "height": 60,
+      "text": "WRO Future Engineers 4WS Robot — Complete Architecture & Execution Flow",
+      "fontSize": 36,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100
+    },
+    {
+      "id": "legend-title",
+      "type": "text",
+      "x": 1750,
+      "y": 0,
+      "width": 400,
+      "height": 30,
+      "text": "LEGEND",
+      "fontSize": 20,
+      "fontFamily": 1,
+      "textAlign": "left",
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100
+    },
+    {
+      "id": "legend-box-file",
+      "type": "rectangle",
+      "x": 1750,
+      "y": 35,
+      "width": 180,
+      "height": 40,
+      "strokeColor": "#1971c2",
+      "backgroundColor": "#e7f5ff",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "roundness": null
+    },
+    {
+      "id": "legend-text-file",
+      "type": "text",
+      "x": 1780,
+      "y": 43,
+      "width": 130,
+      "height": 25,
+      "text": "Python File",
+      "fontSize": 16,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "strokeColor": "#1971c2",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100
+    },
+    {
+      "id": "legend-box-c",
+      "type": "rectangle",
+      "x": 1950,
+      "y": 35,
+      "width": 180,
+      "height": 40,
+      "strokeColor": "#e67700",
+      "backgroundColor": "#fff3e0",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "roundness": null
+    },
+    {
+      "id": "legend-text-c",
+      "type": "text",
+      "x": 1980,
+      "y": 43,
+      "width": 130,
+      "height": 25,
+      "text": "C / ESP-IDF",
+      "fontSize": 16,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "strokeColor": "#e67700",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100
+    },
+    {
+      "id": "legend-box-config",
+      "type": "rectangle",
+      "x": 1750,
+      "y": 80,
+      "width": 180,
+      "height": 40,
+      "strokeColor": "#2f9e44",
+      "backgroundColor": "#ebfbee",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "roundness": null
+    },
+    {
+      "id": "legend-text-config",
+      "type": "text",
+      "x": 1780,
+      "y": 88,
+      "width": 130,
+      "height": 25,
+      "text": "Config YAML",
+      "fontSize": 16,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "strokeColor": "#2f9e44",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100
+    },
+    {
+      "id": "legend-box-pkg",
+      "type": "rectangle",
+      "x": 1950,
+      "y": 80,
+      "width": 180,
+      "height": 40,
+      "strokeColor": "#7950f2",
+      "backgroundColor": "#f3f0ff",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "roundness": {
+        "type": 3,
+        "value": 8
+      }
+    },
+    {
+      "id": "legend-text-pkg",
+      "type": "text",
+      "x": 1980,
+      "y": 88,
+      "width": 130,
+      "height": 25,
+      "text": "Package / Library",
+      "fontSize": 16,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "strokeColor": "#7950f2",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100
+    },
+    {
+      "id": "section-pi-label",
+      "type": "text",
+      "x": 950,
+      "y": 120,
+      "width": 300,
+      "height": 35,
+      "text": "▲  RASPBERRY PI 4B — HIGH-LEVEL (Python 3.11)  ▲",
+      "fontSize": 22,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "strokeColor": "#1971c2",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100
+    },
+    {
+      "id": "section-pi-bg",
+      "type": "rectangle",
+      "x": 0,
+      "y": 150,
+      "width": 1650,
+      "height": 1680,
+      "strokeColor": "#1971c2",
+      "backgroundColor": "#e7f5ff",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 20,
+      "roundness": {
+        "type": 3,
+        "value": 8
+      }
+    },
+    {
+      "id": "section-esp-label",
+      "type": "text",
+      "x": 980,
+      "y": 1880,
+      "width": 300,
+      "height": 35,
+      "text": "▼  ESP32-S3 — LOW-LEVEL (C / FreeRTOS)  ▼",
+      "fontSize": 22,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "strokeColor": "#e67700",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100
+    },
+    {
+      "id": "section-esp-bg",
+      "type": "rectangle",
+      "x": 0,
+      "y": 1920,
+      "width": 1650,
+      "height": 780,
+      "strokeColor": "#e67700",
+      "backgroundColor": "#fff3e0",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 20,
+      "roundness": {
+        "type": 3,
+        "value": 8
+      }
+    },
+
+    { "id": "box-runall", "type": "rectangle", "x": 50, "y": 180, "width": 200, "height": 65, "strokeColor": "#1971c2", "backgroundColor": "#e7f5ff", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100 },
+    { "id": "txt-runall", "type": "text", "x": 60, "y": 190, "width": 180, "height": 45, "text": "run_all.py\nTOP-LEVEL LAUNCHER\n--mode boot (default)", "fontSize": 13, "fontFamily": 1, "textAlign": "center", "strokeColor": "#1971c2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "box-config", "type": "rectangle", "x": 50, "y": 280, "width": 200, "height": 65, "strokeColor": "#2f9e44", "backgroundColor": "#ebfbee", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100, "roundness": null },
+    { "id": "txt-config", "type": "text", "x": 60, "y": 290, "width": 180, "height": 45, "text": "config/pi_config.yaml\nConfigManager.load()\nYAML params", "fontSize": 13, "fontFamily": 1, "textAlign": "center", "strokeColor": "#2f9e44", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "box-reqs", "type": "rectangle", "x": 50, "y": 380, "width": 200, "height": 80, "strokeColor": "#7950f2", "backgroundColor": "#f3f0ff", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100, "roundness": { "type": 3, "value": 8 } },
+    { "id": "txt-reqs", "type": "text", "x": 60, "y": 390, "width": 180, "height": 60, "text": "requirements.txt\nnumpy | scipy | opencv-python\nPyYAML | pyserial | smbus2\nfilterpy | numba | psutil", "fontSize": 11, "fontFamily": 1, "textAlign": "center", "strokeColor": "#7950f2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "box-bootpy", "type": "rectangle", "x": 320, "y": 180, "width": 220, "height": 65, "strokeColor": "#1971c2", "backgroundColor": "#e7f5ff", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100 },
+    { "id": "txt-bootpy", "type": "text", "x": 330, "y": 190, "width": 200, "height": 45, "text": "pi/boot.py :: boot_sequence()\nBOOT ENTRY POINT\nSelf-test → LED → Switch", "fontSize": 13, "fontFamily": 1, "textAlign": "center", "strokeColor": "#1971c2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "box-mainpy", "type": "rectangle", "x": 620, "y": 180, "width": 220, "height": 65, "strokeColor": "#1971c2", "backgroundColor": "#e7f5ff", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100 },
+    { "id": "txt-mainpy", "type": "text", "x": 630, "y": 190, "width": 200, "height": 45, "text": "pi/main.py :: main()\nMAIN RACE LOGIC\nSystemManager + 7 tasks", "fontSize": 13, "fontFamily": 1, "textAlign": "center", "strokeColor": "#1971c2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "arrow-runall-boot", "type": "arrow", "x": 150, "y": 245, "width": 170, "height": 0, "strokeColor": "#1971c2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100, "points": [[0,0],[170,0]], "lastCommittedPoint": null, "startBinding": { "elementId": "box-runall", "focus": 0, "gap": 1 }, "endBinding": { "elementId": "box-bootpy", "focus": 0, "gap": 1 } },
+
+    { "id": "arrow-boot-main", "type": "arrow", "x": 540, "y": 215, "width": 80, "height": 0, "strokeColor": "#1971c2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100, "points": [[0,0],[80,0]], "lastCommittedPoint": null, "startBinding": { "elementId": "box-bootpy", "focus": 0, "gap": 1 }, "endBinding": { "elementId": "box-mainpy", "focus": 0, "gap": 1 } },
+
+    { "id": "text-flow-top", "type": "text", "x": 150, "y": 255, "width": 170, "height": 20, "text": "check_dependencies() → Logger →", "fontSize": 11, "fontFamily": 1, "textAlign": "center", "strokeColor": "#868e96", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 80 },
+
+    { "id": "arrow-config", "type": "arrow", "x": 150, "y": 310, "width": 0, "height": 70, "strokeColor": "#2f9e44", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 80, "points": [[0,0],[0,70]], "lastCommittedPoint": null, "dashness": { "type": 2, "strength": 8 }, "startBinding": null, "endBinding": null },
+
+    { "id": "text-checkdeps", "type": "text", "x": 50, "y": 470, "width": 200, "height": 20, "text": "check_dependencies() verifies:", "fontSize": 11, "fontFamily": 1, "textAlign": "center", "strokeColor": "#868e96", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 80 },
+
+    { "id": "box-selftest-runner", "type": "rectangle", "x": 320, "y": 280, "width": 220, "height": 45, "strokeColor": "#1971c2", "backgroundColor": "#e7f5ff", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100 },
+    { "id": "txt-selftest-runner", "type": "text", "x": 330, "y": 290, "width": 200, "height": 25, "text": "pi/selftest/runner.py\nSelfTestRunner.run_all()", "fontSize": 11, "fontFamily": 1, "textAlign": "center", "strokeColor": "#1971c2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "arrow-boot-selftest", "type": "arrow", "x": 430, "y": 245, "width": 0, "height": 35, "strokeColor": "#1971c2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 80, "points": [[0,0],[0,35]], "dashness": { "type": 2, "strength": 8 } },
+
+    { "id": "box-self-camera", "type": "rectangle", "x": 50, "y": 520, "width": 160, "height": 50, "strokeColor": "#1971c2", "backgroundColor": "#e7f5ff", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+    { "id": "txt-self-camera", "type": "text", "x": 60, "y": 530, "width": 140, "height": 25, "text": "tests_camera.py\nPiCamera init/capture", "fontSize": 11, "fontFamily": 1, "textAlign": "center", "strokeColor": "#1971c2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "box-self-tof", "type": "rectangle", "x": 230, "y": 520, "width": 160, "height": 50, "strokeColor": "#1971c2", "backgroundColor": "#e7f5ff", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+    { "id": "txt-self-tof", "type": "text", "x": 240, "y": 530, "width": 140, "height": 25, "text": "tests_tof.py\nVL53L0X/L1X range", "fontSize": 11, "fontFamily": 1, "textAlign": "center", "strokeColor": "#1971c2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "box-self-imu", "type": "rectangle", "x": 410, "y": 520, "width": 160, "height": 50, "strokeColor": "#1971c2", "backgroundColor": "#e7f5ff", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+    { "id": "txt-self-imu", "type": "text", "x": 420, "y": 530, "width": 140, "height": 25, "text": "tests_imu.py\nMPU6050 init/read", "fontSize": 11, "fontFamily": 1, "textAlign": "center", "strokeColor": "#1971c2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "box-self-mag", "type": "rectangle", "x": 590, "y": 520, "width": 160, "height": 50, "strokeColor": "#1971c2", "backgroundColor": "#e7f5ff", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+    { "id": "txt-self-mag", "type": "text", "x": 600, "y": 530, "width": 140, "height": 25, "text": "tests_mag.py\nQMC5883L init/cal", "fontSize": 11, "fontFamily": 1, "textAlign": "center", "strokeColor": "#1971c2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "box-self-fusion", "type": "rectangle", "x": 770, "y": 520, "width": 160, "height": 50, "strokeColor": "#1971c2", "backgroundColor": "#e7f5ff", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+    { "id": "txt-self-fusion", "type": "text", "x": 780, "y": 530, "width": 140, "height": 25, "text": "tests_fusion.py\nUKF + comp filter", "fontSize": 11, "fontFamily": 1, "textAlign": "center", "strokeColor": "#1971c2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "box-self-control", "type": "rectangle", "x": 950, "y": 520, "width": 160, "height": 50, "strokeColor": "#1971c2", "backgroundColor": "#e7f5ff", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+    { "id": "txt-self-control", "type": "text", "x": 960, "y": 530, "width": 140, "height": 25, "text": "tests_control.py\nStanley + PID + kin", "fontSize": 11, "fontFamily": 1, "textAlign": "center", "strokeColor": "#1971c2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "box-self-comm", "type": "rectangle", "x": 1130, "y": 520, "width": 160, "height": 50, "strokeColor": "#1971c2", "backgroundColor": "#e7f5ff", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+    { "id": "txt-self-comm", "type": "text", "x": 1140, "y": 530, "width": 140, "height": 25, "text": "tests_comm.py\nUART + CRC + heartbeat", "fontSize": 11, "fontFamily": 1, "textAlign": "center", "strokeColor": "#1971c2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "arrow-selftest-spread", "type": "arrow", "x": 430, "y": 325, "width": 0, "height": 195, "strokeColor": "#1971c2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 60, "points": [[0,0],[0,195]] },
+
+    { "id": "line-self1", "type": "line", "x": 130, "y": 520, "width": 300, "height": 0, "strokeColor": "#1971c2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 60, "points": [[0,0],[300,0]] },
+
+    { "id": "box-led-switch", "type": "rectangle", "x": 320, "y": 610, "width": 220, "height": 55, "strokeColor": "#1971c2", "backgroundColor": "#e7f5ff", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100 },
+    { "id": "txt-led-switch", "type": "text", "x": 330, "y": 615, "width": 200, "height": 40, "text": "StatusLED (GPIO23,24)\n→ Green ON steady\nStartSwitch (GPIO25) wait", "fontSize": 11, "fontFamily": 1, "textAlign": "center", "strokeColor": "#1971c2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "arrow-post-self", "type": "arrow", "x": 430, "y": 570, "width": 0, "height": 40, "strokeColor": "#1971c2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100, "points": [[0,0],[0,40]] },
+
+    { "id": "text-post-self", "type": "text", "x": 660, "y": 585, "width": 250, "height": 20, "text": "ALL PASSED → Green LED blinks 3× → steady ON", "fontSize": 11, "fontFamily": 1, "textAlign": "center", "strokeColor": "#2f9e44", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 80 },
+
+    { "id": "arrow-switch-main", "type": "arrow", "x": 540, "y": 640, "width": 80, "height": 0, "strokeColor": "#1971c2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100, "points": [[0,0],[80,0]], "startBinding": { "elementId": "box-led-switch", "focus": 0, "gap": 1 }, "endBinding": { "elementId": "box-mainpy", "focus": 0, "gap": 1 } },
+
+    { "id": "text-press-switch", "type": "text", "x": 560, "y": 650, "width": 50, "height": 20, "text": "PRESS", "fontSize": 11, "fontFamily": 1, "textAlign": "center", "strokeColor": "#e03131", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "box-system-mgr", "type": "rectangle", "x": 620, "y": 280, "width": 220, "height": 100, "strokeColor": "#1971c2", "backgroundColor": "#e7f5ff", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100 },
+    { "id": "txt-system-mgr", "type": "text", "x": 630, "y": 290, "width": 200, "height": 80, "text": "SystemManager\n├── ConfigManager\n├── TaskScheduler\n├── HealthMonitor\n└── PerformanceMonitor", "fontSize": 12, "fontFamily": 1, "textAlign": "left", "strokeColor": "#1971c2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "arrow-main-system", "type": "arrow", "x": 730, "y": 245, "width": 0, "height": 35, "strokeColor": "#1971c2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 80, "points": [[0,0],[0,35]], "dashness": { "type": 2, "strength": 8 } },
+
+    { "id": "section-tasks-title", "type": "text", "x": 50, "y": 710, "width": 300, "height": 25, "text": "ASYNC TASKS (TaskScheduler — cooperative multitasking)", "fontSize": 16, "fontFamily": 1, "textAlign": "left", "strokeColor": "#1e1e1e", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "box-task-sensor", "type": "rectangle", "x": 50, "y": 750, "width": 190, "height": 130, "strokeColor": "#1971c2", "backgroundColor": "#e7f5ff", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100 },
+    { "id": "txt-task-sensor", "type": "text", "x": 55, "y": 750, "width": 180, "height": 125, "text": "TASK 1: sensor_task\n100 Hz | Priority 10\n\nReads:\n• PiCamera (640×480)\n• VL53L0X L (0x30)\n• VL53L0X R (0x31)\n• VL53L1X F (0x32)\n• MPU6050 (0x68)\n• QMC5883L (0x0D)", "fontSize": 10, "fontFamily": 1, "textAlign": "left", "strokeColor": "#1971c2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "box-task-fusion", "type": "rectangle", "x": 270, "y": 750, "width": 190, "height": 130, "strokeColor": "#1971c2", "backgroundColor": "#e7f5ff", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100 },
+    { "id": "txt-task-fusion", "type": "text", "x": 275, "y": 750, "width": 180, "height": 125, "text": "TASK 2: fusion_task\n100 Hz | Priority 9\n\nCalls:\n• ComplementaryFilter\n• RobotUKF (filterpy)\n• AdaptiveNoiseEstimator\n• MahalanobisOutlierRej\n→ RobotLocalization\n→ PoseEstimator", "fontSize": 10, "fontFamily": 1, "textAlign": "left", "strokeColor": "#1971c2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "box-task-perception", "type": "rectangle", "x": 490, "y": 750, "width": 190, "height": 130, "strokeColor": "#1971c2", "backgroundColor": "#e7f5ff", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100 },
+    { "id": "txt-task-perception", "type": "text", "x": 495, "y": 750, "width": 180, "height": 125, "text": "TASK 3: perception_task\n50 Hz | Priority 8\n\nCalls:\n• LaneDetector\n  (Canny + HoughLines)\n• WallDetector (ToF)\n• FreeSpaceDetector\n  (Sobel edge threshold)", "fontSize": 10, "fontFamily": 1, "textAlign": "left", "strokeColor": "#1971c2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "box-task-planning", "type": "rectangle", "x": 710, "y": 750, "width": 190, "height": 130, "strokeColor": "#1971c2", "backgroundColor": "#e7f5ff", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100 },
+    { "id": "txt-task-planning", "type": "text", "x": 715, "y": 750, "width": 180, "height": 125, "text": "TASK 4: planning_task\n20 Hz | Priority 7\n\nCalls:\n• GlobalPlanner\n  (rectangle waypoints)\n• CubicSplineTrajectory\n  (scipy interpolate)\n• VelocityProfiler", "fontSize": 10, "fontFamily": 1, "textAlign": "left", "strokeColor": "#1971c2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "box-task-control", "type": "rectangle", "x": 930, "y": 750, "width": 190, "height": 130, "strokeColor": "#1971c2", "backgroundColor": "#e7f5ff", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100 },
+    { "id": "txt-task-control", "type": "text", "x": 935, "y": 750, "width": 180, "height": 125, "text": "TASK 5: control_task\n100 Hz | Priority 6\n\nCalls:\n• StanleyController\n• ServoPID → servo °\n• MotorPID → 0-255\n• KinematicModel\n→ UART send steering\n  to ESP32", "fontSize": 10, "fontFamily": 1, "textAlign": "left", "strokeColor": "#1971c2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "box-task-comm", "type": "rectangle", "x": 1150, "y": 750, "width": 190, "height": 130, "strokeColor": "#1971c2", "backgroundColor": "#e7f5ff", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100 },
+    { "id": "txt-task-comm", "type": "text", "x": 1155, "y": 750, "width": 180, "height": 125, "text": "TASK 6: comm_task\n200 Hz | Priority 5\n\nReads UART from\nESP32:\n• Packet decode\n• CRC-16 validate\n• Status / heartbeat\n  responses", "fontSize": 10, "fontFamily": 1, "textAlign": "left", "strokeColor": "#1971c2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "box-task-health", "type": "rectangle", "x": 1375, "y": 750, "width": 190, "height": 130, "strokeColor": "#1971c2", "backgroundColor": "#e7f5ff", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100 },
+    { "id": "txt-task-health", "type": "text", "x": 1380, "y": 750, "width": 180, "height": 125, "text": "TASK 7: health_task\n2 Hz | Priority 1\n\n• Checks all component\n  heartbeats\n• PerformanceMonitor\n  (psutil CPU/RAM)\n• Diagnostics snapshot\n• MemoryManager GC", "fontSize": 10, "fontFamily": 1, "textAlign": "left", "strokeColor": "#1971c2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "box-mission", "type": "rectangle", "x": 50, "y": 920, "width": 280, "height": 90, "strokeColor": "#1971c2", "backgroundColor": "#e7f5ff", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100 },
+    { "id": "txt-mission", "type": "text", "x": 60, "y": 930, "width": 260, "height": 70, "text": "MISSION / STATE MACHINE\npi/mission/state_machine.py — RobotState enum\nINIT → IDLE → START_SEARCH → FORWARD → CORNERING\n→ OBSTACLE_AVOID → REVERSE → LAP_FINISHED → PARK\nAlso: LapCounter (2 laps), RaceStrategy, Checkpoint", "fontSize": 10, "fontFamily": 1, "textAlign": "left", "strokeColor": "#1971c2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "box-perception-mod", "type": "rectangle", "x": 50, "y": 1050, "width": 280, "height": 70, "strokeColor": "#1971c2", "backgroundColor": "#e7f5ff", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100 },
+    { "id": "txt-perception-mod", "type": "text", "x": 60, "y": 1060, "width": 260, "height": 50, "text": "PERCEPTION MODULES\npi/perception/\nlane_detection.py | wall_detection.py\nfree_space.py | visual_odometry.py\nobject_detection.py | landmark_detection.py", "fontSize": 10, "fontFamily": 1, "textAlign": "left", "strokeColor": "#1971c2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "box-fusion-mod", "type": "rectangle", "x": 370, "y": 1050, "width": 280, "height": 70, "strokeColor": "#1971c2", "backgroundColor": "#e7f5ff", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100 },
+    { "id": "txt-fusion-mod", "type": "text", "x": 380, "y": 1060, "width": 260, "height": 50, "text": "SENSOR FUSION\npi/fusion/\nukf.py (filterpy) | ekf.py | complementary.py\nadaptive_noise.py | mahalanobis.py", "fontSize": 10, "fontFamily": 1, "textAlign": "left", "strokeColor": "#1971c2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "box-localization", "type": "rectangle", "x": 690, "y": 1050, "width": 280, "height": 70, "strokeColor": "#1971c2", "backgroundColor": "#e7f5ff", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100 },
+    { "id": "txt-localization", "type": "text", "x": 700, "y": 1060, "width": 260, "height": 50, "text": "LOCALIZATION\npi/localization/\nrobot_localization.py | pose_estimation.py\npose_graph.py | occupancy_grid.py", "fontSize": 10, "fontFamily": 1, "textAlign": "left", "strokeColor": "#1971c2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "box-dynamics", "type": "rectangle", "x": 1010, "y": 1050, "width": 280, "height": 70, "strokeColor": "#1971c2", "backgroundColor": "#e7f5ff", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100 },
+    { "id": "txt-dynamics", "type": "text", "x": 1020, "y": 1060, "width": 260, "height": 50, "text": "VEHICLE DYNAMICS\npi/dynamics/\nkinematic_model.py (bicycle, L=0.26m)\nackermann.py | dynamic_bicycle.py", "fontSize": 10, "fontFamily": 1, "textAlign": "left", "strokeColor": "#1971c2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "box-trajectory", "type": "rectangle", "x": 690, "y": 1150, "width": 280, "height": 70, "strokeColor": "#1971c2", "backgroundColor": "#e7f5ff", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100 },
+    { "id": "txt-trajectory", "type": "text", "x": 700, "y": 1160, "width": 260, "height": 50, "text": "TRAJECTORY GENERATION\npi/trajectory/\ncubic_splines.py (scipy) | bezier.py\nvelocity_profile.py | smoothing.py", "fontSize": 10, "fontFamily": 1, "textAlign": "left", "strokeColor": "#1971c2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "box-control-mod", "type": "rectangle", "x": 1010, "y": 1150, "width": 280, "height": 90, "strokeColor": "#1971c2", "backgroundColor": "#e7f5ff", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100 },
+    { "id": "txt-control-mod", "type": "text", "x": 1020, "y": 1160, "width": 260, "height": 70, "text": "CONTROL ALGORITHMS\npi/control/\nstanley.py | adaptive_pid.py\nservo_pid.py (-30° to +30°)\nmotor_pid.py (0-255 PWM)\nmpc.py | gain_scheduling.py\nfeedforward.py | anti_windup.py", "fontSize": 10, "fontFamily": 1, "textAlign": "left", "strokeColor": "#1971c2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "box-planning-mod", "type": "rectangle", "x": 370, "y": 1150, "width": 280, "height": 70, "strokeColor": "#1971c2", "backgroundColor": "#e7f5ff", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100 },
+    { "id": "txt-planning-mod", "type": "text", "x": 380, "y": 1160, "width": 260, "height": 50, "text": "PATH PLANNING\npi/planning/\nglobal_planner.py | hybrid_astar.py\ndynamic_avoidance.py | safe_corridor.py", "fontSize": 10, "fontFamily": 1, "textAlign": "left", "strokeColor": "#1971c2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "box-comm-mod", "type": "rectangle", "x": 50, "y": 1150, "width": 280, "height": 70, "strokeColor": "#1971c2", "backgroundColor": "#e7f5ff", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100 },
+    { "id": "txt-comm-mod", "type": "text", "x": 60, "y": 1160, "width": 260, "height": 50, "text": "COMMUNICATION\npi/comm/\nuart.py — UARTCommunicator\n  (/dev/serial0, 115200 baud)\nprotocol.py — Packet framing:\n  0xA5 | cnt | type | len | payload | CRC16 | 0x5A", "fontSize": 10, "fontFamily": 1, "textAlign": "left", "strokeColor": "#1971c2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "box-hardware", "type": "rectangle", "x": 50, "y": 1260, "width": 280, "height": 70, "strokeColor": "#1971c2", "backgroundColor": "#e7f5ff", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100 },
+    { "id": "txt-hardware", "type": "text", "x": 60, "y": 1270, "width": 260, "height": 50, "text": "PI HARDWARE\npi/hardware/\nled.py — StatusLED (GPIO23=green, GPIO24=red)\nswitch.py — StartSwitch (GPIO25, pull-up)", "fontSize": 10, "fontFamily": 1, "textAlign": "left", "strokeColor": "#1971c2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "box-sync", "type": "rectangle", "x": 370, "y": 1260, "width": 280, "height": 70, "strokeColor": "#1971c2", "backgroundColor": "#e7f5ff", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100 },
+    { "id": "txt-sync", "type": "text", "x": 380, "y": 1270, "width": 260, "height": 50, "text": "SYNCHRONIZATION\npi/sync/\nframe_sync.py | timestamp.py\nlatency.py | buffer_manager.py", "fontSize": 10, "fontFamily": 1, "textAlign": "left", "strokeColor": "#1971c2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "box-i2c-sensors", "type": "rectangle", "x": 690, "y": 1260, "width": 600, "height": 120, "strokeColor": "#1971c2", "backgroundColor": "#e7f5ff", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100 },
+    { "id": "txt-i2c-sensors", "type": "text", "x": 700, "y": 1270, "width": 580, "height": 100, "text": "I²C SENSOR DRIVERS\npi/sensors/\n├── camera/camera_driver.py — PiCamera (OpenCV, 640×480, 60fps)\n├── camera/calibration.py — CameraCalibration\n├── camera/pipeline.py — CameraPipeline\n├── imu/mpu6050.py — MPU6050 (0x68, accel+gyro)\n├── imu/filtering.py — IMU filtering (LPF, moving average)\n├── tof/vl53l0x.py — VL53L0X (Left 0x30, Right 0x31, I²C)\n├── tof/vl53l1x.py — VL53L1X (Front 0x32, I²C)\n├── tof/calibration.py — ToF calibration routines\n├── tof/cross_verify.py — Cross-verification between ToFs\n└── magnetometer/qmc5883l.py — QMC5883L (0x0D, compass)", "fontSize": 10, "fontFamily": 1, "textAlign": "left", "strokeColor": "#1971c2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "box-scripts", "type": "rectangle", "x": 50, "y": 1370, "width": 280, "height": 85, "strokeColor": "#7950f2", "backgroundColor": "#f3f0ff", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100, "roundness": { "type": 3, "value": 8 } },
+    { "id": "txt-scripts", "type": "text", "x": 60, "y": 1380, "width": 260, "height": 70, "text": "SCRIPTS\nscripts/\nrun_pi.sh / run_pi.bat — Launch Pi\nflash_esp.sh / flash_esp.bat — Flash ESP32\nautostart_pi.sh — rc.local auto-start", "fontSize": 10, "fontFamily": 1, "textAlign": "left", "strokeColor": "#7950f2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "box-tests", "type": "rectangle", "x": 370, "y": 1370, "width": 280, "height": 85, "strokeColor": "#7950f2", "backgroundColor": "#f3f0ff", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100, "roundness": { "type": 3, "value": 8 } },
+    { "id": "txt-tests", "type": "text", "x": 380, "y": 1380, "width": 260, "height": 70, "text": "PYTEST UNIT TESTS\ntests/\ntest_comm.py | test_control.py\ntest_sensors.py | test_fusion.py\nRun: pytest tests/ -v", "fontSize": 10, "fontFamily": 1, "textAlign": "left", "strokeColor": "#7950f2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "box-selftest", "type": "rectangle", "x": 690, "y": 1370, "width": 280, "height": 85, "strokeColor": "#7950f2", "backgroundColor": "#f3f0ff", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100, "roundness": { "type": 3, "value": 8 } },
+    { "id": "txt-selftest", "type": "text", "x": 700, "y": 1380, "width": 260, "height": 70, "text": "SELF-TEST SUITE\npi/selftest/\nrunner.py — SelfTestRunner\ntests_camera.py | tests_tof.py\ntests_imu.py | tests_mag.py\ntests_fusion.py | tests_control.py | tests_comm.py", "fontSize": 10, "fontFamily": 1, "textAlign": "left", "strokeColor": "#7950f2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "box-packages", "type": "rectangle", "x": 1010, "y": 1370, "width": 280, "height": 85, "strokeColor": "#7950f2", "backgroundColor": "#f3f0ff", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100, "roundness": { "type": 3, "value": 8 } },
+    { "id": "txt-packages", "type": "text", "x": 1020, "y": 1380, "width": 260, "height": 70, "text": "EXTERNAL PACKAGES\nnumpy — arrays, math\nscipy — splines, filters\nopencv-python — vision\nfilterpy — UKF\npyserial — UART\nsmbus2 — I²C\npsutil — CPU/RAM monitor", "fontSize": 10, "fontFamily": 1, "textAlign": "left", "strokeColor": "#7950f2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "box-diag", "type": "rectangle", "x": 690, "y": 920, "width": 600, "height": 100, "strokeColor": "#1971c2", "backgroundColor": "#e7f5ff", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100 },
+    { "id": "txt-diag", "type": "text", "x": 700, "y": 930, "width": 580, "height": 80, "text": "SYSTEM INFRASTRUCTURE\npi/system/\nmanager.py — SystemManager (component registry, lifecycle init/shutdown)\nscheduler.py — TaskScheduler (async cooperative, priority-sorted coroutines)\nconfig_manager.py — ConfigManager (singleton, loads pi_config.yaml)\nlogger.py — Logger (singleton, rotating file + console)\nhealth_monitor.py — HealthMonitor (heartbeat timeout per component)\nperformance_monitor.py — PerformanceMonitor (psutil CPU/RAM logging)\nmemory_manager.py — MemoryManager (gc.collect() when threshold exceeded)\ndiagnostics.py — Diagnostics (full system state snapshot dump)", "fontSize": 10, "fontFamily": 1, "textAlign": "left", "strokeColor": "#1971c2", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "text-uart-arrow", "type": "text", "x": 540, "y": 1480, "width": 500, "height": 40, "text": "═══════════════════  UART @ 115200 baud  ═══════════════════\n0xA5 | counter | type | len | payload (float angle + uint8 speed) | CRC16 | 0x5A", "fontSize": 12, "fontFamily": 1, "textAlign": "center", "strokeColor": "#e03131", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "line-uart1", "type": "line", "x": 150, "y": 1520, "width": 1200, "height": 0, "strokeColor": "#e03131", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100, "points": [[0,0],[1200,0]] },
+
+    { "id": "line-uart2", "type": "line", "x": 150, "y": 1530, "width": 1200, "height": 0, "strokeColor": "#e03131", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100, "points": [[0,0],[1200,0]] },
+
+    { "id": "arrow-uart-down", "type": "arrow", "x": 730, "y": 1460, "width": 0, "height": 70, "strokeColor": "#e03131", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100, "points": [[0,0],[0,70]] },
+
+    { "id": "text-esp-boot", "type": "text", "x": 50, "y": 1560, "width": 300, "height": 25, "text": "ESP32-S3 — BOOT & TASKS (FreeRTOS)", "fontSize": 16, "fontFamily": 1, "textAlign": "left", "strokeColor": "#1e1e1e", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "box-esp-main", "type": "rectangle", "x": 50, "y": 1600, "width": 250, "height": 80, "strokeColor": "#e67700", "backgroundColor": "#fff3e0", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100 },
+    { "id": "txt-esp-main", "type": "text", "x": 60, "y": 1610, "width": 230, "height": 60, "text": "esp/main/main.c :: app_main()\nENTRY POINT (ESP-IDF)\nInitializes all hardware\nCreates 5 FreeRTOS tasks", "fontSize": 11, "fontFamily": 1, "textAlign": "center", "strokeColor": "#e67700", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "box-esp-init", "type": "rectangle", "x": 350, "y": 1600, "width": 250, "height": 80, "strokeColor": "#e67700", "backgroundColor": "#fff3e0", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100 },
+    { "id": "txt-esp-init", "type": "text", "x": 360, "y": 1610, "width": 230, "height": 60, "text": "HARDWARE INIT SEQUENCE\nled_init() | uart_init()\ntb6612fng_init() | servo_pwm_init()\nmotor_pwm_init() | watchdog_init()", "fontSize": 10, "fontFamily": 1, "textAlign": "left", "strokeColor": "#e67700", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "arrow-esp-init", "type": "arrow", "x": 300, "y": 1640, "width": 50, "height": 0, "strokeColor": "#e67700", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100, "points": [[0,0],[50,0]] },
+
+    { "id": "box-esp-selftest", "type": "rectangle", "x": 650, "y": 1600, "width": 250, "height": 80, "strokeColor": "#e67700", "backgroundColor": "#fff3e0", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100 },
+    { "id": "txt-esp-selftest", "type": "text", "x": 660, "y": 1610, "width": 230, "height": 60, "text": "ESP SELF-TEST\nselftest.h/c\nTests: UART loopback\nServo PWM | Motor PWM\nTB6612FNG | Watchdog", "fontSize": 10, "fontFamily": 1, "textAlign": "left", "strokeColor": "#e67700", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "arrow-esp-selftest", "type": "arrow", "x": 600, "y": 1640, "width": 50, "height": 0, "strokeColor": "#e67700", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100, "points": [[0,0],[50,0]] },
+
+    { "id": "box-esp-ready", "type": "rectangle", "x": 950, "y": 1600, "width": 250, "height": 80, "strokeColor": "#e67700", "backgroundColor": "#fff3e0", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100 },
+    { "id": "txt-esp-ready", "type": "text", "x": 960, "y": 1610, "width": 230, "height": 60, "text": "PASS → state=READY\nGreen LED ON\nFAIL → state=ERROR\nRed LED ON\n\nEnters while(1) vTaskDelay", "fontSize": 10, "fontFamily": 1, "textAlign": "left", "strokeColor": "#e67700", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "arrow-esp-ready", "type": "arrow", "x": 900, "y": 1640, "width": 50, "height": 0, "strokeColor": "#e67700", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100, "points": [[0,0],[50,0]] },
+
+    { "id": "box-esp-tasks", "type": "rectangle", "x": 50, "y": 1720, "width": 1200, "height": 110, "strokeColor": "#e67700", "backgroundColor": "#fff3e0", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100 },
+    { "id": "txt-esp-tasks", "type": "text", "x": 60, "y": 1730, "width": 1180, "height": 90, "text": "FreeRTOS xTaskCreate() — 5 Concurrent Tasks:\n\n1. uart_rx_task()      — UART1 byte-level RX: reads header 0xA5, extracts payload, validates CRC-16\n   → process_packet(): PKT_STEERING_CMD (servo_set_angle + motor_set_speed) | PKT_EMERGENCY_STOP | PKT_STATUS_REQ | PKT_SELFTEST_REQ\n2. timeout_monitor_task() — 500ms comm timeout: if no valid packet received → auto emergency stop\n3. watchdog_task()         — Feeds hardware watchdog timer every 500ms (3s timeout = reset)\n4. status_task()           — Tracks uptime, packet count, error count for status response\n5. led_indicator_task()    — Displays state via Green (GPIO2) / Red (GPIO4) LED", "fontSize": 10, "fontFamily": 1, "textAlign": "left", "strokeColor": "#e67700", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "arrow-esp-task-bar", "type": "arrow", "x": 175, "y": 1680, "width": 0, "height": 40, "strokeColor": "#e67700", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 80, "points": [[0,0],[0,40]] },
+
+    { "id": "box-esp-drivers", "type": "rectangle", "x": 50, "y": 1870, "width": 1200, "height": 100, "strokeColor": "#e67700", "backgroundColor": "#fff3e0", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100 },
+    { "id": "txt-esp-drivers", "type": "text", "x": 60, "y": 1880, "width": 1180, "height": 80, "text": "ESP32 HARDWARE DRIVERS:\n\nservo_pwm.c   — LEDC PWM → GPIO13 → MG995 Servo (50Hz, 12-bit, 0°-180° → -30° to +30° steering)\nmotor_pwm.c   — LEDC PWM → GPIO11 → TB6612FNG (20kHz, 10-bit, 0-255 speed)\ntb6612fng.c   — GPIO8(AIN1) | GPIO9(AIN2) | GPIO6(BIN1) | GPIO7(BIN2) | GPIO10(PWMB) | GPIO12(STBY) → DC motor forward/reverse/brake/coast\npacket_validator.c — Header (0xA5) / Footer (0x5A) / CRC-16 validation\ncommand_validator.c — Semantic command type/length/range checking\ntimeout_detector.c  — 500ms communication timeout detection\nwatchdog.c          — Hardware watchdog timer (3s timeout → ESP32 reset)\ncrc.c               — CRC-16-CCITT polynomial (0x1021) calculation & verify\nfailsafe.c          — Emergency stop: motors off, state transition to FAILSAFE", "fontSize": 9, "fontFamily": 1, "textAlign": "left", "strokeColor": "#e67700", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 },
+
+    { "id": "arrow-esp-drivers", "type": "arrow", "x": 175, "y": 1830, "width": 0, "height": 40, "strokeColor": "#e67700", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 80, "points": [[0,0],[0,40]] },
+
+    { "id": "box-esp-hw", "type": "rectangle", "x": 50, "y": 2010, "width": 1200, "height": 90, "strokeColor": "#e67700", "backgroundColor": "#fff3e0", "fillStyle": "solid", "strokeWidth": 2, "roughness": 0, "opacity": 100 },
+    { "id": "txt-esp-hw", "type": "text", "x": 60, "y": 2020, "width": 1180, "height": 70, "text": "PHYSICAL HARDWARE CONNECTIONS:\n\nESP32-S3 GPIO13 ────── PWM ──────► MG995 Servo (steering, -30° to +30°)\nESP32-S3 GPIO11 ────── PWM ──────► TB6612FNG PWMA (motor speed 0-255)\nESP32-S3 GPIO8/GPIO9 ────────────► TB6612FNG AIN1/AIN2 (motor A direction)\nESP32-S3 GPIO6/GPIO7 ────────────► TB6612FNG BIN1/BIN2 (motor B direction)\nESP32-S3 GPIO10 ─────────────────► TB6612FNG PWMB (motor B speed)\nESP32-S3 GPIO12 ─────────────────► TB6612FNG STBY (standby, active high)\nESP32-S3 UART1 TX/RX ────────────► Raspberry Pi UART (/dev/serial0, 115200)\nESP32-S3 GPIO2/GPIO4 ────────────► Green/Red Status LEDs\nRaspberry Pi I²C1 SDA/SCL ───────► VL53L0X (0x30, 0x31) | VL53L1X (0x32) | MPU6050 (0x68) | QMC5883L (0x0D)\nRaspberry Pi GPIO23/GPIO24 ──────► Green/Red Status LEDs\nRaspberry Pi GPIO25 ─────────────► Start Switch (momentary button, pull-up)\nRaspberry Pi Camera CSI ─────────► PiCamera Module (640×480, 60fps)", "fontSize": 9, "fontFamily": 1, "textAlign": "left", "strokeColor": "#e67700", "backgroundColor": "transparent", "fillStyle": "solid", "strokeWidth": 1, "roughness": 0, "opacity": 100 }
+  ],
+  "files": {}
+}
