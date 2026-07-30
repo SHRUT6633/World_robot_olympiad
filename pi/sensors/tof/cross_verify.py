@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/sensors/tof/cross_verify.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# Cross-verification of multi-ToF distance readings
+# =============================================================================
+
 from ...system.logger import log
 
 

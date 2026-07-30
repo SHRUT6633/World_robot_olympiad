@@ -1,4 +1,12 @@
 # =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/system/health_monitor.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# Heartbeat-based liveness detection
+# =============================================================================
+
+# =============================================================================
 # health_monitor.py — HealthMonitor (Heartbeat-Based Liveness Detection)
 # =============================================================================
 # The HealthMonitor keeps track of whether each subsystem is "alive" by

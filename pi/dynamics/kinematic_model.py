@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/dynamics/kinematic_model.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# PURPOSE: Kinematic bicycle model for 4WS forward simulation
+# =============================================================================
+
 import numpy as np
 from .steering_modes import SteeringMode, compute_4ws_angles
 

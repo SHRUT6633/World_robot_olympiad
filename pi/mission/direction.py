@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/mission/direction.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# PURPOSE: Direction/driving direction detection
+# =============================================================================
+
 class DirectionDetector:
     # ──────────────────────────────────────────────────────────────────
     # Infers the robot's *turning direction* from the instantaneous

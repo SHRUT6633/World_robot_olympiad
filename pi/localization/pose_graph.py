@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/localization/pose_graph.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# PURPOSE: Simple pose-graph (Graph SLAM) optimisation
+# =============================================================================
+
 import numpy as np
 from ..system.logger import log
 

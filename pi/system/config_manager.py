@@ -1,4 +1,12 @@
 # =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/system/config_manager.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# Singleton YAML configuration loader
+# =============================================================================
+
+# =============================================================================
 # config_manager.py — ConfigManager (Singleton YAML Configuration Loader)
 # =============================================================================
 # This module provides a singleton ConfigManager that loads all robot

@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/mission/checkpoint.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# PURPOSE: Checkpoint detection and management
+# =============================================================================
+
 import math
 from ..system.logger import log
 

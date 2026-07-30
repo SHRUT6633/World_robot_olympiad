@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/sensors/camera/camera_driver.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# Raspberry Pi Camera Module driver
+# =============================================================================
+
 import cv2
 import numpy as np
 from ..base import SensorBase

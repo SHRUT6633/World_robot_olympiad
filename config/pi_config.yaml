@@ -1,3 +1,10 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: config/pi_config.yaml
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# Raspberry Pi configuration: pins, I2C addresses, fusion params, defaults
+# =============================================================================
 ---
 system:
   name: "WRO_4WS_Pi"

@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/comm/protocol.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# UART packet protocol definitions
+# =============================================================================
+
 import struct
 from enum import IntEnum
 

@@ -1,3 +1,13 @@
+/**
+ * ===========================================================================
+ * WRO 2026 — 4WS AWD Autonomous Robot
+ * File: esp/main/packet_validator.c
+ * Rev:  v9.9  |  Status: RELEASED
+ * ---------------------------------------------------------------------------
+ * PURPOSE: Packet format validation and CRC verification
+ * ===========================================================================
+ */
+
 #include "packet_validator.h"
 #include "crc.h"
 

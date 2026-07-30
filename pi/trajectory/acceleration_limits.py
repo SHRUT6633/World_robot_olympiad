@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/trajectory/acceleration_limits.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# PURPOSE: Acceleration limit computation
+# =============================================================================
+
 import numpy as np
 
 

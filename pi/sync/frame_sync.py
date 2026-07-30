@@ -1,4 +1,12 @@
 # =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/sync/frame_sync.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# Multi-sensor frame synchronisation
+# =============================================================================
+
+# =============================================================================
 # frame_sync.py — Multi-sensor frame synchronisation via timestamp alignment
 # =============================================================================
 # The robot may have several sensors (cameras, LIDAR, etc.) each producing

@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/perception/pillar_tracker.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# Pillar passing tracker and logic
+# =============================================================================
+
 import time
 from ..system.logger import log
 

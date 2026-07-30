@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/control/feedforward.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# PURPOSE: Feedforward steering controller based on kinematic bicycle model
+# =============================================================================
+
 import numpy as np
 
 

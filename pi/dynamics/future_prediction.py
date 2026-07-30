@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/dynamics/future_prediction.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# PURPOSE: Future trajectory prediction using kinematic model
+# =============================================================================
+
 import numpy as np
 
 

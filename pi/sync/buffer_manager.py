@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/sync/buffer_manager.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# Sensor ring-buffer manager
+# =============================================================================
+
 from collections import deque
 from ..system.logger import log
 

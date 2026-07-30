@@ -1,3 +1,13 @@
+/**
+ * ===========================================================================
+ * WRO 2026 — 4WS AWD Autonomous Robot
+ * File: esp/main/uart_receiver.c
+ * Rev:  v9.9  |  Status: RELEASED
+ * ---------------------------------------------------------------------------
+ * PURPOSE: UART packet receiver
+ * ===========================================================================
+ */
+
 #include "uart_receiver.h"
 #include "driver/uart.h"
 #include "esp_log.h"

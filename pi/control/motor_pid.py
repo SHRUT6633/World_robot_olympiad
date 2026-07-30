@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/control/motor_pid.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# PURPOSE: PID controller specialised for DC motor speed control
+# =============================================================================
+
 from .adaptive_pid import AdaptivePID
 
 

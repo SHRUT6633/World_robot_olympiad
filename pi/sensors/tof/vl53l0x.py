@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/sensors/tof/vl53l0x.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# VL53L0X Time-of-Flight ranging sensor driver
+# =============================================================================
+
 import time
 from ..base import SensorBase, FilteredSensorMixin
 from ...system.logger import log

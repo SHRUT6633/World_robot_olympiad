@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/dynamics/dynamic_bicycle.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# PURPOSE: 2D dynamic bicycle model with linear tire forces
+# =============================================================================
+
 import numpy as np
 
 

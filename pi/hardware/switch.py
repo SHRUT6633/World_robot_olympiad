@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/hardware/switch.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# Start switch driver
+# =============================================================================
+
 try:
     from gpiozero import Button
     GPIO_AVAILABLE = True

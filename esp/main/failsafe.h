@@ -1,3 +1,13 @@
+/**
+ * ===========================================================================
+ * WRO 2026 — 4WS AWD Autonomous Robot
+ * File: esp/main/failsafe.h
+ * Rev:  v9.9  |  Status: RELEASED
+ * ---------------------------------------------------------------------------
+ * PURPOSE: Header for failsafe subsystem
+ * ===========================================================================
+ */
+
 #ifndef FAILSAFE_H
 #define FAILSAFE_H
 

@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/dynamics/ackermann.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# PURPOSE: Ackermann steering geometry for inner/outer wheel angles
+# =============================================================================
+
 import numpy as np
 
 

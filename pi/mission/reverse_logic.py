@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/mission/reverse_logic.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# PURPOSE: Reverse manoeuvre logic
+# =============================================================================
+
 class ReverseLogic:
     # ReverseLogic decides when the robot should back up and manages the
     # duration of the reverse manoeuvre.  It is a simple timed state:

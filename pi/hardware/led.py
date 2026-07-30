@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/hardware/led.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# Status LED controller
+# =============================================================================
+
 try:
     from gpiozero import LED
     GPIO_AVAILABLE = True

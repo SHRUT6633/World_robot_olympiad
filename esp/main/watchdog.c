@@ -1,3 +1,13 @@
+/**
+ * ===========================================================================
+ * WRO 2026 — 4WS AWD Autonomous Robot
+ * File: esp/main/watchdog.c
+ * Rev:  v9.9  |  Status: RELEASED
+ * ---------------------------------------------------------------------------
+ * PURPOSE: Task watchdog timer management
+ * ===========================================================================
+ */
+
 #include "watchdog.h"
 #include "esp_task_wdt.h"
 #include "esp_log.h"

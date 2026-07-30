@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/sensors/imu/mpu6050.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# MPU6050 6-axis IMU driver
+# =============================================================================
+
 import time
 import numpy as np
 from ..base import SensorBase

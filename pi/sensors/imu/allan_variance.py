@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/sensors/imu/allan_variance.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# Allan variance IMU noise analysis
+# =============================================================================
+
 import numpy as np
 from ...system.logger import log
 

@@ -1,4 +1,12 @@
 # =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/system/diagnostics.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# System-state snapshot and diagnostic dump
+# =============================================================================
+
+# =============================================================================
 # diagnostics.py — Diagnostics (System-State Snapshot & Dump)
 # =============================================================================
 # Provides a lightweight diagnostic tool that periodically captures the

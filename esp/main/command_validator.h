@@ -1,3 +1,13 @@
+/**
+ * ===========================================================================
+ * WRO 2026 — 4WS AWD Autonomous Robot
+ * File: esp/main/command_validator.h
+ * Rev:  v9.9  |  Status: RELEASED
+ * ---------------------------------------------------------------------------
+ * PURPOSE: Header for command validation
+ * ===========================================================================
+ */
+
 #ifndef COMMAND_VALIDATOR_H
 #define COMMAND_VALIDATOR_H
 

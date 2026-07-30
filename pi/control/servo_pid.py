@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/control/servo_pid.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# PURPOSE: PID controller specialised for servo-based steering
+# =============================================================================
+
 from .adaptive_pid import AdaptivePID
 
 

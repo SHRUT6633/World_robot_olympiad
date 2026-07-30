@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/fusion/ekf.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# Extended Kalman Filter for state estimation
+# =============================================================================
+
 import numpy as np
 from filterpy.kalman import ExtendedKalmanFilter
 from ..system.logger import log

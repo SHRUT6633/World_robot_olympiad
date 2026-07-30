@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/control/feedforward_comp.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# PURPOSE: Feedforward compensator for longitudinal acceleration control
+# =============================================================================
+
 import numpy as np
 
 

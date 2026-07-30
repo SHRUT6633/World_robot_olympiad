@@ -1,4 +1,12 @@
 # =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/system/performance_monitor.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# CPU/RAM background logger
+# =============================================================================
+
+# =============================================================================
 # performance_monitor.py — PerformanceMonitor (CPU/RAM Background Logger)
 # =============================================================================
 # Monitors system resource usage (CPU percent, RAM percent) on a daemon

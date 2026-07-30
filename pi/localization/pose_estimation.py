@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/localization/pose_estimation.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# PURPOSE: Dead-reckoning pose estimator using odometry updates
+# =============================================================================
+
 import numpy as np
 
 

@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/perception/pillar_detector.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# Coloured pillar detection via HSV segmentation
+# =============================================================================
+
 import cv2
 import numpy as np
 

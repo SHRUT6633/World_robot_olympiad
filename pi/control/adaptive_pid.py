@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/control/adaptive_pid.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# PURPOSE: Versatile PID controller with optional output limiting
+# =============================================================================
+
 class AdaptivePID:
     # Versatile PID (Proportional–Integral–Derivative) controller with optional output limiting.
     #

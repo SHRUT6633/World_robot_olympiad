@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/planning/hybrid_astar.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# PURPOSE: Hybrid A* path planning
+# =============================================================================
+
 import heapq
 import math
 import numpy as np

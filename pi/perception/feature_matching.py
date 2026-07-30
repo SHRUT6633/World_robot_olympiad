@@ -1,4 +1,12 @@
 # =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/perception/feature_matching.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# ORB feature extraction and matching
+# =============================================================================
+
+# =============================================================================
 # feature_matching.py — ORB feature extraction + brute-force matching
 # =============================================================================
 # Provides a reusable ORB (Oriented FAST and Rotated BRIEF) feature

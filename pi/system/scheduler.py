@@ -1,4 +1,12 @@
 # =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/system/scheduler.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# Cooperative async task runner
+# =============================================================================
+
+# =============================================================================
 # scheduler.py — TaskScheduler (Cooperative Async Task Runner)
 # =============================================================================
 # Implements a simple, deterministic task scheduler for running multiple

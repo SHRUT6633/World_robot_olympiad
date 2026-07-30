@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/dynamics/turning_radius.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# PURPOSE: Steady-state turning radius prediction from steering angle
+# =============================================================================
+
 import numpy as np
 
 

@@ -1,3 +1,13 @@
+/**
+ * ===========================================================================
+ * WRO 2026 — 4WS AWD Autonomous Robot
+ * File: esp/main/command_validator.c
+ * Rev:  v9.9  |  Status: RELEASED
+ * ---------------------------------------------------------------------------
+ * PURPOSE: Validates command data received from UART
+ * ===========================================================================
+ */
+
 #include "command_validator.h"
 
 /* Maximum allowed servo angle in degrees (±30).

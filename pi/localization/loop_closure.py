@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/localization/loop_closure.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# PURPOSE: Loop closure detection for SLAM pose graph optimisation
+# =============================================================================
+
 import numpy as np
 from ..system.logger import log
 

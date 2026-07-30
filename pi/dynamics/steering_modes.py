@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/dynamics/steering_modes.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# PURPOSE: 4WS steering mode definitions and angle computation
+# =============================================================================
+
 import numpy as np
 from enum import Enum
 

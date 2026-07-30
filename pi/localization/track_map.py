@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/localization/track_map.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# PURPOSE: Track section mapping for lap counting and corner detection
+# =============================================================================
+
 from ..system.logger import log
 
 

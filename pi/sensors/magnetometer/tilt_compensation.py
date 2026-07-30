@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/sensors/magnetometer/tilt_compensation.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# Magnetometer tilt compensation
+# =============================================================================
+
 import numpy as np
 
 

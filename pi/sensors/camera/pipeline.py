@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/sensors/camera/pipeline.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# End-to-end camera image processing pipeline
+# =============================================================================
+
 import cv2
 import numpy as np
 from ...system.logger import log

@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/mission/obstacle_strategy.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# PURPOSE: Obstacle avoidance strategy
+# =============================================================================
+
 from ..system.logger import log
 
 

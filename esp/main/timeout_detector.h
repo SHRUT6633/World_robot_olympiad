@@ -1,3 +1,13 @@
+/**
+ * ===========================================================================
+ * WRO 2026 — 4WS AWD Autonomous Robot
+ * File: esp/main/timeout_detector.h
+ * Rev:  v9.9  |  Status: RELEASED
+ * ---------------------------------------------------------------------------
+ * PURPOSE: Header for timeout detector
+ * ===========================================================================
+ */
+
 #ifndef TIMEOUT_DETECTOR_H
 #define TIMEOUT_DETECTOR_H
 

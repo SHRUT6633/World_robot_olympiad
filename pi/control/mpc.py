@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/control/mpc.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# PURPOSE: Model Predictive Controller for lateral steering control
+# =============================================================================
+
 import numpy as np
 from ..dynamics.kinematic_model import KinematicModel
 

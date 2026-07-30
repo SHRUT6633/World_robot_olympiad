@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/sensors/magnetometer/qmc5883l.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# QMC5883L 3-axis magnetometer driver
+# =============================================================================
+
 import time
 import numpy as np
 from ..base import SensorBase

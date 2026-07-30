@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/sensors/tof/calibration.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# ToF sensor calibration and compensation
+# =============================================================================
+
 import json
 from pathlib import Path
 from ...system.logger import log

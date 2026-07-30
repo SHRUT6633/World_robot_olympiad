@@ -1,3 +1,10 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: config/esp_config.yaml
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# ESP32-S3 configuration: pin mappings, servo limits, watchdog period
+# =============================================================================
 ---
 system:
   name: "WRO_4WS_ESP32"

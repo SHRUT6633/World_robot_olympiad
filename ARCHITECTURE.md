@@ -1,3 +1,10 @@
+<!--
+=============================================================================
+WRO 2026 — 4WS AWD Autonomous Robot
+File: ARCHITECTURE.md
+Rev:  v9.9  |  Status: RELEASED
+=============================================================================
+-->
 # System Architecture
 
 ## Data Flow Diagram

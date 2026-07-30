@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/fusion/adaptive_noise.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# Adaptive noise estimation for Kalman filters
+# =============================================================================
+
 import numpy as np
 from collections import deque
 

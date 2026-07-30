@@ -1,3 +1,13 @@
+/**
+ * ===========================================================================
+ * WRO 2026 — 4WS AWD Autonomous Robot
+ * File: esp/main/uart_receiver.h
+ * Rev:  v9.9  |  Status: RELEASED
+ * ---------------------------------------------------------------------------
+ * PURPOSE: Header for UART receiver
+ * ===========================================================================
+ */
+
 #ifndef UART_RECEIVER_H
 #define UART_RECEIVER_H
 

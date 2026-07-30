@@ -1,4 +1,12 @@
 # =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/system/memory_manager.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# Automatic GC and memory-pressure monitor
+# =============================================================================
+
+# =============================================================================
 # memory_manager.py — Automatic garbage collection & memory-pressure monitor
 # =============================================================================
 # This module monitors system memory and triggers Python GC when free memory

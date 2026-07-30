@@ -1,4 +1,12 @@
 # =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/sync/latency.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# Round-trip latency measurement
+# =============================================================================
+
+# =============================================================================
 # latency.py — Round-trip latency measurement with sliding-window averaging
 # =============================================================================
 # Whenever a message is sent over the network (or inter-process), call

@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/perception/parking_detector.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# Parking bay detection and state machine
+# =============================================================================
+
 import time
 from ..system.logger import log
 

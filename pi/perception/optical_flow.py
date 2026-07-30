@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/perception/optical_flow.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# Lucas-Kanade optical flow estimation
+# =============================================================================
+
 import cv2
 import numpy as np
 

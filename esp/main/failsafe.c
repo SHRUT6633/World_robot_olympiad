@@ -1,3 +1,13 @@
+/**
+ * ===========================================================================
+ * WRO 2026 — 4WS AWD Autonomous Robot
+ * File: esp/main/failsafe.c
+ * Rev:  v9.9  |  Status: RELEASED
+ * ---------------------------------------------------------------------------
+ * PURPOSE: Emergency stop and safety subsystem
+ * ===========================================================================
+ */
+
 #include "failsafe.h"
 #include "l298n.h"
 #include "servo_pwm.h"

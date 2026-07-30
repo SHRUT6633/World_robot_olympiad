@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/sensors/imu/temp_compensation.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# MEMS IMU temperature compensation
+# =============================================================================
+
 import numpy as np
 from ...system.logger import log
 

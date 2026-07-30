@@ -1,4 +1,12 @@
 # =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/perception/corner_detection.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# Shi-Tomasi corner detection
+# =============================================================================
+
+# =============================================================================
 # corner_detection.py — Shi-Tomasi corner detector wrapper (OpenCV)
 # =============================================================================
 # Detects "good features to track" in an image — corners that are suitable

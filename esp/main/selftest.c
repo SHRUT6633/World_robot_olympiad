@@ -1,3 +1,13 @@
+/**
+ * ===========================================================================
+ * WRO 2026 — 4WS AWD Autonomous Robot
+ * File: esp/main/selftest.c
+ * Rev:  v9.9  |  Status: RELEASED
+ * ---------------------------------------------------------------------------
+ * PURPOSE: Hardware self-test routines
+ * ===========================================================================
+ */
+
 #include "selftest.h"
 #include "crc.h"
 #include "esp_log.h"

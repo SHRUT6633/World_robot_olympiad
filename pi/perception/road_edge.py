@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/perception/road_edge.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# Road edge detection via vertical ROI analysis
+# =============================================================================
+
 import cv2
 import numpy as np
 

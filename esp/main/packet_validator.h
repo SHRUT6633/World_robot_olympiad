@@ -1,3 +1,13 @@
+/**
+ * ===========================================================================
+ * WRO 2026 — 4WS AWD Autonomous Robot
+ * File: esp/main/packet_validator.h
+ * Rev:  v9.9  |  Status: RELEASED
+ * ---------------------------------------------------------------------------
+ * PURPOSE: Header for packet validation
+ * ===========================================================================
+ */
+
 #ifndef PACKET_VALIDATOR_H
 #define PACKET_VALIDATOR_H
 

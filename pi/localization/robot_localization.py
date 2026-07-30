@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/localization/robot_localization.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# PURPOSE: High-level localisation manager with EKF/UKF filter pipeline
+# =============================================================================
+
 from .pose_estimation import PoseEstimator
 from ..system.logger import log
 

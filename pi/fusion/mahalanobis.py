@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/fusion/mahalanobis.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# Mahalanobis distance outlier rejection
+# =============================================================================
+
 import numpy as np
 from ..system.logger import log
 

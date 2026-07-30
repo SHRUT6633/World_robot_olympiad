@@ -1,4 +1,12 @@
 # =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/perception/landmark_detection.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# Template-based landmark recognition
+# =============================================================================
+
+# =============================================================================
 # landmark_detection.py — Template-based landmark recognition
 # =============================================================================
 # Pre-register visual templates (e.g. "start_zone", "loading_bay") and then

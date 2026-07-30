@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/control/gain_scheduling.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# PURPOSE: Speed-based PID gain scheduling for varying dynamics
+# =============================================================================
+
 class GainScheduler:
     # Selects PID gains based on the robot's current speed (gain scheduling).
     # At different speeds, the robot's dynamics change significantly:

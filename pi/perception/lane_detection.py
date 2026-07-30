@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/perception/lane_detection.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# Lane line detection via edge/Hough transform
+# =============================================================================
+
 import cv2
 import numpy as np
 

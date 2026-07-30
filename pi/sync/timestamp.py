@@ -1,4 +1,12 @@
 # =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/sync/timestamp.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# Monotonic-clock timestamp synchronisation
+# =============================================================================
+
+# =============================================================================
 # timestamp.py — Monotonic-clock timestamp synchronisation
 # =============================================================================
 # Provides a lightweight epoch-relative clock based on time.perf_counter()

@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/localization/occupancy_grid.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# PURPOSE: 2-D occupancy grid with log-odds Bayesian mapping
+# =============================================================================
+
 import numpy as np
 from ..system.logger import log
 

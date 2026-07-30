@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/trajectory/cubic_splines.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# PURPOSE: Cubic spline interpolation
+# =============================================================================
+
 import numpy as np
 from scipy.interpolate import CubicSpline
 

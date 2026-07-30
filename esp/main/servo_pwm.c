@@ -1,3 +1,13 @@
+/**
+ * ===========================================================================
+ * WRO 2026 — 4WS AWD Autonomous Robot
+ * File: esp/main/servo_pwm.c
+ * Rev:  v9.9  |  Status: RELEASED
+ * ---------------------------------------------------------------------------
+ * PURPOSE: Servo PWM signal generation
+ * ===========================================================================
+ */
+
 #include "servo_pwm.h"
 #include "driver/ledc.h"
 #include "esp_log.h"

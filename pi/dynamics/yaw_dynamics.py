@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/dynamics/yaw_dynamics.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# PURPOSE: Yaw dynamics modelling using kinematic bicycle model
+# =============================================================================
+
 import numpy as np
 
 

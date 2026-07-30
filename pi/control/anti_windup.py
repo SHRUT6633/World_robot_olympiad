@@ -1,3 +1,11 @@
+# =============================================================================
+# WRO 2026 — 4WS AWD Autonomous Robot
+# File: pi/control/anti_windup.py
+# Rev:  v9.9  |  Status: RELEASED
+# -----------------------------------------------------------------------------
+# PURPOSE: Anti-windup to prevent integral accumulation during actuator saturation
+# =============================================================================
+
 class AntiWindup:
     # AntiWindup prevents the integral term in a PID controller from accumulating
     # excessively when the actuator is saturated (i.e., the output hits a physical
