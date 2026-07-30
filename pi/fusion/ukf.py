@@ -1,5 +1,5 @@
 import numpy as np
-from filterpy.kalman import UnscentedKalmanFilter, MerkedScaledSigmaPoints
+from filterpy.kalman import UnscentedKalmanFilter, MerweScaledSigmaPoints
 from ..system.logger import log
 
 
@@ -9,7 +9,7 @@ class RobotUKF:
         self.dim_x = 6
         self.dim_z = 6
 
-        points = MerkedScaledSigmaPoints(n=self.dim_x, alpha=0.1, beta=2.0, kappa=0)
+        points = MerweScaledSigmaPoints(n=self.dim_x, alpha=0.1, beta=2.0, kappa=0)
         self.ukf = UnscentedKalmanFilter(
             dim_x=self.dim_x, dim_z=self.dim_z, dt=dt, points=points,
             fx=self._fx, hx=self._hx
