@@ -176,7 +176,7 @@ class VL53L0X(SensorBase, FilteredSensorMixin):
             range_mm = (data[10] << 8) | data[11]
             return float(range_mm)
         except Exception as e:
-            log.warn(f"{self.name}: read error - {e}")
+            self._log_error(f"read error - {e}")
             return None
 
     def read(self):

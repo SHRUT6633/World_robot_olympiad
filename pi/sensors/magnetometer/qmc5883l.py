@@ -161,7 +161,7 @@ class QMC5883L(SensorBase):
             z = z - 65536 if z > 32767 else z
             return np.array([x, y, z], dtype=float)
         except Exception as e:
-            log.warn(f"QMC5883L read error: {e}")
+            self._log_error(str(e))
             return np.zeros(3)
 
     def read(self):

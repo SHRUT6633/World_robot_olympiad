@@ -4,6 +4,7 @@ try:
     import numpy as np
 except ImportError:
     np = None
+from ..system.logger import log
 
 
 class SensorBase(abc.ABC):
@@ -28,6 +29,21 @@ class SensorBase(abc.ABC):
         self._last_read = 0.0
         # Minimum time (seconds) between two hardware reads. 10 ms = 100 Hz.
         self._read_interval = 0.01
+        # Rate-limited error logging: logs at most once every 2 seconds
+        # and auto-disables sensor after 50 consecutive failures.
+        self._last_error_log = 0.0
+        self._error_count = 0
+        self._error_cooldown = 2.0
+        self._max_errors = 50
+
+    def _log_error(self, msg):
+        now = time.monotonic()
+        self._error_count += 1
+        if self._error_count >= self._max_errors:
+            self._enabled = False
+        if now - self._last_error_log >= self._error_cooldown:
+            self._last_error_log = now
+            log.warn(f"{self.name}: {msg}")
 
     @abc.abstractmethod
     def init(self):

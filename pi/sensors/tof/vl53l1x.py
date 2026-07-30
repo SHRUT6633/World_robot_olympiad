@@ -151,7 +151,7 @@ class VL53L1X(SensorBase, FilteredSensorMixin):
             # Non-zero status: measurement invalid. Discard.
             return None
         except Exception as e:
-            log.warn(f"{self.name}: read error - {e}")
+            self._log_error(f"read error - {e}")
             return None
 
     def read(self):

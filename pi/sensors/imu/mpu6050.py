@@ -150,7 +150,7 @@ class MPU6050(SensorBase):
             # Convert unsigned 16-bit to signed 16-bit (two's complement).
             return val - 65536 if val > 32767 else val
         except Exception as e:
-            log.warn(f"MPU6050 read error: {e}")
+            self._log_error(str(e))
             return 0
 
     def read_raw(self):
