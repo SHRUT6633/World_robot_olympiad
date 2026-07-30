@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          pip install flake8 pylint
+      - name: Lint with flake8
+        run: |
+          flake8 pi/ --max-line-length=100 --ignore=E402,W503
+      - name: Lint with pylint
+        run: |
+          pylint pi/ --disable=C,R,fixme --fail-under=8.0 \
+            --init-hook="import sys; sys.path.insert(0, '.')"
+
+  build-esp:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: esp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.espressif
+            esp/build
+          key: ${{ runner.os }}-esp-${{ hashFiles('esp/**') }}
+      - uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: "v5.5.5"
+          target: esp32s3
+          path: esp
+      - name: cppcheck (non-blocking)
+        continue-on-error: true
+        run: |
+          sudo apt-get update && sudo apt-get install -y cppcheck
+          cppcheck --enable=all --suppress=missingIncludeSystem main/
+
+  check-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate YAML
+        run: |
+          pip install pyyaml
+          python -c "
+import yaml, sys
+files = ['config/pi_config.yaml', 'config/esp_config.yaml',
+         'config/surprise_rules.yaml']
+for f in files:
+    try:
+        with open(f) as fh:
+            yaml.safe_load(fh)
+        print(f'{f}: OK')
+    except Exception as e:
+        print(f'{f}: FAIL - {e}')
+        sys.exit(1)
+"

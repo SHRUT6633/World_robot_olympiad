@@ -1,0 +1,44 @@
+---
+pillar_logic: "NORMAL"
+drive_direction: "BEST_FIT"
+steering_mode: "SAME_PHASE"
+obstacle_pass_side: "DYNAMIC"
+parking_mode: "STANDARD"
+stop_and_go: "DISABLED"
+stop_duration_s: 3.0
+narrow_track: "DISABLED"
+max_speed_ms: 2.0
+
+rates:
+  perception_hz: 20
+  control_hz: 100
+  fusion_hz: 100
+  comms_hz: 200
+  logging_hz: 0.5
+
+colour_thresholds:
+  red:
+    lower: [0, 100, 100]
+    upper: [10, 255, 255]
+    lower2: [170, 100, 100]
+    upper2: [180, 255, 255]
+  green:
+    lower: [40, 50, 50]
+    upper: [80, 255, 255]
+  pink:
+    lower: [140, 100, 50]
+    upper: [170, 255, 255]
+
+parking:
+  robot_length_mm: 200
+  parallel_tolerance_mm: 20
+  park_timeout_s: 15
+  align_speed_ms: 0.3
+  final_speed_ms: 0.15
+
+track:
+  outer_size_mm: 3000
+  inner_size_mm: 1000
+  open_challenge_width_mm: 1000
+  obstacle_challenge_width_mm: 1000
+  narrow_width_mm: 600

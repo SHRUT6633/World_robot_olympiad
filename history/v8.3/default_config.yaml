@@ -1,0 +1,10 @@
+surprise_rules:
+  pillar_logic: pass_right
+  drive_direction: forward
+  steering_mode: same_phase
+  parking_mode: parallel_reverse
+  penalties:
+    pillar_knock_over: 10
+    line_cross: 5
+    timeout: 20
+    parking_misalignment_mm: 2

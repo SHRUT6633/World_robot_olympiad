@@ -1,0 +1,10 @@
+{
+  "alpha": 0.92,
+  "beta": 0.08,
+  "dt_s": 0.0105,
+  "quaternion": true,
+  "accel_norm_min": 0.5,
+  "accel_norm_max": 1.5,
+  "gyro_range_dps": 250,
+  "accel_range_g": 2
+}
