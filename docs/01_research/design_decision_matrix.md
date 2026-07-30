@@ -8,6 +8,8 @@ Rev:  v9.9  |  Status: RELEASED
 
 # Design Decision Matrix — WRO 2026 Robot Architecture
 
+> **Theoretical research document.** No physical prototypes were built for rejected alternatives (2WS, FWD, RWD, etc.). All comparisons are based on mathematical analysis, simulation, and engineering reasoning. The final architecture was built directly from these conclusions.
+
 ## Purpose
 
 This document captures the **weighted decision matrix** used to select the final robot architecture. Every major design choice was evaluated against the same nine criteria, scored 1–5, with weights derived from the WRO 2026 rulebook requirements. Each decision includes empirical test data, analytical justification with governing equations, and references to the implementation code.

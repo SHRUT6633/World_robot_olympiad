@@ -8,6 +8,8 @@ Rev:  v9.9  |  Status: RELEASED
 
 # Drivetrain Trade-off Analysis — FWD vs RWD vs AWD
 
+> **Theoretical research document.** No physical prototypes were built for FWD or RWD configurations. All analysis is mathematical modelling, simulation, and paper-based comparison. The final robot uses a single-motor AWD system only.
+
 ## The Question
 
 Once the 4WS decision was made, the next engineering question was:

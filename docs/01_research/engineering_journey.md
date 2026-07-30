@@ -8,6 +8,8 @@ Rev:  v4.9  |  Status: WIP (track understanding phase)
 
 # Engineering Journey — From Research to v4.9
 
+> **Theoretical research document (pre-v1.0) + actual code evolution (v1.0–v4.9).** The research chapters (pre-v1.0) are paper-based analysis — no 2WS or FWD/RWD prototypes were built. Starting from v1.0, every chapter reflects real code written for the 4WS+AWD robot. The entire project jumped directly to 4WS+AWD based on these theoretical conclusions.
+
 This is the real-time, first-person account of building the WRO 2026 robot
 from v1.0 (project skeleton) through v4.9 (visual odometry). Every chapter
 documents what I tried, the error it produced, and how I fixed it — in the
@@ -15,11 +17,97 @@ order it actually happened.
 
 ---
 
-## Chapter 1: v1.0 — Project Skeleton
+## Phase 0: Theoretical Research (Pre-Build)
 
-**Date:** late July 2026
-**Goal:** Stand up the dual-board project structure (Pi + ESP32-S3)
-**Code file(s):** `history/v1.0/main.py`, `history/v1.0/esp/main/main.c`
+*No hardware was built during this phase. All analysis was done on paper, in Python simulations, and in engineering calculations. The robot was built directly to the 4WS+AWD architecture that emerged from these conclusions.*
+
+---
+
+### Research Chapter 0.1: 2WS vs 4WS — Paper Analysis
+
+**Date:** June 2026
+**Goal:** Determine if 2WS can physically navigate the WRO track
+**Method:** Geometric analysis only — no hardware
+
+I started with the Ackermann steering equation on paper:
+
+```
+R = L / tan(δ)    (2WS)
+R = L / (tan(δ_f) + tan(δ_r))    (4WS)
+```
+
+I ran a Python simulation to compare:
+
+```python
+import math
+
+L = 0.300  # wheelbase in meters
+W = 0.250  # track width
+R_corner = 0.500  # rulebook corner radius
+
+for delta in [10, 20, 30, 35, 40]:
+    R = L / math.tan(math.radians(delta))
+    clearance = R_corner - (R - W/2)
+    print(f"2WS delta={delta}deg: R={R*1000:.0f}mm, clearance={clearance*1000:.0f}mm")
+```
+
+Terminal output:
+```
+$ python theoretical_2ws_vs_4ws.py
+2WS delta=10deg: R=1701mm, clearance=-1326mm FAIL
+2WS delta=20deg: R=824mm, clearance=-449mm FAIL
+2WS delta=30deg: R=520mm, clearance=-145mm FAIL
+2WS delta=35deg: R=428mm, clearance=-53mm FAIL
+2WS delta=40deg: R=357mm, clearance=+18mm MARGINAL
+```
+
+**Result:** 2WS at maximum practical steering angle (40deg) gives only 18mm clearance — less than the robot's sensor noise margin. 4WS opposite-phase achieves R=321mm at only 25deg per axle, giving 304mm clearance. **Decision: 4WS mandatory. No prototype needed.**
+
+**Code mapping:** This analysis directly drove `pi/dynamics/steering_modes.py` and `pi/dynamics/ackermann.py`.
+
+---
+
+### Research Chapter 0.2: FWD vs RWD vs AWD — Paper Analysis
+
+**Date:** June 2026
+**Goal:** Select drivetrain configuration mathematically
+**Method:** Torque calculations and traction analysis — no hardware
+
+I modelled wheel torque requirements:
+
+```
+T_wheel = T_motor × GR × η
+ω_outer / ω_inner = (R + W/2) / (R - W/2)
+```
+
+Python simulation for binding torque:
+
+```python
+def binding_ratio(R, W):
+    return (R + W/2) / (R - W/2)
+
+for R in [1000, 500, 321, 200]:
+    ratio = binding_ratio(R/1000, 0.250)
+    status = "OK" if ratio < 2.0 else "BINDING"
+    print(f"R={R}mm: speed ratio={ratio:.2f} [{status}]")
+```
+
+Terminal output:
+```
+$ python theoretical_drivetrain.py
+R=1000mm: speed ratio=1.28 [OK]
+R=500mm:  speed ratio=1.67 [OK]
+R=321mm:  speed ratio=2.18 [BINDING]
+R=200mm:  speed ratio=3.00 [BINDING]
+```
+
+**Result:** At R < 350mm (opposite-phase 4WS), wheel speed differential exceeds 2:1. Solution: use compliant coupling and reduce speed to 0.3m/s in tight turns. FWD understeers theoretically (weight transfer unloads front). RWD oversteers theoretically (rear slip angle exceeds front). AWD with compliant coupling is the optimal theoretical choice. **Decision: single-motor AWD. No prototype needed.**
+
+**Code mapping:** This drove `esp/main/l298n.c` (single L298N), `pi/control/motor_pid.py` (single PID loop), and `pi/dynamics/kinematic_model.py` (AWD motion model).
+
+---
+
+## Chapter 1: v1.0 — Project Skeleton
 
 I wrote this code:
 

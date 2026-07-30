@@ -8,6 +8,8 @@ Rev:  v9.9  |  Status: RELEASED
 
 # Turning Radius Analysis — 2WS vs 4WS
 
+> **Theoretical research document.** No physical prototypes were built for 2WS, FWD, or RWD configurations. All analysis is mathematical simulation and paper-based engineering comparison. The final robot uses 4WS+AWD only.
+
 ## Why This Document Exists
 
 Before writing a single line of code or cutting a single piece of aluminium, I needed to answer the fundamental question:
