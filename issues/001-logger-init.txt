@@ -1,0 +1,36 @@
+Issue 001: Logger.info() crashes with AttributeError
+====================================================
+
+Date  : 2026-07-30
+Module: pi/system/logger.py (line 127)
+        pi/main.py (line 182 via global_planner.plan_lap)
+
+Symptoms
+--------
+$ python pi/main.py
+...
+AttributeError: 'Logger' object has no attribute 'logger'
+
+Root Cause
+----------
+Logger is a singleton. Its .init() method creates self.logger (the
+underlying logging.Logger).  .init() was never called anywhere in
+main.py, so self.logger never existed.  When global_planner.plan_lap()
+called log.info(...), the delegate self.logger.info(...) crashed.
+
+Fix
+---
+Added log.init() immediately after the import in pi/main.py (line 38):
+
+    from pi.system.logger import log
+    log.init()
+
+.init() is idempotent (guarded by _initialized flag), so calling it
+multiple times is harmless.  All subsequent log.info/warn/error calls
+now work.
+
+Prevention
+----------
+Ensure every entry point (main.py, boot.py, etc.) calls log.init()
+before any module logs a message.  Consider adding a lazy-init fallback
+in Logger.info()/warn()/error() if self.logger is missing.

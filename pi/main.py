@@ -35,6 +35,7 @@ import time
 import numpy as np
 from pi.system.manager import SystemManager
 from pi.system.logger import log
+log.init()
 from pi.system.config_manager import ConfigManager
 from pi.sensors.camera.camera_driver import PiCamera
 from pi.sensors.camera.calibration import CameraCalibration

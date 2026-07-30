@@ -1,0 +1,7 @@
+WRO 4WS Robot - Known Issues
+=============================
+
+Each file documents a bug, error, or unexpected behaviour encountered
+during development. Format: 001-description.txt
+
+001-logger-init.txt  -- Logger.info() fails because .init() never called
