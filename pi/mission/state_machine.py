@@ -14,7 +14,11 @@ class RobotState(Enum):
     OBSTACLE_AVOID = auto()   # Manoeuvring around a detected obstacle.
     REVERSE = auto()          # Backing up (e.g. when stuck or boxed in).
     LAP_FINISHED = auto()     # All laps completed; prepare to park.
-    PARK = auto()             # Final parking manoeuvre.
+    PARK = auto()             # Final parking manoeuvre (entry).
+    PARK_APPROACH = auto()    # Moving towards the detected parking zone.
+    PARK_ALIGN = auto()       # Aligning parallel to the outer wall (2 cm tolerance).
+    PARK_BACK_IN = auto()     # Reversing into the parking spot between magenta markers.
+    PARK_VERIFY = auto()      # Stopped — judges verify position (≥30 s stationary).
     EMERGENCY_STOP = auto()   # Immediate stop due to fault or collision risk.
     SHUTDOWN = auto()         # Safe shutdown sequence.
 

@@ -113,9 +113,34 @@ colour_thresholds:
   red:
     lower: [0, 100, 100]
     upper: [10, 255, 255]
+    lower2: [170, 100, 100]
+    upper2: [180, 255, 255]
   green:
     lower: [40, 50, 50]
     upper: [80, 255, 255]
-  blue:
-    lower: [100, 150, 50]
-    upper: [130, 255, 255]
+  pink:
+    lower: [140, 100, 50]
+    upper: [170, 255, 255]
+
+# ---------------------------------------------------------------------------
+# PARKING PARAMETERS  (Rulebook Appendix A section 6)
+# ---------------------------------------------------------------------------
+# The parking lot is between two magenta markers.
+# Marker dimensions: 200x20x100 mm (Rule 13.25)
+# Parking length: 1.5 × robot length (variable, see Rule 13.26)
+parking:
+  robot_length_mm: 200
+  parallel_tolerance_mm: 20
+  park_timeout_s: 15
+  align_speed_ms: 0.3
+  final_speed_ms: 0.15
+
+# ---------------------------------------------------------------------------
+# TRACK PARAMETERS
+# ---------------------------------------------------------------------------
+track:
+  outer_size_mm: 3000
+  inner_size_mm: 1000
+  open_challenge_width_mm: 1000
+  obstacle_challenge_width_mm: 1000
+  narrow_width_mm: 600

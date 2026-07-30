@@ -1,4 +1,5 @@
 esp/build/
+**/esp/build/
 .vscode/
 __pycache__/
 *.pyc
@@ -6,4 +7,20 @@ __pycache__/
 venv/
 .venv/
 logs/
-esp/sdkconfig.old
+*.bin
+*.elf
+*.map
+*.s
+*.a
+*.o
+sdkconfig.old
+**/sdkconfig.old
+build/
+**/build/
+node_modules/
+dist/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/

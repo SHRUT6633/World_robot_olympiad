@@ -51,7 +51,11 @@ from pi.fusion.mahalanobis import MahalanobisOutlierRejector
 from pi.perception.lane_detection import LaneDetector
 from pi.perception.wall_detection import WallDetector
 from pi.perception.free_space import FreeSpaceDetector
+from pi.perception.pillar_detector import PillarDetector
+from pi.perception.pillar_tracker import PillarTracker
+from pi.perception.parking_detector import ParkingDetector
 from pi.localization.robot_localization import RobotLocalization
+from pi.localization.track_map import TrackMap
 from pi.mission.state_machine import StateMachine, RobotState
 from pi.mission.lap_counter import LapCounter
 from pi.planning.global_planner import GlobalPlanner
@@ -184,13 +188,30 @@ async def main():
     # =========================================================================
     # Perception Modules
     # =========================================================================
-    #   lane_detector  – Finds lane boundaries from the camera frame
-    #                     (edge detection, Hough transform, or ML).
-    #   wall_detector  – Detects walls using ToF point clouds.
-    #   free_space     – Classifies drivable vs. obstacle regions.
+    #   lane_detector    – Finds lane boundaries from the camera frame.
+    #   wall_detector    – Detects walls using ToF point clouds.
+    #   free_space       – Classifies drivable vs. obstacle regions.
+    #   pillar_detector  – Colour-based pillar detection using exact RGB
+    #                      from Rulebook 13.21-13.22: red=(238,39,55),
+    #                      green=(68,214,44), pink=(255,0,255).
+    #                      Returns bearing + estimated distance.
+    #   pillar_tracker   – Tracks which pillars have been passed and on
+    #                      which side. Validates correct/incorrect pass
+    #                      based on pillar_logic config (NORMAL/REVERSED).
+    #   parking_detector – Detects magenta parking markers (Rule 13.27),
+    #                      computes the parking zone rectangle, and
+    #                      guides parallel alignment (2 cm tolerance).
+    #   track_map        – Lightweight geometry-based track localization.
+    #                      No SLAM — just section/zone tracking using
+    #                      known track dimensions (Rule 13.1-13.8).
     lane_detector = LaneDetector()
     wall_detector = WallDetector()
     free_space = FreeSpaceDetector()
+    pillar_detector = PillarDetector(config=sr.get("colour_thresholds", {}))
+    pillar_tracker = PillarTracker(pillar_logic=pillar_logic)
+    robot_len_mm = config.get("surprise_rules", "parking", "robot_length_mm", default=200)
+    parking_detector = ParkingDetector(robot_length_mm=robot_len_mm)
+    track_map = TrackMap(track_width_mm=1000)
 
     # =========================================================================
     # Mission & Planning
@@ -198,14 +219,13 @@ async def main():
     #   state_machine  – Finite-state machine (e.g. SEARCHING, TRACKING,
     #                    AVOIDING, FINISHED). Drives top-level behavior.
     #   lap_counter    – Counts laps completed using pose or start/finish
-    #                    line crossings. total_laps=2 means the robot stops
-    #                    after 2 laps.
-    #                     Change to match competition lap count.
+    #                    line crossings. total_laps=3 means the robot stops
+    #                    after 3 laps (Rule 10.2.1).
     #   global_planner – Generates waypoints around the track.
     #                    plan_lap(track_width, track_length) creates a
     #                    rectangular circuit. Adjust for actual track size.
     state_machine = StateMachine()
-    lap_counter = LapCounter(total_laps=2)
+    lap_counter = LapCounter(total_laps=3)
     global_planner = GlobalPlanner()
     global_planner.plan_lap(track_width=3.0, track_length=5.0)
 
@@ -307,15 +327,20 @@ async def main():
     # =========================================================================
     # Perception Task (50 Hz)
     # =========================================================================
-    # Runs lane detection and free-space detection on the latest camera frame.
-    # Runs at 50 Hz (20 ms period) — camera may be 60 FPS but perception
-    # is typically heavier, so we run it slower.
+    # Runs lane detection, pillar colour detection, and parking zone
+    # detection on the latest camera frame.  Pillar colours use the exact
+    # RGB values from Rulebook 13.21-13.22-13.27.  ParkingDetector also
+    # checks ToF left/right for parallel alignment verification.
     # Heartbeat: "perception".
     async def perception_task():
         frame = camera.frame
         if frame is not None:
             lanes = lane_detector.detect(frame)
             free = free_space.detect(frame)
+            pillar_dets = pillar_detector.detect(frame)
+            pillar_tracker.update(pillar_dets)
+            pink_dets = pillar_dets.get("pink", [])
+            parking_detector.update(pink_dets, tof_left.read(), tof_right.read())
         mgr.health.heartbeat("perception")
 
     # =========================================================================
