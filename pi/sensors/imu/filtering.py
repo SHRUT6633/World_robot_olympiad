@@ -113,11 +113,8 @@ class IMUFilter:
         return filtered[0]
 
     def high_pass(self, data, axis="x", sensor="gyro"):
-        """
-        Apply a 2nd-order Butterworth high-pass filter.
-
-        High-pass removes DC offset and very slow drift.
-        """
+        # Same persistent-state IIR approach as low_pass, but using
+        # high-pass coefficients to remove DC bias and ultra-slow drift.
         zi = getattr(self, f"_zi_{sensor}")[axis]
         if zi is None:
             zi = signal.lfilter_zi(self._b_high, self._a_high) * data

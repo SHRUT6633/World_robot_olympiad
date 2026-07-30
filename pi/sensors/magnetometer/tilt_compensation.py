@@ -87,7 +87,11 @@ class TiltCompensation:
         The 1e-6 epsilon prevents division by zero (|a| = 0 in free fall,
         which should not happen in normal operation).
         """
+        # Normalise by total acceleration magnitude (gravity + motion).
+        # At rest, |a| ≈ 1 g; in motion, it includes linear acceleration.
         norm = np.linalg.norm(accel) + 1e-6
+        # pitch = arcsin(-ax/|a|): when nose-up, ax reads -g·sin(pitch).
+        # roll = arctan2(ay, az): Y and Z share gravity on a roll tilt.
         self.pitch = np.arcsin(-accel[0] / norm)
         self.roll = np.arctan2(accel[1], accel[2])
 
@@ -107,8 +111,10 @@ class TiltCompensation:
           is reduced to < 2°.
         """
         # Tilt-compensated X: project mag_x and mag_z onto horizontal X.
+        # Rotate magnetic vector from body frame to horizontal (world) frame:
+        # X_h = mx·cos(pitch) + mz·sin(pitch) — compensates pitch tilt.
         x = mag[0] * np.cos(self.pitch) + mag[2] * np.sin(self.pitch)
-        # Tilt-compensated Y: project all 3 axes onto horizontal Y.
+        # Y_h accounts for both pitch AND roll coupling into Y.
         y = (mag[0] * np.sin(self.roll) * np.sin(self.pitch) +
              mag[1] * np.cos(self.roll) -
              mag[2] * np.sin(self.roll) * np.cos(self.pitch))

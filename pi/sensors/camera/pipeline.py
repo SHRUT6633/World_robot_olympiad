@@ -64,6 +64,8 @@ class CameraPipeline:
         """
         if mtx is None:
             return img
+        # Apply lens distortion correction using the camera matrix and
+        # distortion coefficients from CameraCalibration.
         return cv2.undistort(img, mtx, dist)
 
     def perspective_transform(self, img, src_pts, dst_pts, size):
@@ -81,6 +83,8 @@ class CameraPipeline:
         Bird's-eye view makes distance measurement and line following
         much easier because the floor geometry is approximately Euclidean.
         """
+        # Compute 3×3 homography from source (perspective-distorted) to
+        # destination (bird's-eye) quadrilateral, then warp the image.
         H = cv2.getPerspectiveTransform(src_pts, dst_pts)
         return cv2.warpPerspective(img, H, size)
 
@@ -98,6 +102,9 @@ class CameraPipeline:
         auto-exposure — the real hardware exposure should also be adjusted
         via the camera driver's V4L2 controls.
         """
+        # Compute average luminance and apply digital gain to hit the target
+        # brightness. This compensates for exposure changes when the robot
+        # moves between light and shadow.
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         mean = np.mean(gray)
         gain = target_brightness / (mean + 1e-6)
@@ -116,10 +123,14 @@ class CameraPipeline:
         The scaling factor 1.1 controls the correction strength.
         Higher values = more aggressive white balance.
         """
+        # Convert to LAB colour space where colour channels (a, b) are
+        # independent of luminance (L), enabling cast-free colour correction.
         result = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
         avg_a = np.mean(result[:, :, 1])
         avg_b = np.mean(result[:, :, 2])
-        # Shift a and b channels toward neutral, weighted by L channel.
+        # Shift a/b toward neutral (128), weighted by L so dark regions
+        # are corrected less aggressively than bright ones (preventing noise
+        # amplification in shadows). Scaling factor 1.1 controls strength.
         result[:, :, 1] = result[:, :, 1] - ((avg_a - 128) * (result[:, :, 0] / 255.0) * 1.1)
         result[:, :, 2] = result[:, :, 2] - ((avg_b - 128) * (result[:, :, 0] / 255.0) * 1.1)
         return cv2.cvtColor(result, cv2.COLOR_LAB2BGR)
@@ -139,9 +150,9 @@ class CameraPipeline:
         field elements more distinguishable.
         """
         inv = 1.0 / gamma
-        # Pre-compute a lookup table for all 256 possible pixel values.
+        # Pre-compute a 256-entry LUT for the gamma power curve: pixel_out =
+        # 255 * (pixel_in/255)^(1/γ). LUT is applied per-pixel via cv2.LUT.
         table = np.array([(i / 255.0) ** inv * 255 for i in range(256)]).astype("uint8")
-        # cv2.LUT applies the table to every pixel efficiently (vectorised).
         return cv2.LUT(img, table)
 
     def apply_clahe(self, img):
@@ -157,8 +168,9 @@ class CameraPipeline:
         Only the L channel is equalised; colour channels a and b are
         preserved to avoid colour shift.
         """
+        # Convert to LAB and apply CLAHE only to the L (luminance) channel,
+        # preserving colour information in a/b channels to avoid hue distortion.
         lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
-        # Apply CLAHE to the L channel only.
         lab[:, :, 0] = self.clahe.apply(lab[:, :, 0])
         return cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
 
@@ -179,6 +191,9 @@ class CameraPipeline:
         """
         if kernel_size < 2:
             return img
+        # Normalised box filter: each output pixel is the average of its
+        # (kernel_size × kernel_size) neighbourhood, reducing high-frequency
+        # noise at the cost of fine-detail blurring.
         kernel = np.ones((kernel_size, kernel_size), np.float32) / (kernel_size * kernel_size)
         return cv2.filter2D(img, -1, kernel)
 

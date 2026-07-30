@@ -89,11 +89,11 @@ class QMC5883L(SensorBase):
         self.bus = bus
         self.address = address
         self._device = None
-        # Hard-iron offset vector (constant bias from robot's own magnetics).
-        # Shape (3,) = [bias_x, bias_y, bias_z] in sensor counts.
+        # H: constant hard-iron offset vector (bias from the robot's own
+        # magnetic field — motors, battery, wiring). Subtracted from raw.
         self.hard_iron = np.zeros(3)
-        # Soft-iron scaling matrix (3×3).
-        # Identity = no correction. Should be calibrated for the environment.
+        # S: 3×3 soft-iron scaling matrix correcting for ferrous material
+        # distortion in the environment. Identity = no correction applied.
         self.soft_iron = np.eye(3)
 
     def init(self):
@@ -116,13 +116,12 @@ class QMC5883L(SensorBase):
         try:
             import smbus2
             self._bus = smbus2.SMBus(self.bus)
-            # Control Register 1: 0x1D = 0b00011101
-            #   Mode=00 (continuous), ODR=01 (50 Hz),
-            #   RNG=00 (±2 G), OSR=01 (64 samples)
+            # 0x09 = Control Reg 1: 0x1D = continuous mode, 50 Hz ODR,
+            # ±2 G range, 64× oversampling (averages 64 samples per output).
             self._bus.write_byte_data(self.address, 0x09, 0x1D)
-            # Control Register 2: 0x01 = soft reset.
+            # 0x0B = Control Reg 2: 0x01 = soft reset (clears all registers).
+            # Must re-write 0x09 after this because reset defaults 0x09 to 0x00.
             self._bus.write_byte_data(self.address, 0x0B, 0x01)
-            # Re-apply Control Register 1 (soft reset cleared it).
             self._bus.write_byte_data(self.address, 0x09, 0x1D)
             self._device = True
             log.info("QMC5883L initialized")
@@ -156,14 +155,13 @@ class QMC5883L(SensorBase):
             import random
             return np.array([random.uniform(-300, 300) for _ in range(3)])
         try:
+            # Block read 6 bytes from register 0x00 (X_L, X_H, Y_L, Y_H, Z_L, Z_H).
             data = self._bus.read_i2c_block_data(self.address, 0x00, 6)
-            # X: bytes 0-1 (LSB first).
+            # Data is little-endian: LSB first, MSB second.
             x = (data[1] << 8) | data[0]
-            # Y: bytes 2-3 (LSB first).
             y = (data[3] << 8) | data[2]
-            # Z: bytes 4-5 (LSB first).
             z = (data[5] << 8) | data[4]
-            # Convert to signed 16-bit.
+            # Convert unsigned 16-bit to signed two's complement.
             x = x - 65536 if x > 32767 else x
             y = y - 65536 if y > 32767 else y
             z = z - 65536 if z > 32767 else z
@@ -192,6 +190,9 @@ class QMC5883L(SensorBase):
         raw = super().read()
         if raw is None:
             return None
+        # Apply hard-iron subtraction then soft-iron matrix multiplication:
+        # B_compensated = S · (B_raw - H) — centres the ellipsoid then
+        # maps it onto a sphere for distortion-free heading.
         compensated = self.soft_iron @ (raw - self.hard_iron)
         return compensated
 
@@ -285,6 +286,8 @@ class QMC5883L(SensorBase):
     def close(self):
         if hasattr(self, "_bus") and self._bus:
             try:
+                # Release the I2C bus so magnetometer is free for other
+                # processes or re-initialisation on the next power cycle.
                 self._bus.close()
             except Exception:
                 pass

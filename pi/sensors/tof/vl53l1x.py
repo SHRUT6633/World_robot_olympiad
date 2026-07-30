@@ -151,12 +151,15 @@ class VL53L1X(SensorBase, FilteredSensorMixin):
             import random
             return random.uniform(100, 3000)
         try:
+            # Block read 17 bytes from result register 0x00; bytes 14-15
+            # hold the 16-bit range (mm), byte 16 holds the range status.
             data = self._bus.read_i2c_block_data(self.address, 0x00, 17)
             range_mm = (data[14] << 8) | data[15]
             status = data[16]
+            # status=0 means valid measurement; non-zero means signal too low,
+            # sigma too high, or wrap-around — discard to avoid acting on garbage.
             if status == 0:
                 return float(range_mm)
-            # Non-zero status: measurement invalid. Discard.
             return None
         except Exception as e:
             self._log_error(f"read error - {e}")
@@ -173,6 +176,8 @@ class VL53L1X(SensorBase, FilteredSensorMixin):
         raw = super().read()
         if raw is None:
             return None
+        # Same two-stage filtering as VL53L0X: outlier rejection protects against
+        # spurious readings from low-reflectivity surfaces at long range.
         filtered = self.filter_outliers(raw)
         return self.filter_moving_avg(filtered)
 

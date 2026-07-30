@@ -39,4 +39,8 @@ class FeedforwardCompensation:
         # Changing mass or friction changes the estimated plant dynamics.
         # If the model is accurate, the feedback controller has very little
         # correction to do. If inaccurate, the feedback must compensate.
+        # Newton's second law with linear viscous drag: F = m·a + b·v
+        # mass and friction are lumped-parameter estimates of the real plant
+        # Accuracy of these parameters directly determines how much the feedback
+        # controller must compensate for — a well-tuned model minimises feedback effort
         return self.mass * target_accel + self.friction * v

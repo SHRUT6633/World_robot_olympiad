@@ -48,8 +48,10 @@ class FuturePositionPredictor:
         trajectory = []
         cx, cy, ch = x, y, heading
         for _ in range(self.steps):
+            # Integrate position along current heading: p₊₁ = p + v*cos(ψ)*dt.
             cx += v * np.cos(ch) * dt
             cy += v * np.sin(ch) * dt
+            # Integrate yaw from kinematic bicycle: ψ₊₁ = ψ + (v/L)*tan(δ)*dt.
             ch += (v / wheelbase) * np.tan(delta) * dt
             trajectory.append((cx, cy))
         return np.array(trajectory)

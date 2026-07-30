@@ -19,6 +19,9 @@ class AntiWindup:
         self.clamp_min = clamp_min
         self.clamp_max = clamp_max
 
+    # NOTE: Both methods are stubs that return `integral` unchanged.
+    # In a real implementation, replace these with active clamping or back-calculation
+    # logic to prevent the PID integral from growing while the actuator is saturated.
     def apply(self, integral, output):
         # Basic back-calculation or clamping anti-windup stub.
         # "integral": the current accumulated integral term.
@@ -48,8 +51,11 @@ class AntiWindup:
         # Otherwise allow integration.
         # NOTE: This stub returns `integral` unchanged regardless.
         # Changing `limit` changes the saturation threshold.
+        # Conditional integration: freeze integral if saturated AND error pushes same direction
+        # This prevents windup more aggressively than simple output clamping
         if output >= limit and error > 0:
             return integral
         if output <= -limit and error < 0:
             return integral
+        # Outside saturation — allow normal integration
         return integral

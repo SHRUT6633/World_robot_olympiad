@@ -78,11 +78,19 @@ class DynamicBicycleModel:
         # Using a smaller dt improves accuracy. If dt is too large, the
         # integration becomes unstable (especially at high speeds).
         x, y, psi, vx, vy, psi_dot = state
+        # Front slip: αf = arctan((vy + lf*ψ̇)/vx) - δ — lateral velocity at
+        # front axle includes yaw rotation (+lf*ψ̇) minus steering angle.
         Fyf = -self.Cf * np.arctan((vy + self.lf * psi_dot) / (vx + 1e-6) - delta)
+        # Rear slip: αr = arctan((vy - lr*ψ̇)/vx) — no steering, yaw subtracts.
         Fyr = -self.Cr * np.arctan((vy - self.lr * psi_dot) / (vx + 1e-6))
+        # No longitudinal dynamics modelled — assumes constant forward speed.
         vx_dot = 0.0
+        # Body-frame lateral acceleration: ΣFy/m - vx*ψ̇ (centrifugal coupling).
         vy_dot = (Fyf + Fyr) / self.m - vx * psi_dot
+        # Yaw acceleration: torque from front/rear lateral forces divided by inertia.
         psi_ddot = (self.lf * Fyf - self.lr * Fyr) / self.Iz
+        # Euler integration of all 6 states — accuracy depends on dt being
+        # small relative to the fastest dynamics (typically yaw natural frequency).
         return np.array([
             x + (vx * np.cos(psi) - vy * np.sin(psi)) * dt,
             y + (vx * np.sin(psi) + vy * np.cos(psi)) * dt,

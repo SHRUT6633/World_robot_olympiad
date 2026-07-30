@@ -88,6 +88,8 @@ class CrossSensorVerifier:
         Returns None if NO readings are valid (robot should emergency stop
         or switch to a different sensing modality).
         """
+        # Averaging only the consistent sensors makes the fused distance
+        # robust against a single failed sensor biasing the control logic.
         valid_vals = [v for n, v in readings.items() if v is not None and valid.get(n, False)]
         if not valid_vals:
             return None

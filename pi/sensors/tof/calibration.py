@@ -92,24 +92,12 @@ class ToFCalibration:
             log.info(f"{sensor.name}: offset={offset:.1f}mm")
 
     def apply(self, sensor_name, raw_mm):
-        """
-        Subtract the per-sensor offset from a raw reading.
-
-        If no offset is stored for this sensor, returns raw_mm unchanged.
-        """
+        # Subtract per-sensor offset (systematic bias from cover glass, etc.).
         return raw_mm - self.offsets.get(sensor_name, 0.0)
 
     def temp_compensate(self, raw_mm, temp_c, coeff=-0.03):
-        """
-        Apply first-order temperature compensation.
-
-        raw_mm  : distance reading (already offset-corrected).
-        temp_c  : current sensor temperature in °C.
-        coeff   : temperature coefficient in mm/°C.
-
-        The VL53L0X typically has a drift of ≈ -0.03 mm/°C.
-        As temperature increases, the measured distance decreases slightly.
-        """
+        # First-order temperature correction: D ≈ -0.03 mm/°C for VL53L0X/L1X
+        # as VCSEL wavelength and SPAD sensitivity drift with temperature.
         return raw_mm + coeff * (temp_c - 25.0)
 
     def save(self, path="config/calibration/tof_calib.json"):

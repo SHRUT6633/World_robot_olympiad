@@ -39,6 +39,8 @@ class MechanicalLinkage:
         # If gear_ratio is large, small servo changes produce large wheel
         # movements (more sensitive, harder to control precisely).
         # If gear_ratio is small, the robot's steering response is sluggish.
+        # Scale servo angle by gear ratio to account for mechanical advantage
+        # (e.g. bell-crank leverage), then clamp to physical steering stop.
         wheel_angle = servo_angle * self.gear_ratio
         return np.clip(wheel_angle, -self.max_steering, self.max_steering)
 
@@ -46,9 +48,10 @@ class MechanicalLinkage:
         # wheel_angle: desired wheel angle (rad).
         # Returns: the servo angle (rad) required to achieve it.
         #
-        # Inverse of servo_to_wheel. Note: this does NOT check if the
-        # wheel_angle exceeds the max steering limit or if the resulting
-        # servo angle is within the servo's own range.
+        # Inverse of servo_to_wheel — divide by gear_ratio to back-calculate
+        # the servo command needed for a desired wheel angle.
+        # Note: this does NOT check if the wheel_angle exceeds the max steering
+        # limit or if the resulting servo angle is within the servo's own range.
         # If wheel_angle is too large, the servo command may be infeasible
         # (the servo will saturate or the linkage will bind).
         return wheel_angle / self.gear_ratio

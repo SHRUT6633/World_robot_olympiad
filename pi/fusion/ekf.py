@@ -26,30 +26,40 @@ class RobotEKF(ExtendedKalmanFilter):
         # Initial state: all zeros (robot starts at origin, stationary)
         self.x = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
         # Initial covariance: moderate uncertainty
+        # EKF predict: P = F @ P @ F.T + Q  (first-order Taylor expansion)
         self.P = np.eye(6) * 0.1
-        # Process noise: trust the motion model fairly well
+        # Process noise Q: diagonal 0.001 — assumes smooth motion on WRO track
+        # Q too high → filter chases noise; Q too low → filter diverges on curves
         self.Q = np.eye(6) * 0.001
-        # Measurement noise: default sensor uncertainty
+        # Measurement noise R: diagonal 0.1 — sensor fusion input quality
+        # Tuned so that GPS/odometry corrections are weighted appropriately
         self.R = np.eye(6) * 0.1
-        # State transition Jacobian (will be updated in predict())
+        # State transition Jacobian F (linearisation of _fx at current state)
+        # Updated every predict() call via analytic partial derivatives
         self.F = np.eye(6)
         # Measurement Jacobian: identity (we observe all states directly)
+        # H = d(hx)/dx |_x  — here hx is identity so H = I
         self.H = np.eye(6)
 
     def predict(self, dt=None):
         # EKF predict step:
         # 1. Apply the non-linear motion model to propagate the state.
-        # 2. Compute the Jacobian F at the current state.
+        # 2. Compute the Jacobian F at the current state (first-order Taylor series).
         # 3. Update covariance: P = F @ P @ F.T + Q.
+        #
+        # Weakness vs UKF: linearisation error grows with non-linearity strength;
+        # the UKF's sigma-point propagation is accurate to 3rd order for Gaussian
+        # inputs, while the EKF is only 1st-order accurate. For WRO track cornering
+        # at moderate speeds, EKF linearisation error is tolerable.
         dt = dt or self.dt
         x, y, heading, v, a, yaw_rate = self.x
-        # Jacobian of the motion model:
-        #   x_next = x + v*cos(heading)*dt
-        #   y_next = y + v*sin(heading)*dt
-        #   heading_next = heading + yaw_rate*dt
-        #   v_next = v + a*dt
-        #   a_next = a
-        #   yaw_rate_next = yaw_rate
+        # Jacobian F = df/dx |_x of the motion model:
+        #   f0: x_next = x + v*cos(heading)*dt   → df0/dheading = -v*sin(h)*dt
+        #   f1: y_next = y + v*sin(heading)*dt   → df1/dheading =  v*cos(h)*dt
+        #   f2: heading_next = heading + yaw_rate*dt → df2/dyaw_rate = dt
+        #   f3: v_next = v + a*dt               → df3/da = dt
+        #   f4: a_next = a, f5: yaw_rate_next = yaw_rate  → diagonal = 1
+        # All other partial derivatives are zero (no coupling between unrelated states)
         self.F = np.array([
             [1, 0, -v * np.sin(heading) * dt, np.cos(heading) * dt, 0, 0],
             [0, 1,  v * np.cos(heading) * dt, np.sin(heading) * dt, 0, 0],
@@ -58,21 +68,25 @@ class RobotEKF(ExtendedKalmanFilter):
             [0, 0, 0, 0, 1, 0],
             [0, 0, 0, 0, 0, 1],
         ])
-        # State propagation (non-linear)
+        # State propagation (non-linear) — same analytic form as UKF _fx
         self.x[0] += v * np.cos(heading) * dt
         self.x[1] += v * np.sin(heading) * dt
         self.x[2] += yaw_rate * dt
         self.x[3] += a * dt
-        # Covariance propagation (linearised)
+        # Covariance propagation (linearised via Jacobian)
         self.P = self.F @ self.P @ self.F.T + self.Q
 
     def update(self, z):
-        # EKF update step:
-        #   y = z - H*x  (innovation)
-        #   S = H*P*H^T + R
-        #   K = P*H^T * S⁻¹  (Kalman gain)
-        #   x = x + K*y
-        #   P = (I - K*H)*P
+        # EKF update (correction) step — Joseph's form covariance update:
+        #   Innovation:   y = z - H*x              (measurement residual)
+        #   Innov. cov:   S = H*P*H^T + R          (uncertainty in measurement space)
+        #   Kalman gain:  K = P*H^T * S^{-1}       (optimal blending weight)
+        #   State:        x = x + K*y               (corrected estimate)
+        #   Covariance:   P = (I - K*H)*P           (reduced uncertainty after obs.)
+        #
+        # The Kalman gain K balances prediction vs. measurement:
+        #   - R large → K small → measurement discounted (trust model)
+        #   - Q large → P large → K large → measurement weighted more
         y = z - self.H @ self.x
         S = self.H @ self.P @ self.H.T + self.R
         K = self.P @ self.H.T @ np.linalg.inv(S)

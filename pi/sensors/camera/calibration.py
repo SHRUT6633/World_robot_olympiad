@@ -90,13 +90,12 @@ class CameraCalibration:
         # 30 iterations or when corner movement < 0.001 pixels.
         criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 
-        # Prepare world-space coordinates for all inner corners.
-        # Shape: (N_corners, 3). All Z=0 (flat chessboard plane).
+        # Build world-space coordinates: (x, y, 0) for each inner corner,
+        # assuming the chessboard lies on the Z=0 plane (flat surface).
         objp = np.zeros((self.chessboard[0] * self.chessboard[1], 3), np.float32)
-        # mgrid creates a grid of (x, y) coordinates for each corner.
-        # reshape(-1, 2) flattens to (N, 2), then we set Z=0.
+        # mgrid creates a 2D grid of corner indices, then scaled by square_size
+        # to give physical millimetre coordinates for Zhang's algorithm.
         objp[:, :2] = np.mgrid[0:self.chessboard[0], 0:self.chessboard[1]].T.reshape(-1, 2)
-        # Scale by physical square size to get real-world units (mm).
         objp *= self.square_size
 
         # Lists: objpoints = 3D points in world space, imgpoints = 2D pixels.
@@ -114,11 +113,16 @@ class CameraCalibration:
                 imgpoints.append(corners2)
 
         if len(objpoints) > 0:
-            # Run Zhang's calibration algorithm.
-            # ret = RMS re-projection error (pixels). Lower is better.
-            # rvecs, tvecs = per-image rotation & translation (extrinsics).
+            # Zhang's algorithm: closed-form initialisation followed by
+            # Levenberg-Marquardt refinement minimising re-projection error.
             ret, self.mtx, self.dist, rvecs, tvecs = cv2.calibrateCamera(
                 objpoints, imgpoints, gray.shape[::-1], None, None
+            )
+            h, w = gray.shape
+            # Compute optimal camera matrix that minimises black border pixels
+            # introduced by undistortion. alpha=1 keeps all original pixels.
+            self.new_mtx, self.roi = cv2.getOptimalNewCameraMatrix(
+                self.mtx, self.dist, (w, h), 1, (w, h)
             )
             h, w = gray.shape
             # Compute the optimal new camera matrix that minimises the
@@ -143,6 +147,8 @@ class CameraCalibration:
         """
         if self.mtx is None or self.dist is None:
             return img
+        # Remap each pixel through the inverse distortion model; new_mtx
+        # produces a slightly zoomed/cropped result with straight lines.
         return cv2.undistort(img, self.mtx, self.dist, None, self.new_mtx)
 
     def save(self, path="config/calibration/camera_calib.json"):

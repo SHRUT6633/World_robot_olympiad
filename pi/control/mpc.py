@@ -41,18 +41,24 @@ class MPCController:
         # Returns the best steering angle (radians) from the candidate set.
         best_steer = 0.0
         best_cost = float("inf")
-        # Evaluate 11 discrete steering angles from -0.5 rad (~-28.6°) to +0.5 rad
+        # Discretised search: 11 candidate angles evenly spaced in [-0.5, +0.5] rad (~±28.6°)
+        # The resolution (~0.1 rad ≈ 5.7°) is coarse but sufficient given the prediction horizon
+        # A finer grid would improve optimality but increases compute cost linearly
         for steer in np.linspace(-0.5, 0.5, 11):
             cost = 0.0
+            # Reset state to current pose for each candidate simulation
             cx, cy, ch = x0, y0, heading0
-            # Simulate forward N steps
+            # Roll out the kinematic model for N steps into the future
             for i in range(self.N):
                 cx, cy, ch = self.model.update(cx, cy, ch, v, steer, self.dt)
                 if i < len(target_path):
                     tx, ty = target_path[i]
+                    # Quadratic position error: penalises deviation from reference path
                     cost += (cx - tx)**2 + (cy - ty)**2  # Position error cost
-                # Steering effort penalty (discourages large angles)
+                # Steering effort penalty: discourages large angles for passenger comfort
+                # Weight = 0.1 — tune higher for smoother but more laggy steering
                 cost += 0.1 * steer**2
+            # Argmin selection: keep the candidate with the lowest cumulative cost
             if cost < best_cost:
                 best_cost = cost
                 best_steer = steer

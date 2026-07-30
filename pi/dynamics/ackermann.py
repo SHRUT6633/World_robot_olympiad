@@ -42,7 +42,10 @@ class AckermannGeometry:
         #
         # If W = 0 (zero track width), both angles are equal (delta).
         # If delta is large, the difference between inner/outer grows.
+        # R = L/tan(|δ|): bicycle-model turn radius of the rear axle centreline.
         R = self.L / (np.tan(abs(delta)) + 1e-6)
+        # Inner wheel follows a tighter arc (R - W/2), requiring a larger angle.
+        # Outer wheel follows a wider arc (R + W/2), requiring a smaller angle.
         delta_inner = np.arctan(self.L / (R - direction * self.W / 2))
         delta_outer = np.arctan(self.L / (R + direction * self.W / 2))
         return delta_inner, delta_outer
@@ -62,4 +65,6 @@ class AckermannGeometry:
         #   longer L = larger turning radius for the same steering angle.
         if abs(delta) < 0.001:
             return float("inf")
+        # R = L/sin(|δ|): radius to the vehicle's outer edge (longer than
+        # the tan-based formula which gives the rear-axle-centre radius).
         return self.L / np.sin(abs(delta))

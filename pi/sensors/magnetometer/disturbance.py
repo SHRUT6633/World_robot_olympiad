@@ -89,15 +89,18 @@ class MagneticDisturbanceDetector:
 
         The first 5 readings are always accepted (not enough history).
         """
+        # Total field magnitude |B| = sqrt(Bx² + By² + Bz²) — invariant under
+        # rotation, so a deviation from the running mean suggests external
+        # interference (e.g. motor current, metal structures).
         magnitude = np.linalg.norm(mag)
         self._history.append(magnitude)
-        # Maintain FIFO buffer.
         if len(self._history) > self.window:
             self._history.pop(0)
-        # Need at least 5 samples for a meaningful baseline.
+        # Need minimum 5 samples for a statistically meaningful baseline.
         if len(self._history) < 5:
             return False
         mean = np.mean(self._history)
         std = np.std(self._history) + 1e-6
+        # Z-score outlier test: if |B - μ| > threshold·σ, flag as disturbed.
         disturbed = abs(magnitude - mean) > self.threshold * std
         return bool(disturbed)

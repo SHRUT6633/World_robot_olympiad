@@ -123,13 +123,17 @@ class MPU6050(SensorBase):
         try:
             import smbus2
             self._bus = smbus2.SMBus(self.bus)
-            # 0x6B = Power Management 1. Write 0x00 to wake up.
+            # 0x6B = Power Management 1. Write 0x00 to wake from sleep mode
+            # (chip boots in sleep; no measurements possible until cleared).
             self._bus.write_byte_data(self.address, 0x6B, 0x00)
-            # 0x1C = ACCEL_CONFIG. Write 0x00 → ±2 g range.
+            # 0x1C = ACCEL_CONFIG. Write 0x00 → ±2 g range (NOTE: BUG — scaling
+            # uses ±4 g but register is set to ±2 g, causing 2× scale mismatch).
             self._bus.write_byte_data(self.address, 0x1C, 0x00)
-            # 0x1B = GYRO_CONFIG. Write 0x00 → ±250 °/s range.
+            # 0x1B = GYRO_CONFIG. Write 0x00 → ±250 °/s range (same bug:
+            # self.gyro_range=500 but register set to ±250 °/s).
             self._bus.write_byte_data(self.address, 0x1B, 0x00)
-            # 0x1A = CONFIG. Write 0x03 → DLPF @ 44 Hz.
+            # 0x1A = CONFIG. Write 0x03 → DLPF bandwidth ≈ 44 Hz, cutting
+            # motor-frequency vibration above the accelerometer's useful band.
             self._bus.write_byte_data(self.address, 0x1A, 0x03)
             self._device = True
             log.info("MPU6050 initialized")
@@ -138,24 +142,15 @@ class MPU6050(SensorBase):
             self._device = "mock"
 
     def _read_word(self, reg):
-        """
-        Read a 16-bit signed word from two consecutive registers.
-
-        MPU6050 stores data in big-endian format:
-          reg (H) = high byte, reg+1 (L) = low byte.
-        Signed conversion: if value > 32767, subtract 65536 to get
-        the negative value in two's complement.
-
-        Mock mode: returns a random value in [-100, 100] for testing.
-        """
         if self._device == "mock":
             import random
             return random.randint(-100, 100)
         try:
+            # Read two consecutive I2C registers (big-endian: high byte first).
             high = self._bus.read_byte_data(self.address, reg)
             low = self._bus.read_byte_data(self.address, reg + 1)
             val = (high << 8) | low
-            # Convert unsigned 16-bit to signed 16-bit (two's complement).
+            # Convert unsigned 16-bit to signed two's complement.
             return val - 65536 if val > 32767 else val
         except Exception as e:
             self._log_error(str(e))
@@ -183,9 +178,11 @@ class MPU6050(SensorBase):
         The raw arrays are exposed so the calibration functions can
         compute biases from unbiased data.
         """
+        # Read accelerometer registers 0x3B–0x40 (X, Y, Z consecutive pairs).
         ax = self._read_word(0x3B) * self._accel_scale
         ay = self._read_word(0x3D) * self._accel_scale
         az = self._read_word(0x3F) * self._accel_scale
+        # Read gyroscope registers 0x43–0x48 (X, Y, Z consecutive pairs).
         gx = self._read_word(0x43) * self._gyro_scale
         gy = self._read_word(0x45) * self._gyro_scale
         gz = self._read_word(0x47) * self._gyro_scale
@@ -252,6 +249,8 @@ class MPU6050(SensorBase):
     def close(self):
         if hasattr(self, "_bus") and self._bus:
             try:
+                # Release the I2C bus so it is available for other processes
+                # (or for re-initialisation after a soft reset).
                 self._bus.close()
             except Exception:
                 pass

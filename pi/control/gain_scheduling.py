@@ -41,6 +41,11 @@ class GainScheduler:
         # Changing these shifts when gains transition:
         #   - Lower thresholds = earlier reduction of gains (more conservative).
         #   - Higher thresholds = aggressive gains held to higher speed (riskier).
+        # Speed zones chosen based on WRO arena characteristics:
+        #   < 0.5 m/s: walking speed, tight turns require aggressive gains
+        #   0.5–1.5 m/s: cruising speed, moderate gains balance tracking vs stability
+        #   > 1.5 m/s: high-speed runs, reduced gains prevent oscillatory instability
+        # No hysteresis on zone boundaries — gains can chatter at transition speeds
         if v < 0.5:
             self.current_zone = "slow"
         elif v < 1.5:

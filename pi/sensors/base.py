@@ -47,8 +47,12 @@ class SensorBase(abc.ABC):
     def _log_error(self, msg):
         now = time.monotonic()
         self._error_count += 1
+        # Auto-disable sensor after max_errors consecutive failures to prevent
+        # the control loop from acting on stale/bogus data.
         if self._error_count >= self._max_errors:
             self._enabled = False
+        # Rate-limit error logs to once per cooldown period (2 s default)
+        # to avoid flooding the log with repeated identical errors.
         if now - self._last_error_log >= self._error_cooldown:
             self._last_error_log = now
             log.warn(f"{self.name}: {msg}")
@@ -127,49 +131,31 @@ class FilteredSensorMixin:
         self._buffer = []
 
     def filter_median(self, value):
-        """
-        Replace value with the median of the last N samples.
-
-        Median is very robust against outliers (e.g. a single ToF
-        reading that bounces off a glossy surface). Slower than moving
-        average due to sorting.
-        """
+        # Median filter: robust to single-pulse outliers (e.g. ToF glint).
+        # Adds overhead due to sorting O(N log N) but rejects spikes cleanly.
         self._buffer.append(value)
         if len(self._buffer) > self.window_size:
             self._buffer.pop(0)
         return float(np.median(self._buffer))
 
     def filter_moving_avg(self, value):
-        """
-        Replace value with the arithmetic mean of the last N samples.
-
-        Equivalent to a simple low-pass FIR filter. Attenuates high-
-        frequency sensor noise but introduces a phase delay equal to
-        (window_size - 1) / 2 samples.
-        """
+        # Simple FIR low-pass: attenuates high-frequency sensor noise but
+        # introduces (window_size - 1)/2 samples of phase delay.
         self._buffer.append(value)
         if len(self._buffer) > self.window_size:
             self._buffer.pop(0)
         return float(np.mean(self._buffer))
 
     def filter_outliers(self, value, threshold=3.0):
-        """
-        Reject a value if it deviates more than `threshold` standard
-        deviations from the running mean.
-
-        If rejected, returns the current mean instead (hold-last-good).
-        This prevents spurious readings (e.g. ultrasonic cross-talk,
-        IR interference from sunlight) from corrupting the control loop.
-        The 1e-6 epsilon prevents division-by-zero when buffer is constant.
-        """
+        # Need at least 3 samples for meaningful mean/std statistics.
         if len(self._buffer) < 3:
-            # Not enough history to compute statistics; accept blindly.
             self._buffer.append(value)
             return value
         mu = np.mean(self._buffer)
         sigma = np.std(self._buffer) + 1e-6
+        # Z-score outlier rejection: if |z| > threshold, hold last mean
+        # instead of letting the spike corrupt the control loop.
         if abs(value - mu) > threshold * sigma:
-            # Outlier detected: return the mean and DO NOT add value to buffer.
             return float(mu)
         self._buffer.append(value)
         if len(self._buffer) > self.window_size:

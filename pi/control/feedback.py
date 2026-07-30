@@ -39,6 +39,11 @@ class FeedbackSteering:
         #
         # If kp is too large, the robot may oscillate around the target heading.
         # If kd is too large, steering becomes jerky/sensitive to noise.
+        # Finite-difference derivative: de = heading_error_k - heading_error_{k-1}
+        # Implicit sample period of 1 (steps) — dt scaling is handled externally
         derivative = heading_error - self._last_error
         self._last_error = heading_error
+        # PD law: proportional reacts to current error, derivative predicts future error
+        # No integral term — steady-state heading error is handled by feedforward or
+        # the outer path-tracking controller (e.g., Stanley or MPC)
         return self.kp * heading_error + self.kd * derivative

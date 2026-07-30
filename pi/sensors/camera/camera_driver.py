@@ -76,14 +76,15 @@ class PiCamera(SensorBase):
         actual values with cap.get(PROP_*) if precise control is needed.
         """
         # Open /dev/video<device> with the V4L2 backend for low latency.
+        # Open /dev/video<device> with V4L2 backend for lower latency than FFMPEG.
         self._cap = cv2.VideoCapture(self.device, cv2.CAP_V4L2)
-        # Request frame width. The driver may round to a supported mode.
+        # Request resolution and framerate; V4L2 may silently round to a
+        # supported mode if the exact values are not available.
         self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
-        # Request frame height.
         self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
-        # Request frames per second.
         self._cap.set(cv2.CAP_PROP_FPS, self.fps)
-        # Minimise internal buffer to reduce latency (fewer stale frames).
+        # Minimise internal driver buffer to reduce latency — a large queue
+        # would serve stale frames to the control loop.
         self._cap.set(cv2.CAP_PROP_BUFFERSIZE, 2)
         log.info(f"Camera: {self.width}x{self.height} @ {self.fps}fps")
 
@@ -100,10 +101,12 @@ class PiCamera(SensorBase):
         stored in self._frame so downstream code can access it without
         re-reading the sensor.
         """
+        # Grab the next frame from V4L2 buffer; ret=False signals end of
+        # stream or camera disconnection (e.g. loose CSI ribbon cable).
         ret, frame = self._cap.read()
         if not ret:
-            # No frame available — camera may be disconnected or busy.
             return None
+        # Cache the frame so .property can re-read without a new bus transaction.
         self._frame = frame
         self._frame_count += 1
         return frame

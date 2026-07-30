@@ -17,6 +17,9 @@ class ServoPID(AdaptivePID):
     # The PID output is scaled by dt and added to the current angle to produce
     # a smooth, incremental change (velocity-form PID on the steering angle).
 
+    # Higher kp than MotorPID for quick steering step response; lower ki to avoid
+    # oscillation from servo dead-zone and non-linearity
+    # kd=0.02 provides moderate damping — critical for overshoot on sharp corners
     def __init__(self, kp=0.8, ki=0.05, kd=0.02, dt=0.01):
         super().__init__(kp, ki, kd, dt)
         self.min_angle = -30.0   # Minimum servo angle (degrees)
@@ -27,7 +30,10 @@ class ServoPID(AdaptivePID):
         # current_steering: current servo angle feedback (degrees)
         #
         # Returns a new servo angle clamped to [-30, 30] degrees.
+        # Steering error computed in angle-space (degrees), not actuator command-space
         error = target_steering - current_steering
+        # limit=10.0 ensures max delta of 10°/step — prevents servo jitter from large step inputs
         output = self.compute(error, limit=10.0)
+        # Incremental (velocity-form) update: integrate PID output into servo angle
         angle = current_steering + output * self.dt
         return max(self.min_angle, min(self.max_angle, angle))

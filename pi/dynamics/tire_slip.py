@@ -26,35 +26,14 @@ class TireSlipEstimator:
         self.mu = mu
 
     def estimate_slip_angle(self, vy, vx, yaw_rate, wheelbase_rear=0.13):
-        # vy: lateral velocity in the body frame (m/s).
-        # vx: longitudinal velocity in the body frame (m/s).
-        # yaw_rate: angular velocity around the vertical axis (rad/s).
-        # wheelbase_rear: distance from CG to the rear axle (m).
-        #   This determines how much yaw contributes to the rear tire slip.
-        # Returns: rear tire slip angle (rad).
-        #
-        # Slip angle formula for the rear tire:
-        #   alpha_r = arctan2(vy - lr * yaw_rate, vx)
-        # The numerator is the lateral velocity at the rear axle (including
-        # the rotational component from yaw). The denominator is forward speed.
-        #
-        # If vx is near 0, return 0 (the tire is stationary — no slip defined).
-        # Changing wheelbase_rear shifts the effective measurement point along
-        # the vehicle, changing how yaw rate contributes to the slip estimate.
+        # αᵣ = arctan2(vy - lr*ψ̇, vx): rear slip angle is the angle between
+        # the tire's heading and its velocity vector at the rear axle.
+        # The term -lr*ψ̇ is the lateral velocity contribution from yaw rotation.
         if abs(vx) < 0.01:
             return 0.0
         return np.arctan2(vy - wheelbase_rear * yaw_rate, vx)
 
     def lateral_force(self, slip_angle):
-        # slip_angle: tire slip angle (rad).
-        # Returns: estimated lateral tire force (N).
-        #
-        # Uses a simple saturation model: F = -mu * tanh(10 * slip_angle).
-        # The tanh function gives a linear region near zero (F ~ -10*mu*angle)
-        # and saturates at ±mu for large slip angles.
-        #
-        # Changing mu scales the saturation level. The factor 10 controls how
-        # quickly the force saturates — smaller = more gradual, larger = sharper
-        # transition. At slip_angle ≈ 0.3 rad (~17°), tanh(3) ≈ 0.995, so the
-        # tire is nearly fully saturated.
+        # Fy = -μ*tanh(10*α): saturating lateral force model — linear at
+        # small α (Fy ∝ -10*μ*α), saturating to ±μ at large α (≥0.3 rad).
         return -self.mu * np.tanh(10 * slip_angle)

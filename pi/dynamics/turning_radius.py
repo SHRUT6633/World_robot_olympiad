@@ -22,19 +22,8 @@ class TurningRadiusPredictor:
         self.L = wheelbase
 
     def predict(self, delta):
-        # delta: steering angle (rad).
-        # Returns: turning radius (m).
-        #
-        # Formula: R = |L / tan(delta)|.
-        # This is the kinematic bicycle model: the rear axle follows a circle
-        # of radius R when the front wheel is steered by delta.
-        #
-        # If delta = 0, returns infinity (straight ahead).
-        # A small delta produces a very large radius (gentle curve).
-        # A large delta produces a small radius (sharp turn).
-        #
-        # The 1e-6 threshold avoids division by zero from numerical noise.
-        # Changing L scales the radius proportionally.
+        # R = |L / tan(δ)|: kinematic bicycle model — the rear axle traces
+        # a circle of radius R when the front wheel is steered by δ.
         if abs(delta) < 1e-6:
             return float("inf")
         return self.L / abs(np.tan(delta))

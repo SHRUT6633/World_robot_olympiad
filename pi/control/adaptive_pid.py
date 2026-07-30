@@ -38,6 +38,7 @@ class AdaptivePID:
         self.ki = ki
         self.kd = kd
         self.dt = dt
+        # Integral accumulator (windup risk if unconstrained — see anti_windup.py)
         self._integral = 0.0    # Accumulated integral of error over time
         self._last_error = 0.0  # Previous error for derivative calculation
         self._last_output = 0.0 # Most recent output value
@@ -45,8 +46,12 @@ class AdaptivePID:
     def compute(self, error, limit=None):
         # error = setpoint - measured_value (signed)
         # limit: if set, output is clamped to [-limit, +limit]
+        # Forward Euler integration: rectangular accumulation of error over time
         self._integral += error * self.dt
+        # Backward difference derivative: (e_k - e_{k-1}) / dt — amplifies high-frequency noise
         derivative = (error - self._last_error) / self.dt
+        # Parallel-form PID: each term computed independently then summed
+        # This structure allows independent gain tuning (non-interacting)
         output = self.kp * error + self.ki * self._integral + self.kd * derivative
         self._last_error = error
         if limit is not None:

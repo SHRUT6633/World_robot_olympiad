@@ -179,8 +179,9 @@ class VL53L0X(SensorBase, FilteredSensorMixin):
             return random.uniform(50, 800)
         try:
             # Block read from register 0x00, 12 bytes.
+            # Block read 12 bytes from result register 0x00; bytes 10-11
+            # contain the 16-bit range measurement in millimetres (MSB, LSB).
             data = self._bus.read_i2c_block_data(self.address, 0x00, 12)
-            # Combine byte 10 (MSB) and byte 11 (LSB) into 16-bit distance.
             range_mm = (data[10] << 8) | data[11]
             return float(range_mm)
         except Exception as e:
@@ -211,6 +212,8 @@ class VL53L0X(SensorBase, FilteredSensorMixin):
         raw = super().read()
         if raw is None:
             return None
+        # Two-stage filter: first reject single-frame spikes (outlier), then
+        # smooth remaining noise with moving average to prevent PID oscillation.
         filtered = self.filter_outliers(raw)
         return self.filter_moving_avg(filtered)
 

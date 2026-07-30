@@ -38,6 +38,10 @@ class FeedforwardSteering:
         #
         # Changing L directly scales the relationship: a longer wheelbase
         # means you need more steering angle to achieve the same curvature.
+        # Near-straight path threshold: skip computation to avoid numerical noise
         if abs(curvature) < 1e-6:
             return 0.0
+        # Kinematic bicycle model: steer = arctan(L / R), where curvature = 1/R
+        # Assumes no slip (pure rolling) — valid for low-speed WRO manoeuvres
+        # This is the inverse Ackermann geometry, velocity-independent
         return np.arctan(self.L * curvature)

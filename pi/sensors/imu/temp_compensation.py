@@ -80,27 +80,12 @@ class IMUTempCompensation:
         return 25.0
 
     def compensate(self, accel, gyro, temp=None):
-        """
-        Apply temperature compensation to IMU readings.
-
-        accel : numpy array (3,) — acceleration in g (before bias subtraction).
-        gyro  : numpy array (3,) — angular velocity in °/s (before bias subtraction).
-        temp  : current temperature in °C. If None, uses read_temp().
-
-        Returns:
-          (accel_comp, gyro_comp) — temperature-compensated readings.
-
-        Formula:
-          accel_comp = accel - accel_temp_coeff * (T - T_ref)
-          gyro_comp  = gyro  - gyro_temp_coeff  * (T - T_ref)
-
-        Note: The signs are chosen so that a positive coefficient with
-        increasing temperature reduces the reading (compensating for a
-        positive bias shift). Adjust coefficients based on empirical testing.
-        """
         if temp is None:
             temp = self.read_temp()
         dt = temp - self.ref_temp
+        # Linear compensation: subtract coefficient × ΔT from each axis.
+        # Positive coefficient with rising T reduces reading, counteracting
+        # the sensor's natural bias increase with temperature.
         accel_comp = accel - self.accel_temp_coeff * dt
         gyro_comp = gyro - self.gyro_temp_coeff * dt
         return accel_comp, gyro_comp

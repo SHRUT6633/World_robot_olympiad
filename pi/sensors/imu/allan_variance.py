@@ -65,12 +65,8 @@ class AllanVariance:
         self._data = []
 
     def add_sample(self, value):
-        """
-        Append a sensor sample to the dataset.
-
-        If the buffer exceeds max_samples, the oldest sample is dropped
-        (FIFO behaviour).
-        """
+        # Append new sample; drop oldest if buffer exceeds max_samples
+        # (FIFO) to bound memory usage during long recording sessions.
         self._data.append(value)
         if len(self._data) > self.max_samples:
             self._data.pop(0)
@@ -99,16 +95,16 @@ class AllanVariance:
             return {}, {}
         data = np.array(self._data)
         n = len(data)
+        # Log-spaced cluster times (powers of 2) for efficient log-log plot.
         max_pow = int(np.log2(n))
-        # Tau values at powers of 2 (standard log-spaced analysis).
         tau_values = [2 ** i for i in range(1, max_pow)]
         avar = {}
         for tau in tau_values:
-            m = n // tau  # Number of non-overlapping clusters.
+            m = n // tau  # Number of non-overlapping clusters of size τ.
             if m < 2:
-                continue  # Need at least 2 clusters for variance.
-            # Reshape into (m, τ) clusters and take mean of each.
+                continue  # Need at least 2 clusters to compute variance.
+            # Average each cluster into a single value.
             theta = np.mean(data[: m * tau].reshape(m, tau), axis=1)
-            # Allan variance: 0.5 * mean of (consecutive difference)^2.
+            # AVAR(τ) = ½·⟨(θₖ₊₁ − θₖ)²⟩ — half the mean-squared difference.
             avar[tau] = 0.5 * np.mean(np.diff(theta) ** 2)
         return avar
