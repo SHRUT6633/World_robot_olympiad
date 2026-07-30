@@ -1,5 +1,5 @@
 #include "failsafe.h"
-#include "motor_pwm.h"
+#include "l298n.h"
 #include "servo_pwm.h"
 #include "esp_log.h"
 
@@ -11,6 +11,6 @@ void failsafe_init(void) {
 
 void failsafe_engage(void) {
     ESP_LOGW(TAG, "FAILSAFE ENGAGED - stopping all motors");
-    motor_set_speed(0);
+    l298n_set_motor(0, true);
     servo_set_angle(0);
 }

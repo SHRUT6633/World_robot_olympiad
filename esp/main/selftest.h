@@ -8,7 +8,7 @@ typedef struct {
     bool uart_ok;
     bool servo_pwm_ok;
     bool motor_pwm_ok;
-    bool tb6612fng_ok;
+    bool l298n_ok;
     bool watchdog_ok;
     uint32_t test_duration_ms;
 } esp_selftest_result_t;

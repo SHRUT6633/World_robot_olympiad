@@ -28,17 +28,8 @@ pwm:
     min_pulse_us: 500
     max_pulse_us: 2500
     center_ns: 1500000
-  motor:
-    pin_a: 11
-    pin_b: 12
-    freq: 20000
-    resolution: 10
 
-tb6612fng:
-  standby_pin: 10
-  ain1: 8
-  ain2: 9
-  bin1: 6
-  bin2: 7
-  pwma: 11
-  pwmb: 12
+l298n:
+  ena: 11
+  in1: 8
+  in2: 9

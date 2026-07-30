@@ -41,9 +41,18 @@ async def main():
         height=config.get("sensors", "camera", "height", default=480),
         fps=config.get("sensors", "camera", "fps", default=60),
     )
-    tof_left = VL53L0X("VL53L0X_Left")
-    tof_right = VL53L0X("VL53L0X_Right")
-    tof_front = VL53L1X("VL53L1X_Front")
+    tof_left = VL53L0X(
+        "VL53L0X_Left",
+        xshut_pin=config.get("sensors", "vl53l0x_left", "xshut_pin", default=None),
+    )
+    tof_right = VL53L0X(
+        "VL53L0X_Right",
+        xshut_pin=config.get("sensors", "vl53l0x_right", "xshut_pin", default=None),
+    )
+    tof_front = VL53L1X(
+        "VL53L1X_Front",
+        xshut_pin=config.get("sensors", "vl53l1x_front", "xshut_pin", default=None),
+    )
     imu = MPU6050()
     mag = QMC5883L()
 

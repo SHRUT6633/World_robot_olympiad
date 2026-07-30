@@ -42,8 +42,7 @@ static void test_motor_pwm(bool *ok) {
     }
 }
 
-static void test_tb6612fng(bool *ok) {
-    gpio_set_level(10, 1);
+static void test_l298n(bool *ok) {
     gpio_set_level(8, 1);
     gpio_set_level(9, 0);
     esp_rom_delay_us(1000);
@@ -77,7 +76,7 @@ void esp_selftest_run(esp_selftest_result_t *result) {
     test_led(&result->uart_ok);
     test_servo_pwm(&result->servo_pwm_ok);
     test_motor_pwm(&result->motor_pwm_ok);
-    test_tb6612fng(&result->tb6612fng_ok);
+    test_l298n(&result->l298n_ok);
     test_watchdog(&result->watchdog_ok);
 
     result->test_duration_ms = (esp_timer_get_time() - t0) / 1000;
@@ -86,12 +85,12 @@ void esp_selftest_run(esp_selftest_result_t *result) {
     ESP_LOGI(TAG, "  UART:       %s", result->uart_ok       ? "PASS" : "FAIL");
     ESP_LOGI(TAG, "  Servo PWM:  %s", result->servo_pwm_ok  ? "PASS" : "FAIL");
     ESP_LOGI(TAG, "  Motor PWM:  %s", result->motor_pwm_ok  ? "PASS" : "FAIL");
-    ESP_LOGI(TAG, "  TB6612FNG:  %s", result->tb6612fng_ok  ? "PASS" : "FAIL");
+    ESP_LOGI(TAG, "  L298N:      %s", result->l298n_ok  ? "PASS" : "FAIL");
     ESP_LOGI(TAG, "  Watchdog:   %s", result->watchdog_ok   ? "PASS" : "FAIL");
 }
 
 bool esp_selftest_all_passed(const esp_selftest_result_t *result) {
     return result->uart_ok && result->servo_pwm_ok &&
-           result->motor_pwm_ok && result->tb6612fng_ok &&
+            result->motor_pwm_ok && result->l298n_ok &&
            result->watchdog_ok;
 }

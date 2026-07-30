@@ -18,18 +18,21 @@ sensors:
     enabled: true
     i2c_bus: 1
     address: 0x30
+    xshut_pin: 17
     range_mm: 1200
     timing_budget_ms: 20
   vl53l0x_right:
     enabled: true
     i2c_bus: 1
     address: 0x31
+    xshut_pin: 27
     range_mm: 1200
     timing_budget_ms: 20
   vl53l1x_front:
     enabled: true
     i2c_bus: 1
     address: 0x32
+    xshut_pin: 22
     range_mm: 4000
     timing_budget_ms: 20
   mpu6050:

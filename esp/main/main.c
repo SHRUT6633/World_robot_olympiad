@@ -7,6 +7,7 @@
 #include "driver/gpio.h"
 #include "driver/ledc.h"
 #include "esp_timer.h"
+#include "esp_task_wdt.h"
 
 #include "uart_receiver.h"
 #include "packet_validator.h"
@@ -16,8 +17,7 @@
 #include "watchdog.h"
 #include "failsafe.h"
 #include "servo_pwm.h"
-#include "motor_pwm.h"
-#include "tb6612fng.h"
+#include "l298n.h"
 #include "selftest.h"
 
 static const char *TAG = "WRO_4WS";
@@ -148,7 +148,7 @@ static void send_selftest_response(void) {
     payload[0] = g_state.selftest_result.uart_ok ? 1 : 0;
     payload[1] = g_state.selftest_result.servo_pwm_ok ? 1 : 0;
     payload[2] = g_state.selftest_result.motor_pwm_ok ? 1 : 0;
-    payload[3] = g_state.selftest_result.tb6612fng_ok ? 1 : 0;
+    payload[3] = g_state.selftest_result.l298n_ok ? 1 : 0;
     payload[4] = g_state.selftest_result.watchdog_ok ? 1 : 0;
     payload[5] = g_state.selftest_result.test_duration_ms & 0xFF;
     payload[6] = (g_state.selftest_result.test_duration_ms >> 8) & 0xFF;
@@ -160,7 +160,7 @@ static void process_packet(uart_packet_t *pkt) {
     if (pkt->msg_type == PKT_EMERGENCY_STOP) {
         g_state.emergency_stop = true;
         g_state.state = ESP_STATE_FAILSAFE;
-        motor_set_speed(0);
+        l298n_set_motor(0, true);
         servo_set_angle(0);
         led_red_on();
         ESP_LOGW(TAG, "EMERGENCY STOP");
@@ -177,7 +177,7 @@ static void process_packet(uart_packet_t *pkt) {
                 g_state.servo_angle = angle;
                 g_state.motor_speed = speed;
                 servo_set_angle(angle);
-                motor_set_speed(speed);
+                l298n_set_motor(speed, true);
                 g_state.motor_enabled = true;
                 g_state.state = ESP_STATE_ACTIVE;
             }
@@ -245,7 +245,7 @@ static void timeout_monitor_task(void *arg) {
         uint64_t elapsed = now - g_state.last_packet_us;
         if (g_state.last_packet_us > 0 && elapsed > timeout_us && g_state.motor_enabled) {
             ESP_LOGW(TAG, "Comm timeout! Stopping motors.");
-            motor_set_speed(0);
+            l298n_set_motor(0, true);
             servo_set_angle(0);
             g_state.motor_enabled = false;
             g_state.state = ESP_STATE_FAILSAFE;
@@ -256,6 +256,7 @@ static void timeout_monitor_task(void *arg) {
 }
 
 static void watchdog_task(void *arg) {
+    esp_task_wdt_add(NULL);
     while (1) { watchdog_feed(); vTaskDelay(pdMS_TO_TICKS(500)); }
 }
 
@@ -292,9 +293,8 @@ void app_main(void) {
     led_init();
     led_both_on();
     uart_init();
-    tb6612fng_init();
+    l298n_init();
     servo_pwm_init();
-    motor_pwm_init();
     watchdog_init();
     failsafe_init();
 

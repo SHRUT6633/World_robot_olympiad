@@ -10,8 +10,15 @@ void watchdog_init(void) {
         .idle_core_mask = 0,
         .trigger_panic = true,
     };
-    ESP_ERROR_CHECK(esp_task_wdt_init(&config));
-    ESP_LOGI(TAG, "Watchdog initialized (3s timeout)");
+    esp_err_t err = esp_task_wdt_init(&config);
+    if (err == ESP_ERR_INVALID_STATE) {
+        ESP_LOGW(TAG, "TWDT already initialized, reconfiguring...");
+        ESP_ERROR_CHECK(esp_task_wdt_reconfigure(&config));
+    } else {
+        ESP_ERROR_CHECK(err);
+    }
+    ESP_ERROR_CHECK(esp_task_wdt_add(NULL));
+    ESP_LOGI(TAG, "Watchdog configured (3s timeout)");
 }
 
 void watchdog_feed(void) {

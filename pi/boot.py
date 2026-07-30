@@ -57,9 +57,18 @@ def power_on_self_test():
     from pi.comm.uart import UARTCommunicator
 
     camera = PiCamera()
-    tof_left = VL53L0X("left")
-    tof_right = VL53L0X("right")
-    tof_front = VL53L1X("front")
+    tof_left = VL53L0X(
+        "left",
+        xshut_pin=config.get("sensors", "vl53l0x_left", "xshut_pin", default=None),
+    )
+    tof_right = VL53L0X(
+        "right",
+        xshut_pin=config.get("sensors", "vl53l0x_right", "xshut_pin", default=None),
+    )
+    tof_front = VL53L1X(
+        "front",
+        xshut_pin=config.get("sensors", "vl53l1x_front", "xshut_pin", default=None),
+    )
     imu = MPU6050()
     mag = QMC5883L()
     ukf = RobotUKF(dt=0.01)
