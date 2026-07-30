@@ -240,15 +240,13 @@ async def main():
     # Heartbeat "sensors" tells the HealthMonitor this task is alive.
     # If this task stalls, health check will mark "sensors" as dead.
     async def sensor_task():
-        while True:
-            camera_data = camera.read()
-            tof_l = tof_left.read()
-            tof_r = tof_right.read()
-            tof_f = tof_front.read()
-            imu_data = imu.read()
-            mag_data = mag.read()
-            mgr.health.heartbeat("sensors")
-            await asyncio.sleep(0.01)  # 100 Hz
+        camera_data = camera.read()
+        tof_l = tof_left.read()
+        tof_r = tof_right.read()
+        tof_f = tof_front.read()
+        imu_data = imu.read()
+        mag_data = mag.read()
+        mgr.health.heartbeat("sensors")
 
     # =========================================================================
     # Fusion Task (100 Hz)
@@ -259,27 +257,22 @@ async def main():
     # localization module's pose.
     # Heartbeat: "fusion".
     async def fusion_task():
-        while True:
-            imu_data = imu.read()
-            mag_data = mag.read()
-            if imu_data:
-                accel, gyro = imu_data["accel"], imu_data["gyro"]
-                heading = mag.heading(mag_data, accel) if mag_data is not None else None
-                pitch, roll, yaw = comp_filter.update(accel, gyro, heading)
-                # Measurement vector z: [x, y, yaw, vx, vy, yaw_rate]
-                # x, y, vx, vy are 0 here because we don't have direct
-                # position/velocity measurements from IMU alone.
-                z = np.array([0.0, 0.0, yaw, 0.0, 0.0, gyro[2]])
-                ukf.predict()
-                ukf.update(z)
-                adaptive_noise.update(
-                    ukf.ukf.y[0] if hasattr(ukf.ukf, "y") else np.zeros(6),
-                    ukf.state,
-                )
-                state = ukf.state
-                localization.pose.update_absolute(state[0], state[1], state[2])
-            mgr.health.heartbeat("fusion")
-            await asyncio.sleep(0.01)  # 100 Hz
+        imu_data = imu.read()
+        mag_data = mag.read()
+        if imu_data:
+            accel, gyro = imu_data["accel"], imu_data["gyro"]
+            heading = mag.heading(mag_data, accel) if mag_data is not None else None
+            pitch, roll, yaw = comp_filter.update(accel, gyro, heading)
+            z = np.array([0.0, 0.0, yaw, 0.0, 0.0, gyro[2]])
+            ukf.predict()
+            ukf.update(z)
+            adaptive_noise.update(
+                ukf.ukf.y[0] if hasattr(ukf.ukf, "y") else np.zeros(6),
+                ukf.state,
+            )
+            state = ukf.state
+            localization.pose.update_absolute(state[0], state[1], state[2])
+        mgr.health.heartbeat("fusion")
 
     # =========================================================================
     # Perception Task (50 Hz)
@@ -289,13 +282,11 @@ async def main():
     # is typically heavier, so we run it slower.
     # Heartbeat: "perception".
     async def perception_task():
-        while True:
-            frame = camera.frame
-            if frame is not None:
-                lanes = lane_detector.detect(frame)
-                free = free_space.detect(frame)
-            mgr.health.heartbeat("perception")
-            await asyncio.sleep(0.02)  # 50 Hz
+        frame = camera.frame
+        if frame is not None:
+            lanes = lane_detector.detect(frame)
+            free = free_space.detect(frame)
+        mgr.health.heartbeat("perception")
 
     # =========================================================================
     # Planning Task (20 Hz)
@@ -305,11 +296,9 @@ async def main():
     # trigger local planning / obstacle avoidance.
     # Heartbeat: "planning".
     async def planning_task():
-        while True:
-            pose = localization.to_dict()
-            target = global_planner.get_target(0)
-            mgr.health.heartbeat("planning")
-            await asyncio.sleep(0.05)  # 20 Hz
+        pose = localization.to_dict()
+        target = global_planner.get_target(0)
+        mgr.health.heartbeat("planning")
 
     # =========================================================================
     # Control Task (100 Hz)
@@ -322,22 +311,20 @@ async def main():
     #   servo_angle    – servo position from servo PID (tracks steering)
     # Heartbeat: "control".
     async def control_task():
-        while True:
-            pose = localization.to_dict()
-            target = global_planner.get_target(0)
-            if target is not None:
-                target_heading = np.arctan2(
-                    target[1] - pose["y"], target[0] - pose["x"]
-                )
-                steering = stanley.compute(
-                    pose["x"], pose["y"], pose["heading"],
-                    target[0], target[1], target_heading, pose["v"],
-                )
-                motor_speed = motor_pid.compute_speed(1.0, pose["v"])
-                servo_angle = servo_pid.compute_angle(steering, 0.0)
-                uart.send_steering(servo_angle, motor_speed)
-            mgr.health.heartbeat("control")
-            await asyncio.sleep(0.01)  # 100 Hz
+        pose = localization.to_dict()
+        target = global_planner.get_target(0)
+        if target is not None:
+            target_heading = np.arctan2(
+                target[1] - pose["y"], target[0] - pose["x"]
+            )
+            steering = stanley.compute(
+                pose["x"], pose["y"], pose["heading"],
+                target[0], target[1], target_heading, pose["v"],
+            )
+            motor_speed = motor_pid.compute_speed(1.0, pose["v"])
+            servo_angle = servo_pid.compute_angle(steering, 0.0)
+            uart.send_steering(servo_angle, motor_speed)
+        mgr.health.heartbeat("control")
 
     # =========================================================================
     # Communications Task (200 Hz)
@@ -345,10 +332,8 @@ async def main():
     # Polls the UART for incoming telemetry packets at 5 ms intervals.
     # Heartbeat: "comm".
     async def comm_task():
-        while True:
-            pkt = uart.read()
-            mgr.health.heartbeat("comm")
-            await asyncio.sleep(0.005)  # 200 Hz
+        pkt = uart.read()
+        mgr.health.heartbeat("comm")
 
     # =========================================================================
     # Health Monitor Task (2 Hz)
@@ -358,12 +343,10 @@ async def main():
     # (default 2.0 s), it is flagged as "dead" and a warning is logged.
     # This is purely diagnostic — it does NOT kill tasks.
     async def health_task():
-        while True:
-            results = mgr.health.check_all()
-            dead = [k for k, v in results.items() if not v]
-            if dead:
-                log.warn(f"Dead components: {dead}")
-            await asyncio.sleep(0.5)  # 2 Hz
+        results = mgr.health.check_all()
+        dead = [k for k, v in results.items() if not v]
+        if dead:
+            log.warn(f"Dead components: {dead}")
 
     # =========================================================================
     # Schedule Tasks

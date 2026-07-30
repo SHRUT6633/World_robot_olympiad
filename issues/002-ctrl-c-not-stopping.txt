@@ -1,0 +1,198 @@
+Issue 002: Ctrl+C does not stop the robot
+==========================================
+
+Date  : 2026-07-30
+Module: pi/main.py (lines 242-366 — 7 task callbacks)
+        pi/system/scheduler.py (line 152-153 — await blocks forever)
+
+========================================================================
+SYMPTOMS (What went wrong)
+========================================================================
+
+Press Ctrl+C to stop the robot → nothing happens.
+The robot keeps running, LEDs stay on, motors keep moving.
+Must unplug power to stop.
+
+========================================================================
+ROOT CAUSE (Why it happened)
+========================================================================
+
+The scheduler calls each task callback with `await`:
+
+  scheduler.py line 152-153:
+      if asyncio.iscoroutinefunction(task.callback):
+          await task.callback()    ← BLOCKS FOREVER
+
+Each callback was an INFINITE while True loop with its own sleep:
+
+  main.py (original):
+      async def sensor_task():
+          while True:                    ← never returns
+              camera_data = camera.read()
+              ...
+              await asyncio.sleep(0.01)  ← its own rate control
+
+When spin_once() awaits sensor_task(), it NEVER returns because the
+while True loop runs forever. The scheduler loop is stuck here:
+
+  scheduler.py line 175-176:
+      while self._running:
+          await self.spin_once()    ← STUCK HERE, never checks _running
+          await asyncio.sleep(0)
+
+So when you press Ctrl+C and the signal handler calls stop() setting
+self._running = False, the scheduler NEVER sees it because it is
+permanently blocked inside await task.callback().
+
+========================================================================
+VISUAL EXPLANATION
+========================================================================
+
+Time     Scheduler                   sensor_task()
+----     ---------                   ------------
+T1       spin_once() starts
+T2         await sensor_task() ───→  while True:
+T3                                    camera.read()
+T4                                    ... more work ...
+T5                                    await asyncio.sleep(0.01)
+T6                                    camera.read()         ← loop repeats
+T7                                    ...                    ← FOREVER
+T8                                    ...
+                                    ↑ NEVER returns to scheduler
+
+Ctrl+C pressed here →────────────────┘
+  stop() sets _running = False       scheduler is STUCK waiting
+  but scheduler CANNOT check it      for sensor_task() to return
+                                    → Ctrl+C does nothing
+
+========================================================================
+THE BROKEN CODE (before fix)
+========================================================================
+
+Each of the 7 task callbacks had the SAME pattern:
+
+  async def sensor_task():             # and fusion_task, perception_task,
+      while True:                      # planning_task, control_task,
+          camera_data = camera.read()  # comm_task, health_task
+          ...
+          await asyncio.sleep(0.01)
+
+The while True makes the coroutine NEVER return → scheduler blocks.
+
+========================================================================
+THE FIX (What I changed)
+========================================================================
+
+Removed `while True:` and `await asyncio.sleep(x)` from all 7 tasks.
+The callback now does ONE iteration and RETURNS.
+
+The scheduler controls the rate via its period logic (the `hz` parameter
+in mgr.scheduler.add()). It only re-runs a callback when its period
+has elapsed.
+
+  main.py (after fix):
+
+      async def sensor_task():
+          camera_data = camera.read()
+          tof_l = tof_left.read()
+          ...
+          mgr.health.heartbeat("sensors")
+          # No while True, no asyncio.sleep — returns immediately
+
+      async def fusion_task():
+          imu_data = imu.read()
+          ...
+          mgr.health.heartbeat("fusion")
+
+      # Same pattern for perception_task, planning_task,
+      # control_task, comm_task, health_task
+
+Now the execution flow is:
+
+T1       spin_once() starts
+T2         await sensor_task() ───→  camera.read()
+T3                                    tof_left.read()
+T4                                    heartbeat()
+T5                                  → RETURNS immediately  ← KEY CHANGE
+T6         await fusion_task() ───→  imu.read()
+T7                                  → RETURNS
+T8       spin_once() ends
+T9       await asyncio.sleep(0)
+T10      while self._running:     ← CAN check the flag now
+T11        ...
+
+Ctrl+C pressed here → stop() sets _running = False
+                        next loop iteration sees False → EXITS → shutdown
+
+========================================================================
+FILES CHANGED
+========================================================================
+
+File: pi/main.py
+  Lines changed: 7 task callbacks (sensor_task, fusion_task, perception_task,
+                  planning_task, control_task, comm_task, health_task)
+  Change: removed `while True:` and `await asyncio.sleep(x)` from each
+
+No changes needed in scheduler.py — it already had the correct period
+logic, it just couldn't reach it because callbacks never returned.
+
+========================================================================
+HOW THE SCHEDULER CONTROLS RATE (instead of the callback)
+========================================================================
+
+The `hz` parameter in mgr.scheduler.add() sets the period:
+
+  mgr.scheduler.add("sensors", sensor_task, hz=100, priority=10)
+  # period = 1/100 = 0.01 sec = 10 ms
+
+Inside spin_once():
+  if now - task.last_run >= task.period:    ← checks if 10ms elapsed
+      await task.callback()                 ← runs one iteration
+      task.last_run = now
+
+So the scheduler runs sensor_task every 10ms — same as the old
+await asyncio.sleep(0.01) inside the callback, but the callback
+no longer blocks the loop.
+
+========================================================================
+VERIFICATION (How to confirm the fix)
+========================================================================
+
+  cd ~/wro
+  git pull
+  python pi/main.py
+
+The robot starts normally. Press Ctrl+C — it should stop within 10ms
+(the scheduler loop period). You'll see:
+
+  ^C
+  18:30:50.123 | INFO     | WRO_4WS | System stopping...
+  18:30:50.124 | INFO     | WRO_4WS | camera close: OK
+  18:30:50.124 | INFO     | WRO_4WS | tof_left close: OK
+  ...
+  18:30:50.130 | INFO     | WRO_4WS | Shutdown complete
+
+If Ctrl+C still doesn't stop, add a print to verify stop() is called:
+
+  async def stop(self):
+      print("STOP CALLED")    # ← temporary debug
+      self._running = False
+      self.scheduler.stop()
+      ...
+
+========================================================================
+PREVENTION (How to stop this happening again)
+========================================================================
+
+Rule: Callbacks registered with the scheduler must RETURN after one
+iteration — they must NOT have while True or await asyncio.sleep().
+The scheduler handles the timing. If you need a slow task, give it a
+lower hz value.
+
+Future callbacks should follow this template:
+
+  async def my_task():
+      # Do one unit of work
+      result = do_something()
+      mgr.health.heartbeat("my_task")
+      # Return — do NOT loop or sleep here
