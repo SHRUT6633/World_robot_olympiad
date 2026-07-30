@@ -1,34 +1,38 @@
 import asyncio
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 import time
 import numpy as np
-from system.manager import SystemManager
-from system.logger import log
-from system.config_manager import ConfigManager
-from sensors.camera.camera_driver import PiCamera
-from sensors.camera.calibration import CameraCalibration
-from sensors.camera.pipeline import CameraPipeline
-from sensors.tof.vl53l0x import VL53L0X
-from sensors.tof.vl53l1x import VL53L1X
-from sensors.imu.mpu6050 import MPU6050
-from sensors.magnetometer.qmc5883l import QMC5883L
-from fusion.ukf import RobotUKF
-from fusion.complementary import ComplementaryFilter
-from fusion.adaptive_noise import AdaptiveNoiseEstimator
-from fusion.mahalanobis import MahalanobisOutlierRejector
-from perception.lane_detection import LaneDetector
-from perception.wall_detection import WallDetector
-from perception.free_space import FreeSpaceDetector
-from localization.robot_localization import RobotLocalization
-from mission.state_machine import StateMachine, RobotState
-from mission.lap_counter import LapCounter
-from planning.global_planner import GlobalPlanner
-from trajectory.cubic_splines import CubicSplineTrajectory
-from trajectory.velocity_profile import VelocityProfiler
-from dynamics.kinematic_model import KinematicModel
-from control.stanley import StanleyController
-from control.servo_pid import ServoPID
-from control.motor_pid import MotorPID
-from comm.uart import UARTCommunicator
+from pi.system.manager import SystemManager
+from pi.system.logger import log
+from pi.system.config_manager import ConfigManager
+from pi.sensors.camera.camera_driver import PiCamera
+from pi.sensors.camera.calibration import CameraCalibration
+from pi.sensors.camera.pipeline import CameraPipeline
+from pi.sensors.tof.vl53l0x import VL53L0X
+from pi.sensors.tof.vl53l1x import VL53L1X
+from pi.sensors.imu.mpu6050 import MPU6050
+from pi.sensors.magnetometer.qmc5883l import QMC5883L
+from pi.fusion.ukf import RobotUKF
+from pi.fusion.complementary import ComplementaryFilter
+from pi.fusion.adaptive_noise import AdaptiveNoiseEstimator
+from pi.fusion.mahalanobis import MahalanobisOutlierRejector
+from pi.perception.lane_detection import LaneDetector
+from pi.perception.wall_detection import WallDetector
+from pi.perception.free_space import FreeSpaceDetector
+from pi.localization.robot_localization import RobotLocalization
+from pi.mission.state_machine import StateMachine, RobotState
+from pi.mission.lap_counter import LapCounter
+from pi.planning.global_planner import GlobalPlanner
+from pi.trajectory.cubic_splines import CubicSplineTrajectory
+from pi.trajectory.velocity_profile import VelocityProfiler
+from pi.dynamics.kinematic_model import KinematicModel
+from pi.control.stanley import StanleyController
+from pi.control.servo_pid import ServoPID
+from pi.control.motor_pid import MotorPID
+from pi.comm.uart import UARTCommunicator
 
 
 async def main():
