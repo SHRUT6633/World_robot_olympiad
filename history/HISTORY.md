@@ -20,6 +20,9 @@ Each version folder has:
 ## The 9 Major Phases
 
 ### v1.x — Foundation & Hardware Testing
+
+![Evolution v1.x](../docs/diagrams/evolution_v1x.svg)
+
 | Ver | What We Did | Key Error Fixed |
 |-----|-------------|-----------------|
 | 1.0 | Project skeleton — Pi + ESP32-S3 | Import path wrong, fixed with sys.path |
@@ -34,6 +37,9 @@ Each version folder has:
 | 1.9 | Hardware verification report | All 14 components tested PASS |
 
 ### v2.x — Basic Driving
+
+![Evolution v2.x](../docs/diagrams/evolution_v2x.svg)
+
 | Ver | What We Did | Key Error Fixed |
 |-----|-------------|-----------------|
 | 2.0 | Forward drive command | Brownout at full PWM, ramp up 500ms |
@@ -48,6 +54,9 @@ Each version folder has:
 | 2.9 | Drive reliability summary | Max speed 1.8m/s, min radius 0.5m |
 
 ### v3.x — Sensing The World
+
+![Evolution v3.x](../docs/diagrams/evolution_v3x.svg)
+
 | Ver | What We Did | Key Error Fixed |
 |-----|-------------|-----------------|
 | 3.0 | IMU raw data logging | First readings garbage, discard 100 |
@@ -62,6 +71,9 @@ Each version folder has:
 | 3.9 | Sensor health monitor | Log spam, rate-limit 1 per 2s |
 
 ### v4.x — Understanding The Track
+
+![Evolution v4.x](../docs/diagrams/evolution_v4x.svg)
+
 | Ver | What We Did | Key Error Fixed |
 |-----|-------------|-----------------|
 | 4.0 | Lane detection (Hough) | Noisy lines, average 5 frames |
@@ -76,6 +88,9 @@ Each version folder has:
 | 4.9 | Visual odometry | Too slow 5fps, 320×240 FAST corners |
 
 ### v5.x — Localization & Fusion
+
+![Evolution v5.x](../docs/diagrams/evolution_v5x.svg)
+
 | Ver | What We Did | Key Error Fixed |
 |-----|-------------|-----------------|
 | 5.0 | Dead reckoning from encoders | Quadratic error 5cm→20cm, short only |
@@ -90,6 +105,9 @@ Each version folder has:
 | 5.9 | Pose pipeline integration | Too slow 20Hz, predict 100Hz correct 50Hz |
 
 ### v6.x — Control & Planning
+
+![Evolution v6.x](../docs/diagrams/evolution_v6x.svg)
+
 | Ver | What We Did | Key Error Fixed |
 |-----|-------------|-----------------|
 | 6.0 | PID speed control | Oscillation low speed, gain schedule |
@@ -104,6 +122,9 @@ Each version folder has:
 | 6.9 | Obstacle avoidance | 200ms replan lag, precompute 3 paths |
 
 ### v7.x — Mission & Behavior
+
+![Evolution v7.x](../docs/diagrams/evolution_v7x.svg)
+
 | Ver | What We Did | Key Error Fixed |
 |-----|-------------|-----------------|
 | 7.0 | Basic 4-state machine | if/elif chain, refactor to dict |
@@ -118,6 +139,9 @@ Each version folder has:
 | 7.9 | Checkpoint manager | Late detection, look-ahead distance |
 
 ### v8.x — Advanced Features
+
+![Evolution v8.x](../docs/diagrams/evolution_v8x.svg)
+
 | Ver | What We Did | Key Error Fixed |
 |-----|-------------|-----------------|
 | 8.0 | Same-phase steering | Wheel scrub, limit 25° |
@@ -132,6 +156,9 @@ Each version folder has:
 | 8.9 | Rate-limited error logger | Drops important errors, severity levels |
 
 ### v9.x — Polish & Competition Ready
+
+![Evolution v9.x](../docs/diagrams/evolution_v9x.svg)
+
 | Ver | What We Did | Key Error Fixed |
 |-----|-------------|-----------------|
 | 9.0 | Full code comments | Stale comments, wrote after stable |

@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 620" width="100%" height="100%">
+<rect x="0" y="0" width="1000" height="620" fill="#fafafa"></rect>
+<rect x="0" y="0" width="1000" height="42" fill="#e8eaf6"></rect>
+<text x="20" y="28" fill="#111" font-family="monospace" font-size="16" font-weight="bold">v6.x — Control &amp; Planning</text>
+<text x="30" y="60" fill="#666" font-family="monospace" font-size="9" font-weight="bold">Versions 1-5</text>
+<text x="510" y="60" fill="#666" font-family="monospace" font-size="9" font-weight="bold">Versions 6-10</text>
+<rect x="30" y="65" width="56" height="22" rx="3" ry="3" fill="#283593"></rect>
+<text x="58" y="80" text-anchor="middle" fill="#fff" font-family="monospace" font-size="9" font-weight="bold">v6.0</text>
+<text x="95" y="74" fill="#111" font-family="monospace" font-size="11" font-weight="bold">PID speed</text>
+<text x="95" y="89" fill="#555" font-family="monospace" font-size="9">Motor speed regulation</text>
+<rect x="380" y="65" width="96" height="18" rx="3" fill="#fff3e0" stroke="#e65100" stroke-width="1"></rect>
+<text x="428" y="78" text-anchor="middle" fill="#e65100" font-family="monospace" font-size="7">gain schedule</text>
+<line x1="58" y1="87" x2="58" y2="112" stroke="#283593" stroke-width="1.5" stroke-dasharray="3,2"></line>
+<polygon points="54,109 58,115 62,109" fill="#283593"></polygon>
+<circle cx="58" cy="95" r="2" fill="#283593"></circle>
+<text x="65" y="99" fill="#999" font-family="monospace" font-size="8">#vi</text>
+<rect x="30" y="117" width="56" height="22" rx="3" ry="3" fill="#303f9f"></rect>
+<text x="58" y="132" text-anchor="middle" fill="#fff" font-family="monospace" font-size="9" font-weight="bold">v6.1</text>
+<text x="95" y="126" fill="#111" font-family="monospace" font-size="11" font-weight="bold">PID servo</text>
+<text x="95" y="141" fill="#555" font-family="monospace" font-size="9">Steering angle servo</text>
+<rect x="380" y="117" width="96" height="18" rx="3" fill="#fff3e0" stroke="#e65100" stroke-width="1"></rect>
+<text x="428" y="130" text-anchor="middle" fill="#e65100" font-family="monospace" font-size="7">add D-term</text>
+<line x1="58" y1="139" x2="58" y2="164" stroke="#303f9f" stroke-width="1.5" stroke-dasharray="3,2"></line>
+<polygon points="54,161 58,167 62,161" fill="#303f9f"></polygon>
+<circle cx="58" cy="147" r="2" fill="#303f9f"></circle>
+<text x="65" y="151" fill="#999" font-family="monospace" font-size="8">#vi</text>
+<rect x="30" y="169" width="56" height="22" rx="3" ry="3" fill="#3949ab"></rect>
+<text x="58" y="184" text-anchor="middle" fill="#fff" font-family="monospace" font-size="9" font-weight="bold">v6.2</text>
+<text x="95" y="178" fill="#111" font-family="monospace" font-size="11" font-weight="bold">Stanley steer</text>
+<text x="95" y="193" fill="#555" font-family="monospace" font-size="9">Lateral path tracking</text>
+<rect x="380" y="169" width="96" height="18" rx="3" fill="#fff3e0" stroke="#e65100" stroke-width="1"></rect>
+<text x="428" y="182" text-anchor="middle" fill="#e65100" font-family="monospace" font-size="7">speed gain fix</text>
+<line x1="58" y1="191" x2="58" y2="216" stroke="#3949ab" stroke-width="1.5" stroke-dasharray="3,2"></line>
+<polygon points="54,213 58,219 62,213" fill="#3949ab"></polygon>
+<circle cx="58" cy="199" r="2" fill="#3949ab"></circle>
+<text x="65" y="203" fill="#999" font-family="monospace" font-size="8">#vi</text>
+<rect x="30" y="221" width="56" height="22" rx="3" ry="3" fill="#283593"></rect>
+<text x="58" y="236" text-anchor="middle" fill="#fff" font-family="monospace" font-size="9" font-weight="bold">v6.3</text>
+<text x="95" y="230" fill="#111" font-family="monospace" font-size="11" font-weight="bold">Feedforward</text>
+<text x="95" y="245" fill="#555" font-family="monospace" font-size="9">Steering anticipation</text>
+<rect x="380" y="221" width="96" height="18" rx="3" fill="#fff3e0" stroke="#e65100" stroke-width="1"></rect>
+<text x="428" y="234" text-anchor="middle" fill="#e65100" font-family="monospace" font-size="7">limit 50%</text>
+<line x1="58" y1="243" x2="58" y2="268" stroke="#283593" stroke-width="1.5" stroke-dasharray="3,2"></line>
+<polygon points="54,265 58,271 62,265" fill="#283593"></polygon>
+<circle cx="58" cy="251" r="2" fill="#283593"></circle>
+<text x="65" y="255" fill="#999" font-family="monospace" font-size="8">#vi</text>
+<rect x="30" y="273" width="56" height="22" rx="3" ry="3" fill="#303f9f"></rect>
+<text x="58" y="288" text-anchor="middle" fill="#fff" font-family="monospace" font-size="9" font-weight="bold">v6.4</text>
+<text x="95" y="282" fill="#111" font-family="monospace" font-size="11" font-weight="bold">Gain scheduling</text>
+<text x="95" y="297" fill="#555" font-family="monospace" font-size="9">Speed-based gains</text>
+<rect x="380" y="273" width="96" height="18" rx="3" fill="#fff3e0" stroke="#e65100" stroke-width="1"></rect>
+<text x="428" y="286" text-anchor="middle" fill="#e65100" font-family="monospace" font-size="7">linear interpolate</text>
+<circle cx="58" cy="303" r="2" fill="#303f9f"></circle>
+<text x="65" y="307" fill="#999" font-family="monospace" font-size="8">#vi</text>
+<rect x="510" y="65" width="56" height="22" rx="3" ry="3" fill="#3949ab"></rect>
+<text x="538" y="80" text-anchor="middle" fill="#fff" font-family="monospace" font-size="9" font-weight="bold">v6.5</text>
+<text x="575" y="74" fill="#111" font-family="monospace" font-size="11" font-weight="bold">Anti-windup</text>
+<text x="575" y="89" fill="#555" font-family="monospace" font-size="9">Integrator clamping</text>
+<rect x="860" y="65" width="96" height="18" rx="3" fill="#fff3e0" stroke="#e65100" stroke-width="1"></rect>
+<text x="908" y="78" text-anchor="middle" fill="#e65100" font-family="monospace" font-size="7">conditional int</text>
+<line x1="538" y1="87" x2="538" y2="112" stroke="#3949ab" stroke-width="1.5" stroke-dasharray="3,2"></line>
+<polygon points="534,109 538,115 542,109" fill="#3949ab"></polygon>
+<circle cx="538" cy="95" r="2" fill="#3949ab"></circle>
+<text x="545" y="99" fill="#999" font-family="monospace" font-size="8">#vi</text>
+<rect x="510" y="117" width="56" height="22" rx="3" ry="3" fill="#283593"></rect>
+<text x="538" y="132" text-anchor="middle" fill="#fff" font-family="monospace" font-size="9" font-weight="bold">v6.6</text>
+<text x="575" y="126" fill="#111" font-family="monospace" font-size="11" font-weight="bold">Waypoint plan</text>
+<text x="575" y="141" fill="#555" font-family="monospace" font-size="9">Global path waypoints</text>
+<rect x="860" y="117" width="96" height="18" rx="3" fill="#fff3e0" stroke="#e65100" stroke-width="1"></rect>
+<text x="908" y="130" text-anchor="middle" fill="#e65100" font-family="monospace" font-size="7">100mm interp</text>
+<line x1="538" y1="139" x2="538" y2="164" stroke="#283593" stroke-width="1.5" stroke-dasharray="3,2"></line>
+<polygon points="534,161 538,167 542,161" fill="#283593"></polygon>
+<circle cx="538" cy="147" r="2" fill="#283593"></circle>
+<text x="545" y="151" fill="#999" font-family="monospace" font-size="8">#vi</text>
+<rect x="510" y="169" width="56" height="22" rx="3" ry="3" fill="#303f9f"></rect>
+<text x="538" y="184" text-anchor="middle" fill="#fff" font-family="monospace" font-size="9" font-weight="bold">v6.7</text>
+<text x="575" y="178" fill="#111" font-family="monospace" font-size="11" font-weight="bold">Cubic spline</text>
+<text x="575" y="193" fill="#555" font-family="monospace" font-size="9">Smooth trajectory</text>
+<rect x="860" y="169" width="96" height="18" rx="3" fill="#fff3e0" stroke="#e65100" stroke-width="1"></rect>
+<text x="908" y="182" text-anchor="middle" fill="#e65100" font-family="monospace" font-size="7">clamped bounds</text>
+<line x1="538" y1="191" x2="538" y2="216" stroke="#303f9f" stroke-width="1.5" stroke-dasharray="3,2"></line>
+<polygon points="534,213 538,219 542,213" fill="#303f9f"></polygon>
+<circle cx="538" cy="199" r="2" fill="#303f9f"></circle>
+<text x="545" y="203" fill="#999" font-family="monospace" font-size="8">#vi</text>
+<rect x="510" y="221" width="56" height="22" rx="3" ry="3" fill="#3949ab"></rect>
+<text x="538" y="236" text-anchor="middle" fill="#fff" font-family="monospace" font-size="9" font-weight="bold">v6.8</text>
+<text x="575" y="230" fill="#111" font-family="monospace" font-size="11" font-weight="bold">Velocity profile</text>
+<text x="575" y="245" fill="#555" font-family="monospace" font-size="9">Trapezoidal profile</text>
+<rect x="860" y="221" width="96" height="18" rx="3" fill="#fff3e0" stroke="#e65100" stroke-width="1"></rect>
+<text x="908" y="234" text-anchor="middle" fill="#e65100" font-family="monospace" font-size="7">0.5m/s2 limit</text>
+<line x1="538" y1="243" x2="538" y2="268" stroke="#3949ab" stroke-width="1.5" stroke-dasharray="3,2"></line>
+<polygon points="534,265 538,271 542,265" fill="#3949ab"></polygon>
+<circle cx="538" cy="251" r="2" fill="#3949ab"></circle>
+<text x="545" y="255" fill="#999" font-family="monospace" font-size="8">#vi</text>
+<rect x="510" y="273" width="56" height="22" rx="3" ry="3" fill="#1a237e"></rect>
+<text x="538" y="288" text-anchor="middle" fill="#fff" font-family="monospace" font-size="9" font-weight="bold">v6.9</text>
+<text x="575" y="282" fill="#111" font-family="monospace" font-size="11" font-weight="bold">Obstacle avoid</text>
+<text x="575" y="297" fill="#555" font-family="monospace" font-size="9">Reactive avoidance</text>
+<rect x="860" y="273" width="96" height="18" rx="3" fill="#fff3e0" stroke="#e65100" stroke-width="1"></rect>
+<text x="908" y="286" text-anchor="middle" fill="#e65100" font-family="monospace" font-size="7">3 precomputed</text>
+<circle cx="538" cy="303" r="2" fill="#1a237e"></circle>
+<text x="545" y="307" fill="#999" font-family="monospace" font-size="8">#vi</text>
+<rect x="0" y="575" width="1000" height="45" fill="#e8eaf6" opacity="0.15"></rect>
+<text x="20" y="595" fill="#555" font-family="monospace" font-size="10">Phase: Control & Planning | 10 versions | 10 errors documented and fixed | 90,000+ words of narrative</text>
+<text x="20" y="612" fill="#999" font-family="monospace" font-size="8">WRO 2026 Future Engineers - 4WS AWD Robot - Generated 2026-07-30</text>
+</svg>

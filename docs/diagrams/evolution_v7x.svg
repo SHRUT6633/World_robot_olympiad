@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 620" width="100%" height="100%">
+<rect x="0" y="0" width="1000" height="620" fill="#fafafa"></rect>
+<rect x="0" y="0" width="1000" height="42" fill="#fce4ec"></rect>
+<text x="20" y="28" fill="#111" font-family="monospace" font-size="16" font-weight="bold">v7.x — Mission &amp; Behavior</text>
+<text x="30" y="60" fill="#666" font-family="monospace" font-size="9" font-weight="bold">Versions 1-5</text>
+<text x="510" y="60" fill="#666" font-family="monospace" font-size="9" font-weight="bold">Versions 6-10</text>
+<rect x="30" y="65" width="56" height="22" rx="3" ry="3" fill="#880e4f"></rect>
+<text x="58" y="80" text-anchor="middle" fill="#fff" font-family="monospace" font-size="9" font-weight="bold">v7.0</text>
+<text x="95" y="74" fill="#111" font-family="monospace" font-size="11" font-weight="bold">4-state machine</text>
+<text x="95" y="89" fill="#555" font-family="monospace" font-size="9">Basic robot states</text>
+<rect x="380" y="65" width="96" height="18" rx="3" fill="#fff3e0" stroke="#e65100" stroke-width="1"></rect>
+<text x="428" y="78" text-anchor="middle" fill="#e65100" font-family="monospace" font-size="7">refactor to dict</text>
+<line x1="58" y1="87" x2="58" y2="112" stroke="#880e4f" stroke-width="1.5" stroke-dasharray="3,2"></line>
+<polygon points="54,109 58,115 62,109" fill="#880e4f"></polygon>
+<circle cx="58" cy="95" r="2" fill="#880e4f"></circle>
+<text x="65" y="99" fill="#999" font-family="monospace" font-size="8">#vi</text>
+<rect x="30" y="117" width="56" height="22" rx="3" ry="3" fill="#ad1457"></rect>
+<text x="58" y="132" text-anchor="middle" fill="#fff" font-family="monospace" font-size="9" font-weight="bold">v7.1</text>
+<text x="95" y="126" fill="#111" font-family="monospace" font-size="11" font-weight="bold">10-state machine</text>
+<text x="95" y="141" fill="#555" font-family="monospace" font-size="9">Full race lifecycle</text>
+<rect x="380" y="117" width="96" height="18" rx="3" fill="#fff3e0" stroke="#e65100" stroke-width="1"></rect>
+<text x="428" y="130" text-anchor="middle" fill="#e65100" font-family="monospace" font-size="7">timer reset fix</text>
+<line x1="58" y1="139" x2="58" y2="164" stroke="#ad1457" stroke-width="1.5" stroke-dasharray="3,2"></line>
+<polygon points="54,161 58,167 62,161" fill="#ad1457"></polygon>
+<circle cx="58" cy="147" r="2" fill="#ad1457"></circle>
+<text x="65" y="151" fill="#999" font-family="monospace" font-size="8">#vi</text>
+<rect x="30" y="169" width="56" height="22" rx="3" ry="3" fill="#c2185b"></rect>
+<text x="58" y="184" text-anchor="middle" fill="#fff" font-family="monospace" font-size="9" font-weight="bold">v7.2</text>
+<text x="95" y="178" fill="#111" font-family="monospace" font-size="11" font-weight="bold">Lap counter</text>
+<text x="95" y="193" fill="#555" font-family="monospace" font-size="9">Start/finish lap count</text>
+<rect x="380" y="169" width="96" height="18" rx="3" fill="#fff3e0" stroke="#e65100" stroke-width="1"></rect>
+<text x="428" y="182" text-anchor="middle" fill="#e65100" font-family="monospace" font-size="7">50cm hysteresis</text>
+<line x1="58" y1="191" x2="58" y2="216" stroke="#c2185b" stroke-width="1.5" stroke-dasharray="3,2"></line>
+<polygon points="54,213 58,219 62,213" fill="#c2185b"></polygon>
+<circle cx="58" cy="199" r="2" fill="#c2185b"></circle>
+<text x="65" y="203" fill="#999" font-family="monospace" font-size="8">#vi</text>
+<rect x="30" y="221" width="56" height="22" rx="3" ry="3" fill="#880e4f"></rect>
+<text x="58" y="236" text-anchor="middle" fill="#fff" font-family="monospace" font-size="9" font-weight="bold">v7.3</text>
+<text x="95" y="230" fill="#111" font-family="monospace" font-size="11" font-weight="bold">Start detection</text>
+<text x="95" y="245" fill="#555" font-family="monospace" font-size="9">Switch + vision start</text>
+<rect x="380" y="221" width="96" height="18" rx="3" fill="#fff3e0" stroke="#e65100" stroke-width="1"></rect>
+<text x="428" y="234" text-anchor="middle" fill="#e65100" font-family="monospace" font-size="7">HW+SW debounce</text>
+<line x1="58" y1="243" x2="58" y2="268" stroke="#880e4f" stroke-width="1.5" stroke-dasharray="3,2"></line>
+<polygon points="54,265 58,271 62,265" fill="#880e4f"></polygon>
+<circle cx="58" cy="251" r="2" fill="#880e4f"></circle>
+<text x="65" y="255" fill="#999" font-family="monospace" font-size="8">#vi</text>
+<rect x="30" y="273" width="56" height="22" rx="3" ry="3" fill="#ad1457"></rect>
+<text x="58" y="288" text-anchor="middle" fill="#fff" font-family="monospace" font-size="9" font-weight="bold">v7.4</text>
+<text x="95" y="282" fill="#111" font-family="monospace" font-size="11" font-weight="bold">Obstacle strategy</text>
+<text x="95" y="297" fill="#555" font-family="monospace" font-size="9">Pass left/right logic</text>
+<rect x="380" y="273" width="96" height="18" rx="3" fill="#fff3e0" stroke="#e65100" stroke-width="1"></rect>
+<text x="428" y="286" text-anchor="middle" fill="#e65100" font-family="monospace" font-size="7">lock decision</text>
+<circle cx="58" cy="303" r="2" fill="#ad1457"></circle>
+<text x="65" y="307" fill="#999" font-family="monospace" font-size="8">#vi</text>
+<rect x="510" y="65" width="56" height="22" rx="3" ry="3" fill="#c2185b"></rect>
+<text x="538" y="80" text-anchor="middle" fill="#fff" font-family="monospace" font-size="9" font-weight="bold">v7.5</text>
+<text x="575" y="74" fill="#111" font-family="monospace" font-size="11" font-weight="bold">Direction detect</text>
+<text x="575" y="89" fill="#555" font-family="monospace" font-size="9">CW/CCW track dir</text>
+<rect x="860" y="65" width="96" height="18" rx="3" fill="#fff3e0" stroke="#e65100" stroke-width="1"></rect>
+<text x="908" y="78" text-anchor="middle" fill="#e65100" font-family="monospace" font-size="7">wait for corner</text>
+<line x1="538" y1="87" x2="538" y2="112" stroke="#c2185b" stroke-width="1.5" stroke-dasharray="3,2"></line>
+<polygon points="534,109 538,115 542,109" fill="#c2185b"></polygon>
+<circle cx="538" cy="95" r="2" fill="#c2185b"></circle>
+<text x="545" y="99" fill="#999" font-family="monospace" font-size="8">#vi</text>
+<rect x="510" y="117" width="56" height="22" rx="3" ry="3" fill="#880e4f"></rect>
+<text x="538" y="132" text-anchor="middle" fill="#fff" font-family="monospace" font-size="9" font-weight="bold">v7.6</text>
+<text x="575" y="126" fill="#111" font-family="monospace" font-size="11" font-weight="bold">Reverse logic</text>
+<text x="575" y="141" fill="#555" font-family="monospace" font-size="9">Backup when stuck</text>
+<rect x="860" y="117" width="96" height="18" rx="3" fill="#fff3e0" stroke="#e65100" stroke-width="1"></rect>
+<text x="908" y="130" text-anchor="middle" fill="#e65100" font-family="monospace" font-size="7">20cm limit</text>
+<line x1="538" y1="139" x2="538" y2="164" stroke="#880e4f" stroke-width="1.5" stroke-dasharray="3,2"></line>
+<polygon points="534,161 538,167 542,161" fill="#880e4f"></polygon>
+<circle cx="538" cy="147" r="2" fill="#880e4f"></circle>
+<text x="545" y="151" fill="#999" font-family="monospace" font-size="8">#vi</text>
+<rect x="510" y="169" width="56" height="22" rx="3" ry="3" fill="#ad1457"></rect>
+<text x="538" y="184" text-anchor="middle" fill="#fff" font-family="monospace" font-size="9" font-weight="bold">v7.7</text>
+<text x="575" y="178" fill="#111" font-family="monospace" font-size="11" font-weight="bold">Parking state</text>
+<text x="575" y="193" fill="#555" font-family="monospace" font-size="9">7-state parking FSM</text>
+<rect x="860" y="169" width="96" height="18" rx="3" fill="#fff3e0" stroke="#e65100" stroke-width="1"></rect>
+<text x="908" y="182" text-anchor="middle" fill="#e65100" font-family="monospace" font-size="7">avg 3 ToF</text>
+<line x1="538" y1="191" x2="538" y2="216" stroke="#ad1457" stroke-width="1.5" stroke-dasharray="3,2"></line>
+<polygon points="534,213 538,219 542,213" fill="#ad1457"></polygon>
+<circle cx="538" cy="199" r="2" fill="#ad1457"></circle>
+<text x="545" y="203" fill="#999" font-family="monospace" font-size="8">#vi</text>
+<rect x="510" y="221" width="56" height="22" rx="3" ry="3" fill="#c2185b"></rect>
+<text x="538" y="236" text-anchor="middle" fill="#fff" font-family="monospace" font-size="9" font-weight="bold">v7.8</text>
+<text x="575" y="230" fill="#111" font-family="monospace" font-size="11" font-weight="bold">Race strategy</text>
+<text x="575" y="245" fill="#555" font-family="monospace" font-size="9">Speed mode selection</text>
+<rect x="860" y="221" width="96" height="18" rx="3" fill="#fff3e0" stroke="#e65100" stroke-width="1"></rect>
+<text x="908" y="234" text-anchor="middle" fill="#e65100" font-family="monospace" font-size="7">boost lap 2</text>
+<line x1="538" y1="243" x2="538" y2="268" stroke="#c2185b" stroke-width="1.5" stroke-dasharray="3,2"></line>
+<polygon points="534,265 538,271 542,265" fill="#c2185b"></polygon>
+<circle cx="538" cy="251" r="2" fill="#c2185b"></circle>
+<text x="545" y="255" fill="#999" font-family="monospace" font-size="8">#vi</text>
+<rect x="510" y="273" width="56" height="22" rx="3" ry="3" fill="#4a0024"></rect>
+<text x="538" y="288" text-anchor="middle" fill="#fff" font-family="monospace" font-size="9" font-weight="bold">v7.9</text>
+<text x="575" y="282" fill="#111" font-family="monospace" font-size="11" font-weight="bold">Checkpoint mgr</text>
+<text x="575" y="297" fill="#555" font-family="monospace" font-size="9">Waypoint verification</text>
+<rect x="860" y="273" width="96" height="18" rx="3" fill="#fff3e0" stroke="#e65100" stroke-width="1"></rect>
+<text x="908" y="286" text-anchor="middle" fill="#e65100" font-family="monospace" font-size="7">look-ahead dist</text>
+<circle cx="538" cy="303" r="2" fill="#4a0024"></circle>
+<text x="545" y="307" fill="#999" font-family="monospace" font-size="8">#vi</text>
+<rect x="0" y="575" width="1000" height="45" fill="#fce4ec" opacity="0.15"></rect>
+<text x="20" y="595" fill="#555" font-family="monospace" font-size="10">Phase: Mission & Behavior | 10 versions | 10 errors documented and fixed | 90,000+ words of narrative</text>
+<text x="20" y="612" fill="#999" font-family="monospace" font-size="8">WRO 2026 Future Engineers - 4WS AWD Robot - Generated 2026-07-30</text>
+</svg>

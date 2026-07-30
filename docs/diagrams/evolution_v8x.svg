@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 620" width="100%" height="100%">
+<rect x="0" y="0" width="1000" height="620" fill="#fafafa"></rect>
+<rect x="0" y="0" width="1000" height="42" fill="#fff8e1"></rect>
+<text x="20" y="28" fill="#111" font-family="monospace" font-size="16" font-weight="bold">v8.x — Advanced Features</text>
+<text x="30" y="60" fill="#666" font-family="monospace" font-size="9" font-weight="bold">Versions 1-5</text>
+<text x="510" y="60" fill="#666" font-family="monospace" font-size="9" font-weight="bold">Versions 6-10</text>
+<rect x="30" y="65" width="56" height="22" rx="3" ry="3" fill="#f57f17"></rect>
+<text x="58" y="80" text-anchor="middle" fill="#fff" font-family="monospace" font-size="9" font-weight="bold">v8.0</text>
+<text x="95" y="74" fill="#111" font-family="monospace" font-size="11" font-weight="bold">Same-phase steer</text>
+<text x="95" y="89" fill="#555" font-family="monospace" font-size="9">4WS parallel turn</text>
+<rect x="380" y="65" width="96" height="18" rx="3" fill="#fff3e0" stroke="#e65100" stroke-width="1"></rect>
+<text x="428" y="78" text-anchor="middle" fill="#e65100" font-family="monospace" font-size="7">limit 25 deg</text>
+<line x1="58" y1="87" x2="58" y2="112" stroke="#f57f17" stroke-width="1.5" stroke-dasharray="3,2"></line>
+<polygon points="54,109 58,115 62,109" fill="#f57f17"></polygon>
+<circle cx="58" cy="95" r="2" fill="#f57f17"></circle>
+<text x="65" y="99" fill="#999" font-family="monospace" font-size="8">#vi</text>
+<rect x="30" y="117" width="56" height="22" rx="3" ry="3" fill="#f9a825"></rect>
+<text x="58" y="132" text-anchor="middle" fill="#fff" font-family="monospace" font-size="9" font-weight="bold">v8.1</text>
+<text x="95" y="126" fill="#111" font-family="monospace" font-size="11" font-weight="bold">Opposite-phase</text>
+<text x="95" y="141" fill="#555" font-family="monospace" font-size="9">4WS tight turn</text>
+<rect x="380" y="117" width="96" height="18" rx="3" fill="#fff3e0" stroke="#e65100" stroke-width="1"></rect>
+<text x="428" y="130" text-anchor="middle" fill="#e65100" font-family="monospace" font-size="7">slow to 0.3m/s</text>
+<line x1="58" y1="139" x2="58" y2="164" stroke="#f9a825" stroke-width="1.5" stroke-dasharray="3,2"></line>
+<polygon points="54,161 58,167 62,161" fill="#f9a825"></polygon>
+<circle cx="58" cy="147" r="2" fill="#f9a825"></circle>
+<text x="65" y="151" fill="#999" font-family="monospace" font-size="8">#vi</text>
+<rect x="30" y="169" width="56" height="22" rx="3" ry="3" fill="#fbc02d"></rect>
+<text x="58" y="184" text-anchor="middle" fill="#fff" font-family="monospace" font-size="9" font-weight="bold">v8.2</text>
+<text x="95" y="178" fill="#111" font-family="monospace" font-size="11" font-weight="bold">Crab-walk steer</text>
+<text x="95" y="193" fill="#555" font-family="monospace" font-size="9">4WS diagonal move</text>
+<rect x="380" y="169" width="96" height="18" rx="3" fill="#fff3e0" stroke="#e65100" stroke-width="1"></rect>
+<text x="428" y="182" text-anchor="middle" fill="#e65100" font-family="monospace" font-size="7">disable yaw corr</text>
+<line x1="58" y1="191" x2="58" y2="216" stroke="#fbc02d" stroke-width="1.5" stroke-dasharray="3,2"></line>
+<polygon points="54,213 58,219 62,213" fill="#fbc02d"></polygon>
+<circle cx="58" cy="199" r="2" fill="#fbc02d"></circle>
+<text x="65" y="203" fill="#999" font-family="monospace" font-size="8">#vi</text>
+<rect x="30" y="221" width="56" height="22" rx="3" ry="3" fill="#f57f17"></rect>
+<text x="58" y="236" text-anchor="middle" fill="#fff" font-family="monospace" font-size="9" font-weight="bold">v8.3</text>
+<text x="95" y="230" fill="#111" font-family="monospace" font-size="11" font-weight="bold">Surprise config</text>
+<text x="95" y="245" fill="#555" font-family="monospace" font-size="9">YAML rule adaptation</text>
+<rect x="380" y="221" width="96" height="18" rx="3" fill="#fff3e0" stroke="#e65100" stroke-width="1"></rect>
+<text x="428" y="234" text-anchor="middle" fill="#e65100" font-family="monospace" font-size="7">UTF-8 encoding</text>
+<line x1="58" y1="243" x2="58" y2="268" stroke="#f57f17" stroke-width="1.5" stroke-dasharray="3,2"></line>
+<polygon points="54,265 58,271 62,265" fill="#f57f17"></polygon>
+<circle cx="58" cy="251" r="2" fill="#f57f17"></circle>
+<text x="65" y="255" fill="#999" font-family="monospace" font-size="8">#vi</text>
+<rect x="30" y="273" width="56" height="22" rx="3" ry="3" fill="#f9a825"></rect>
+<text x="58" y="288" text-anchor="middle" fill="#fff" font-family="monospace" font-size="9" font-weight="bold">v8.4</text>
+<text x="95" y="282" fill="#111" font-family="monospace" font-size="11" font-weight="bold">Pillar tracker</text>
+<text x="95" y="297" fill="#555" font-family="monospace" font-size="9">Pass-side tracking</text>
+<rect x="380" y="273" width="96" height="18" rx="3" fill="#fff3e0" stroke="#e65100" stroke-width="1"></rect>
+<text x="428" y="286" text-anchor="middle" fill="#e65100" font-family="monospace" font-size="7">500ms cooldown</text>
+<circle cx="58" cy="303" r="2" fill="#f9a825"></circle>
+<text x="65" y="307" fill="#999" font-family="monospace" font-size="8">#vi</text>
+<rect x="510" y="65" width="56" height="22" rx="3" ry="3" fill="#fbc02d"></rect>
+<text x="538" y="80" text-anchor="middle" fill="#fff" font-family="monospace" font-size="9" font-weight="bold">v8.5</text>
+<text x="575" y="74" fill="#111" font-family="monospace" font-size="11" font-weight="bold">Parking detector</text>
+<text x="575" y="89" fill="#555" font-family="monospace" font-size="9">Full 7-state park</text>
+<rect x="860" y="65" width="96" height="18" rx="3" fill="#fff3e0" stroke="#e65100" stroke-width="1"></rect>
+<text x="908" y="78" text-anchor="middle" fill="#e65100" font-family="monospace" font-size="7">exposure comp</text>
+<line x1="538" y1="87" x2="538" y2="112" stroke="#fbc02d" stroke-width="1.5" stroke-dasharray="3,2"></line>
+<polygon points="534,109 538,115 542,109" fill="#fbc02d"></polygon>
+<circle cx="538" cy="95" r="2" fill="#fbc02d"></circle>
+<text x="545" y="99" fill="#999" font-family="monospace" font-size="8">#vi</text>
+<rect x="510" y="117" width="56" height="22" rx="3" ry="3" fill="#f57f17"></rect>
+<text x="538" y="132" text-anchor="middle" fill="#fff" font-family="monospace" font-size="9" font-weight="bold">v8.6</text>
+<text x="575" y="126" fill="#111" font-family="monospace" font-size="11" font-weight="bold">Track map</text>
+<text x="575" y="141" fill="#555" font-family="monospace" font-size="9">Geometry-based map</text>
+<rect x="860" y="117" width="96" height="18" rx="3" fill="#fff3e0" stroke="#e65100" stroke-width="1"></rect>
+<text x="908" y="130" text-anchor="middle" fill="#e65100" font-family="monospace" font-size="7">reset at start</text>
+<line x1="538" y1="139" x2="538" y2="164" stroke="#f57f17" stroke-width="1.5" stroke-dasharray="3,2"></line>
+<polygon points="534,161 538,167 542,161" fill="#f57f17"></polygon>
+<circle cx="538" cy="147" r="2" fill="#f57f17"></circle>
+<text x="545" y="151" fill="#999" font-family="monospace" font-size="8">#vi</text>
+<rect x="510" y="169" width="56" height="22" rx="3" ry="3" fill="#f9a825"></rect>
+<text x="538" y="184" text-anchor="middle" fill="#fff" font-family="monospace" font-size="9" font-weight="bold">v8.7</text>
+<text x="575" y="178" fill="#111" font-family="monospace" font-size="11" font-weight="bold">Scheduler</text>
+<text x="575" y="193" fill="#555" font-family="monospace" font-size="9">Multi-rate task sched</text>
+<rect x="860" y="169" width="96" height="18" rx="3" fill="#fff3e0" stroke="#e65100" stroke-width="1"></rect>
+<text x="908" y="182" text-anchor="middle" fill="#e65100" font-family="monospace" font-size="7">absolute time</text>
+<line x1="538" y1="191" x2="538" y2="216" stroke="#f9a825" stroke-width="1.5" stroke-dasharray="3,2"></line>
+<polygon points="534,213 538,219 542,213" fill="#f9a825"></polygon>
+<circle cx="538" cy="199" r="2" fill="#f9a825"></circle>
+<text x="545" y="203" fill="#999" font-family="monospace" font-size="8">#vi</text>
+<rect x="510" y="221" width="56" height="22" rx="3" ry="3" fill="#fbc02d"></rect>
+<text x="538" y="236" text-anchor="middle" fill="#fff" font-family="monospace" font-size="9" font-weight="bold">v8.8</text>
+<text x="575" y="230" fill="#111" font-family="monospace" font-size="11" font-weight="bold">Health heartbeats</text>
+<text x="575" y="245" fill="#555" font-family="monospace" font-size="9">Watchdog heartbeats</text>
+<rect x="860" y="221" width="96" height="18" rx="3" fill="#fff3e0" stroke="#e65100" stroke-width="1"></rect>
+<text x="908" y="234" text-anchor="middle" fill="#e65100" font-family="monospace" font-size="7">3 misses tol</text>
+<line x1="538" y1="243" x2="538" y2="268" stroke="#fbc02d" stroke-width="1.5" stroke-dasharray="3,2"></line>
+<polygon points="534,265 538,271 542,265" fill="#fbc02d"></polygon>
+<circle cx="538" cy="251" r="2" fill="#fbc02d"></circle>
+<text x="545" y="255" fill="#999" font-family="monospace" font-size="8">#vi</text>
+<rect x="510" y="273" width="56" height="22" rx="3" ry="3" fill="#e65100"></rect>
+<text x="538" y="288" text-anchor="middle" fill="#fff" font-family="monospace" font-size="9" font-weight="bold">v8.9</text>
+<text x="575" y="282" fill="#111" font-family="monospace" font-size="11" font-weight="bold">Error logger</text>
+<text x="575" y="297" fill="#555" font-family="monospace" font-size="9">Rate-limited logging</text>
+<rect x="860" y="273" width="96" height="18" rx="3" fill="#fff3e0" stroke="#e65100" stroke-width="1"></rect>
+<text x="908" y="286" text-anchor="middle" fill="#e65100" font-family="monospace" font-size="7">severity levels</text>
+<circle cx="538" cy="303" r="2" fill="#e65100"></circle>
+<text x="545" y="307" fill="#999" font-family="monospace" font-size="8">#vi</text>
+<rect x="0" y="575" width="1000" height="45" fill="#fff8e1" opacity="0.15"></rect>
+<text x="20" y="595" fill="#555" font-family="monospace" font-size="10">Phase: Advanced Features | 10 versions | 10 errors documented and fixed | 90,000+ words of narrative</text>
+<text x="20" y="612" fill="#999" font-family="monospace" font-size="8">WRO 2026 Future Engineers - 4WS AWD Robot - Generated 2026-07-30</text>
+</svg>
