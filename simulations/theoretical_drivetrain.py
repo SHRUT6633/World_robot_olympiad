@@ -1,20 +1,60 @@
 # =============================================================================
 # WRO 2026 - 4WS AWD Autonomous Robot
 # File: simulations/theoretical_drivetrain.py
-# Rev:  v0.1  |  Status: RESEARCH (pre-code)
+# Rev:  v0.3  |  Status: RESEARCH (pre-code)
 # =============================================================================
-# Pre-build theoretical simulation comparing FWD, RWD and AWD.
-# Run: python simulations/theoretical_drivetrain.py
+# Interactive simulation: compare FWD vs RWD vs AWD traction.
+# All values COMPUTED in real-time - change any parameter.
 # No hardware required - pure torque and traction analysis.
+# =============================================================================
+#
+# Usage:
+#   python simulations\theoretical_drivetrain.py                        # defaults
+#   python simulations\theoretical_drivetrain.py --mass 3.0             # custom
+#   python simulations\theoretical_drivetrain.py --friction 0.5         # custom
+#   python simulations\theoretical_drivetrain.py --torque 0.15 --gear 12
+#   python simulations\theoretical_drivetrain.py --interactive          # input mode
 # =============================================================================
 
 import math
+import sys
 
-L = 0.300   # wheelbase (m)
-W = 0.250   # track width (m)
-M = 2.0     # robot mass (kg)
-g = 9.81    # gravity
-mu = 0.7    # tyre-road friction coefficient (rubber on vinyl)
+L = 0.300      # wheelbase (m)
+W = 0.250      # track width (m)
+M = 2.0        # robot mass (kg)
+g = 9.81       # gravity
+mu = 0.7       # tyre-road friction coefficient
+T_motor = 0.12 # motor torque (Nm)
+GR = 9.6       # gear ratio
+eta = 0.85     # drivetrain efficiency
+
+args = sys.argv[1:]
+i = 0
+while i < len(args):
+    if args[i] == "--mass" and i + 1 < len(args):
+        M = float(args[i + 1])
+        i += 2
+    elif args[i] == "--friction" and i + 1 < len(args):
+        mu = float(args[i + 1])
+        i += 2
+    elif args[i] == "--torque" and i + 1 < len(args):
+        T_motor = float(args[i + 1])
+        i += 2
+    elif args[i] == "--gear" and i + 1 < len(args):
+        GR = float(args[i + 1])
+        i += 2
+    elif args[i] == "--track" and i + 1 < len(args):
+        W = float(args[i + 1]) / 1000
+        i += 2
+    elif args[i] == "--interactive":
+        print("=== Interactive Mode ===")
+        M = float(input("Mass (kg) [2.0]: ") or "2.0")
+        mu = float(input("Friction coeff [0.7]: ") or "0.7")
+        T_motor = float(input("Motor torque (Nm) [0.12]: ") or "0.12")
+        print()
+        i += 1
+    else:
+        i += 1
 
 print("=" * 60)
 print("THEORETICAL: FWD vs RWD vs AWD Drivetrain Comparison")
@@ -24,9 +64,7 @@ print(f"Friction: mu={mu}  |  Max traction: {mu*M*g:.1f}N")
 print("-" * 60)
 
 # -- Torque Calculation --
-T_motor = 0.12   # Nm (typical 370 DC motor)
-GR = 9.6         # gear ratio (motor to wheel)
-eta = 0.85       # drivetrain efficiency
+
 T_wheel = T_motor * GR * eta
 
 print(f"\n[Torque Budget]")
