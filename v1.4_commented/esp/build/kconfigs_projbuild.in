@@ -1,0 +1,6 @@
+source "E:/Espressif/frameworks/esp-idf-v5.5.5/components/bootloader/Kconfig.projbuild"
+source "E:/Espressif/frameworks/esp-idf-v5.5.5/components/esp_app_format/Kconfig.projbuild"
+source "E:/Espressif/frameworks/esp-idf-v5.5.5/components/esp_rom/Kconfig.projbuild"
+source "E:/Espressif/frameworks/esp-idf-v5.5.5/components/esptool_py/Kconfig.projbuild"
+source "E:/Espressif/frameworks/esp-idf-v5.5.5/components/partition_table/Kconfig.projbuild"
+source "F:/WRO/World-Robot-Olympiad-2026/esp/main/Kconfig.projbuild"
