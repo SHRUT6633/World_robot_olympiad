@@ -1,4 +1,16 @@
+<!--
+=============================================================================
+WRO 2026 — 4WS AWD Autonomous Robot
+File: docs/wiring/WIRING.md
+Rev:  v9.9  |  Status: RELEASED
+=============================================================================
+-->
+
 # WRO 4WS Wiring / Pinout (BCM numbering)
+
+## Full Wiring Schematic
+
+![WRO 2026 Wiring Schematic](wiring_schematic.svg)
 
 ## Raspberry Pi 4B GPIO
 
