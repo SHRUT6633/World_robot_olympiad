@@ -43,8 +43,8 @@ flowchart TD
     MOTOR_RAIL --> L298N[L298N driver]
     L298N --> M1[Drive motor<br/>AWD all 4 wheels]
     BUCK5 --> PI[Raspberry Pi 4<br/>5V GPIO pin]
-    BUCK5 --> ESP[ESP32-S3<br/>5V input]
-    ESP --> P33[Pi 3.3V pin<br/>sensor rail]
+    PI -- USB 5V --> ESP[ESP32-S3<br/>powered from Pi USB]
+    PI --> P33[Pi 3.3V pin<br/>sensor rail]
     P33 --> S1[MPU6050 IMU]
     P33 --> S2[QMC5883L mag]
     P33 --> S3[VL53L0X x2 ToF]
@@ -57,9 +57,9 @@ Three independent rails, one battery:
 | Rail | Voltage | Source | Feeds | Why separate |
 |------|---------|--------|-------|--------------|
 | **Motor rail** | 7.4V (battery direct) | LiPo → L298N `VS` | L298N → drive motor | High current, huge transients — must never touch logic |
-| **Logic 5V rail** | 5V / 5A | Buck converter | Pi 4, ESP32-S3 | Clean, regulated, stable under load |
+| **Logic 5V rail** | 5V / 5A | Buck converter | Pi 4 — ESP32-S3 rides on the Pi's USB port | Clean, regulated, stable under load |
 | **Servo rail** | 5V / 3A | Isolated UBEC | MG995 steering servo | Servo stall current sags shared rails |
-| **Sensor rail** | 3.3V | Pi 3.3V pin | All I2C sensors | Small current (<60mA), close to the Pi bus |
+| **Sensor rail** | 3.3V | Pi 3.3V pin | All I2C sensors | Sensors are powered BY the Pi — they never draw from the battery |
 
 ---
 
@@ -72,10 +72,14 @@ Measured/typical values, not datasheet maximums:
 | Drive motor (single, AWD) | 7.4V | 0.9A | 2.5A stall | 6.7W |
 | L298N driver loss | 7.4V | 0.2A | — | 1.5W |
 | MG995 steering servo | 5V | 0.35A | 1.5A stall | 1.8W |
-| Raspberry Pi 4 (headless + camera) | 5V | 1.3A | 2.0A | 6.5W |
-| ESP32-S3 (UART + PWM only) | 5V | 0.30A | 0.5A | 1.5W |
+| Raspberry Pi 4 + ESP32-S3 (via USB) | 5V | 1.6A | 2.5A | 8.0W |
 | Sensors (IMU + mag + 3×ToF) | 3.3V | 0.06A | 0.09A | 0.2W |
-| **Total** | — | **~3.1A @7.4V equiv** | **~5.6A** | **~18.2W** |
+| **Total** | — | **~2.4A @7.4V** | **~5A** | **~18.2W** |
+```
+
+> The ESP32-S3 is powered from the Pi's USB port — its 1.5W is already
+> inside the Pi row. Nothing logic-related draws from the battery
+> except through the Pi.
 
 Battery runtime estimate:
 
@@ -157,6 +161,7 @@ Rules:
 
 | Failure we actually had | What it taught us | Where fixed |
 |------------------------|-------------------|-------------|
+| ESP32 burned on first power-up (v1.2, 2 days) | Logic needs a real power source — Pi USB, never a weak 3.3V pin | Section 8 |
 | ESP32 brownout reboot loop at motor start (v2.x, 4 days) | Motor rail must be separate + bulk capacitance | Sections 2, 4 |
 | Mag heading destroyed when motors ran (v5.x) | Current wires and sensor wires must be separated + twisted | Section 5 |
 | Servo glitches under load on the shared 5V | Servo needs its own isolated supply | Section 2 |
@@ -165,13 +170,72 @@ Rules:
 
 ---
 
-## 8. Build & verify checklist
+## 8. Power history — the day the ESP32 burned
+
+Recorded in the same format as the error catalog
+(`docs/issues/phases/`). This really happened on the first bench
+power-up.
+
+| | |
+|---|---|
+| Error | E-0023 (BIG) |
+| Version | v1.2 — boot & power phase |
+| Found | Day 4 |
+| Fixed | Day 6 (2 days) |
+| Terminal | UART boot log |
+
+**WHAT HAPPENED**
+
+```
+[  3.1s] boot: power on — 7.4V battery OK
+[  3.2s] boot: Pi 4 up — 5.0V rail OK
+[  3.4s] boot: esp32 no response — UART timeout
+[  3.6s] boot: retry 1 — still no response
+[  4.2s] boot: retry 2 — still no response
+[  4.5s] boot: ERROR — ESP32 not reachable, LED RED
+[  5.0s] boot: smoke from ESP32 area — POWER OFF!
+```
+
+**WHY IT HAPPENED (root cause)**
+
+The first design powered the ESP32-S3 from the Pi's **3.3V pin**.
+That pin can only deliver ~50 mA total, but the ESP32 needs up to
+500 mA the moment it starts. The voltage collapsed, the ESP32
+brownout-looped, and its onboard LDO regulator overheated and burned
+the chip.
+
+**INVESTIGATION**
+
+1. Multimeter on the 3.3V pin during ESP32 boot → voltage sagged from
+   3.3V to 1.9V (brownout — same failure mode as the v2.x motor issue).
+2. Current clamp on the 3.3V wire → 0.48A peak draw, ~10× the budget.
+3. Chip surface temperature after 60 s → >85°C, LDO destroyed.
+
+**FIX (took 2 days)**
+
+1. Power the ESP32 from the **Pi's USB port (5V)** — the Pi USB port
+   has enough current for the whole ESP32-S3 board.
+2. Added a 470µF bulk cap on the 5V rail to cover Pi + ESP32 peaks.
+3. Sensors stay on the Pi I2C bus and keep power from the Pi 3.3V pin
+   (they draw <60 mA total — measured, safe).
+
+**PREVENTION**
+
+- Logic is powered from ONE source: the Pi.
+- Sensors → Pi 3.3V pin (small, measured current).
+- ESP32 → Pi USB (5V).
+- Nothing logic-related touches the motor or servo rails.
+
+---
+
+## 9. Build & verify checklist
 
 Bench test before every competition day (10 minutes):
 
 1. **Switch off** — no voltage anywhere after the switch. Fuse installed.
-2. **Switch on, no motor** — 7.4V at battery, 5.0V at Pi and ESP32,
-   5.0V at UBEC, 3.3V at the sensor rail. Measured with a multimeter.
+2. **Switch on, no motor** — 7.4V at battery, 5.0V at Pi, 5.0V at the
+   ESP32 (via Pi USB), 5.0V at UBEC, 3.3V at the sensor rail. Measured
+   with a multimeter.
 3. **Servo sweep test** — servo moves, Pi stays alive, voltage at Pi
    never drops below 4.8V.
 4. **Motor ramp test** — motor starts, ESP32 stays in RUN state
@@ -181,7 +245,7 @@ Bench test before every competition day (10 minutes):
 6. **Weight check** — battery + wiring included in the 1.5 kg limit
    (Rule 11.2).
 
-## 9. WRO rule compliance
+## 10. WRO rule compliance
 
 | Rule | Requirement | Our power solution |
 |------|-------------|--------------------|
@@ -189,3 +253,11 @@ Bench test before every competition day (10 minutes):
 | 11.6 / 11.10 | Wireless off during rounds | Switch disconnects everything; radios disabled in code |
 | 11.13 | Max 2 driving motors, mechanically linked | 1 motor, 4 wheels, AWD linkage |
 | Power & Sense (Appendix C, 4 pts) | Battery isolation + wiring diagram | This document + `docs/wiring/WIRING.md` |
+
+---
+
+## 11. Component datasheets
+
+Full electrical specifications for every component — voltages,
+currents, interfaces, and official datasheet links — live in
+[`docs/datasheets/README.md`](../datasheets/README.md).

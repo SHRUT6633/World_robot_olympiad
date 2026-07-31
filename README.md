@@ -68,6 +68,8 @@ docs/
     03_obstacle.md       #   Obstacle Management (4 pts)
   power/
     POWER_DISTRIBUTION.md#   Power rails, budget, protection, grounding
+  datasheets/
+    README.md            #   Component specs + official datasheet links
   engineering/
     FAILURE_ANALYSIS.md  #   All bugs, root causes, fixes, prevention
 esp/                     # ESP32-S3 firmware (ESP-IDF v5.5.5)
