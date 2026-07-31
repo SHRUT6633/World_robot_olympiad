@@ -17,9 +17,54 @@ Each version folder has:
 
 ---
 
+## The Journey at a Glance
+
+```mermaid
+flowchart TD
+    A[Day 0<br/>Nothing] --> B[Foundation<br/>v1.x<br/>Hardware tested]
+    B --> C[Driving<br/>v2.x<br/>Moves and steers]
+    C --> D[Sensing<br/>v3.x<br/>Sees the world]
+    D --> E[Track<br/>v4.x<br/>Lanes and pillars]
+    E --> F[Localization<br/>v5.x<br/>Knows where it is]
+    F --> G[Control<br/>v6.x<br/>Drives itself]
+    G --> H[Mission<br/>v7.x<br/>Follows the rules]
+    H --> I[Advanced<br/>v8.x<br/>4WS steering modes]
+    I --> J[Polish<br/>v9.x<br/>Competition ready]
+    J --> K[WRO 2026<br/>122/122 pts target]
+```
+
+```mermaid
+timeline
+    title 90 versions, 9 phases, 180 development days
+    v1.x : Foundation & hardware testing
+    v2.x : Basic driving
+    v3.x : Sensing the world
+    v4.x : Understanding the track
+    v5.x : Localization & fusion
+    v6.x : Control & planning
+    v7.x : Mission & behavior
+    v8.x : Advanced features
+    v9.x : Polish & competition ready
+```
+
+---
+
 ## The 9 Major Phases
 
 ### v1.x — Foundation & Hardware Testing
+
+```mermaid
+flowchart LR
+    v10[v1.0<br/>Skeleton] --> v11[v1.1<br/>I2C scan]
+    v11 --> v12[v1.2<br/>Camera test]
+    v12 --> v13[v1.3<br/>Motor test]
+    v13 --> v14[v1.4<br/>Servo calib]
+    v14 --> v15[v1.5<br/>UART loop]
+    v15 --> v16[v1.6<br/>Sensor loop]
+    v16 --> v17[v1.7<br/>LED + switch]
+    v17 --> v18[v1.8<br/>Self-test]
+    v18 --> v19[v1.9<br/>HW verified]
+```
 
 ![Evolution v1.x](../docs/diagrams/evolution_v1x.svg)
 
@@ -38,6 +83,19 @@ Each version folder has:
 
 ### v2.x — Basic Driving
 
+```mermaid
+flowchart LR
+    v20[v2.0<br/>Forward drive] --> v21[v2.1<br/>Turn + steer]
+    v21 --> v22[v2.2<br/>PWM control]
+    v22 --> v23[v2.3<br/>Encoder odometry]
+    v23 --> v24[v2.4<br/>PID straight]
+    v24 --> v25[v2.5<br/>Open-loop trajectory]
+    v25 --> v26[v2.6<br/>Stop + reverse]
+    v26 --> v27[v2.7<br/>S-curve ramp]
+    v27 --> v28[v2.8<br/>Keyboard control]
+    v28 --> v29[v2.9<br/>Drive reliable]
+```
+
 ![Evolution v2.x](../docs/diagrams/evolution_v2x.svg)
 
 | Ver | What We Did | Key Error Fixed |
@@ -54,6 +112,19 @@ Each version folder has:
 | 2.9 | Drive reliability summary | Max speed 1.8m/s, min radius 0.5m |
 
 ### v3.x — Sensing The World
+
+```mermaid
+flowchart LR
+    v30[v3.0<br/>IMU logging] --> v31[v3.1<br/>IMU calib]
+    v31 --> v32[v3.2<br/>Complementary]
+    v32 --> v33[v3.3<br/>Mag heading]
+    v33 --> v34[v3.4<br/>ToF reading]
+    v34 --> v35[v3.5<br/>ToF fusion]
+    v35 --> v36[v3.6<br/>Camera frames]
+    v36 --> v37[v3.7<br/>HSV colour]
+    v37 --> v38[v3.8<br/>Blob detect]
+    v38 --> v39[v3.9<br/>Sensor health]
+```
 
 ![Evolution v3.x](../docs/diagrams/evolution_v3x.svg)
 
@@ -72,6 +143,19 @@ Each version folder has:
 
 ### v4.x — Understanding The Track
 
+```mermaid
+flowchart LR
+    v40[v4.0<br/>Lane detect] --> v41[v4.1<br/>Wall detect]
+    v41 --> v42[v4.2<br/>Free space]
+    v42 --> v43[v4.3<br/>Corner detect]
+    v43 --> v44[v4.4<br/>Red pillar]
+    v44 --> v45[v4.5<br/>Green pillar]
+    v45 --> v46[v4.6<br/>Pink marker]
+    v46 --> v47[v4.7<br/>Pillar distance]
+    v47 --> v48[v4.8<br/>Pillar tracking]
+    v48 --> v49[v4.9<br/>Visual odometry]
+```
+
 ![Evolution v4.x](../docs/diagrams/evolution_v4x.svg)
 
 | Ver | What We Did | Key Error Fixed |
@@ -88,6 +172,19 @@ Each version folder has:
 | 4.9 | Visual odometry | Too slow 5fps, 320×240 FAST corners |
 
 ### v5.x — Localization & Fusion
+
+```mermaid
+flowchart LR
+    v50[v5.0<br/>Dead reckoning] --> v51[v5.1<br/>Mag + gyro]
+    v51 --> v52[v5.2<br/>Full filter]
+    v52 --> v53[v5.3<br/>EKF]
+    v53 --> v54[v5.4<br/>UKF]
+    v54 --> v55[v5.5<br/>UKF tuning]
+    v55 --> v56[v5.6<br/>Adaptive noise]
+    v56 --> v57[v5.7<br/>Outlier reject]
+    v57 --> v58[v5.8<br/>Cross verify]
+    v58 --> v59[v5.9<br/>Pose pipeline]
+```
 
 ![Evolution v5.x](../docs/diagrams/evolution_v5x.svg)
 
@@ -106,6 +203,19 @@ Each version folder has:
 
 ### v6.x — Control & Planning
 
+```mermaid
+flowchart LR
+    v60[v6.0<br/>PID speed] --> v61[v6.1<br/>PID servo]
+    v61 --> v62[v6.2<br/>Stanley]
+    v62 --> v63[v6.3<br/>Feedforward]
+    v63 --> v64[v6.4<br/>Gain schedule]
+    v64 --> v65[v6.5<br/>Anti-windup]
+    v65 --> v66[v6.6<br/>Global planner]
+    v66 --> v67[v6.7<br/>Spline]
+    v67 --> v68[v6.8<br/>Velocity profile]
+    v68 --> v69[v6.9<br/>Avoidance]
+```
+
 ![Evolution v6.x](../docs/diagrams/evolution_v6x.svg)
 
 | Ver | What We Did | Key Error Fixed |
@@ -122,6 +232,19 @@ Each version folder has:
 | 6.9 | Obstacle avoidance | 200ms replan lag, precompute 3 paths |
 
 ### v7.x — Mission & Behavior
+
+```mermaid
+flowchart LR
+    v70[v7.0<br/>4-state] --> v71[v7.1<br/>10-state]
+    v71 --> v72[v7.2<br/>Lap counter]
+    v72 --> v73[v7.3<br/>Start detect]
+    v73 --> v74[v7.4<br/>Obstacle pass]
+    v74 --> v75[v7.5<br/>Direction]
+    v75 --> v76[v7.6<br/>Reverse logic]
+    v76 --> v77[v7.7<br/>Parking SM]
+    v77 --> v78[v7.8<br/>Race strategy]
+    v78 --> v79[v7.9<br/>Checkpoints]
+```
 
 ![Evolution v7.x](../docs/diagrams/evolution_v7x.svg)
 
@@ -140,6 +263,19 @@ Each version folder has:
 
 ### v8.x — Advanced Features
 
+```mermaid
+flowchart LR
+    v80[v8.0<br/>Same-phase] --> v81[v8.1<br/>Opposite-phase]
+    v81 --> v82[v8.2<br/>Crab-walk]
+    v82 --> v83[v8.3<br/>Surprise YAML]
+    v83 --> v84[v8.4<br/>Pillar pass-side]
+    v84 --> v85[v8.5<br/>Parking detect]
+    v85 --> v86[v8.6<br/>Track map]
+    v86 --> v87[v8.7<br/>Scheduler]
+    v87 --> v88[v8.8<br/>Health monitor]
+    v88 --> v89[v8.9<br/>Error logger]
+```
+
 ![Evolution v8.x](../docs/diagrams/evolution_v8x.svg)
 
 | Ver | What We Did | Key Error Fixed |
@@ -156,6 +292,20 @@ Each version folder has:
 | 8.9 | Rate-limited error logger | Drops important errors, severity levels |
 
 ### v9.x — Polish & Competition Ready
+
+```mermaid
+flowchart LR
+    v90[v9.0<br/>Comments] --> v91[v9.1<br/>Scoring docs]
+    v91 --> v92[v9.2<br/>Error catalog]
+    v92 --> v93[v9.3<br/>README + ARCH]
+    v93 --> v94[v9.4<br/>CI pipeline]
+    v94 --> v95[v9.5<br/>Cleanup]
+    v95 --> v96[v9.6<br/>Integration test]
+    v96 --> v97[v9.7<br/>12 bug fixes]
+    v97 --> v98[v9.8<br/>Performance]
+    v98 --> v99[v9.9<br/>Release]
+    v99 --> R[Race day<br/>WRO 2026]
+```
 
 ![Evolution v9.x](../docs/diagrams/evolution_v9x.svg)
 
@@ -186,6 +336,22 @@ happened, fixes as we applied them, and the robot growing version by version.
 ---
 
 ## By The Numbers
+
+```mermaid
+flowchart TD
+    subgraph SENSORS[Sensors]
+        CAM[Camera] --> PERC[Perception<br/>pillars, lanes]
+        IMU[IMU + Magnetometer] --> FUS[Fusion<br/>complementary]
+        TOF[ToF x3] --> FUS
+        ENC[Encoders] --> FUS
+    end
+    PERC --> LOC[Localization<br/>EKF / UKF]
+    FUS --> LOC
+    LOC --> PLAN[Planning<br/>spline + profile]
+    PLAN --> CTRL[Control<br/>PID + Stanley]
+    CTRL --> MODES[Steering modes<br/>same / opposite / crab]
+    MODES --> WHEELS[4 wheels<br/>1.8 m/s, 0.5m radius]
+```
 
 | Metric | Value |
 |--------|-------|
