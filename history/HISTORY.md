@@ -66,7 +66,7 @@ flowchart LR
     v18 --> v19[v1.9<br/>HW verified]
 ```
 
-![Evolution v1.x](../docs/diagrams/evolution_v1x.svg)
+> **Phase result:** every hardware component tested and verified — nothing moves until it is proven.
 
 | Ver | What We Did | Key Error Fixed |
 |-----|-------------|-----------------|
@@ -96,7 +96,7 @@ flowchart LR
     v28 --> v29[v2.9<br/>Drive reliable]
 ```
 
-![Evolution v2.x](../docs/diagrams/evolution_v2x.svg)
+> **Phase result:** from first forward move to reliable driving at 1.8 m/s.
 
 | Ver | What We Did | Key Error Fixed |
 |-----|-------------|-----------------|
@@ -126,7 +126,7 @@ flowchart LR
     v38 --> v39[v3.9<br/>Sensor health]
 ```
 
-![Evolution v3.x](../docs/diagrams/evolution_v3x.svg)
+> **Phase result:** the robot learns to see the world — IMU, compass, ToF and camera all feeding live data.
 
 | Ver | What We Did | Key Error Fixed |
 |-----|-------------|-----------------|
@@ -156,7 +156,7 @@ flowchart LR
     v48 --> v49[v4.9<br/>Visual odometry]
 ```
 
-![Evolution v4.x](../docs/diagrams/evolution_v4x.svg)
+> **Phase result:** the robot understands the track — lanes, walls, corners and every pillar colour.
 
 | Ver | What We Did | Key Error Fixed |
 |-----|-------------|-----------------|
@@ -186,7 +186,7 @@ flowchart LR
     v58 --> v59[v5.9<br/>Pose pipeline]
 ```
 
-![Evolution v5.x](../docs/diagrams/evolution_v5x.svg)
+> **Phase result:** the robot always knows where it is — dead reckoning grew into EKF/UKF fusion.
 
 | Ver | What We Did | Key Error Fixed |
 |-----|-------------|-----------------|
@@ -216,7 +216,7 @@ flowchart LR
     v68 --> v69[v6.9<br/>Avoidance]
 ```
 
-![Evolution v6.x](../docs/diagrams/evolution_v6x.svg)
+> **Phase result:** the robot drives itself — PID, Stanley, splines, velocity profiles, avoidance.
 
 | Ver | What We Did | Key Error Fixed |
 |-----|-------------|-----------------|
@@ -246,7 +246,7 @@ flowchart LR
     v78 --> v79[v7.9<br/>Checkpoints]
 ```
 
-![Evolution v7.x](../docs/diagrams/evolution_v7x.svg)
+> **Phase result:** the robot follows the rules — states, laps, starts, parking, race strategy.
 
 | Ver | What We Did | Key Error Fixed |
 |-----|-------------|-----------------|
@@ -276,7 +276,17 @@ flowchart LR
     v88 --> v89[v8.9<br/>Error logger]
 ```
 
-![Evolution v8.x](../docs/diagrams/evolution_v8x.svg)
+> **Phase result:** advanced features — three 4WS steering modes, schedulers, health monitoring.
+
+```mermaid
+flowchart TD
+    MODES[3 steering modes<br/>from 4-wheel steering] --> M1[Same-phase<br/>smooth high-speed lines]
+    MODES --> M2[Opposite-phase<br/>tight 0.5m turns]
+    MODES --> M3[Crab-walk<br/>sideways parking]
+    M1 --> WHEELS[Four wheels,<br/>1.8 m/s, ±2cm parking]
+    M2 --> WHEELS
+    M3 --> WHEELS
+```
 
 | Ver | What We Did | Key Error Fixed |
 |-----|-------------|-----------------|
@@ -307,7 +317,7 @@ flowchart LR
     v99 --> R[Race day<br/>WRO 2026]
 ```
 
-![Evolution v9.x](../docs/diagrams/evolution_v9x.svg)
+> **Phase result:** competition ready — docs, CI, tests, performance, and the release candidate.
 
 | Ver | What We Did | Key Error Fixed |
 |-----|-------------|-----------------|
@@ -368,3 +378,20 @@ flowchart TD
 | Parking precision | ±2cm parallel tolerance |
 | Configuration options | 55+ |
 | Competition max score target | 122/122 pts |
+
+---
+
+## Race Day — From Start Line to 122 Points
+
+```mermaid
+flowchart TD
+    V[Vehicle check<br/>size + weight] --> R1[Round 1<br/>Mobility Management]
+    R1 --> R2[Round 2<br/>Power & Sense]
+    R2 --> R3[Round 3<br/>Obstacle Management<br/>+ surprise rule]
+    R3 --> S[Surprise rule loaded<br/>from surprise_rules.yaml]
+    S --> P[Park in the zone<br/>crab-walk, ±2cm]
+    P --> T[122 / 122 points]
+```
+
+The full story of how this robot got here — every version, every bug,
+every fix — is documented in the 90 version folders above.
