@@ -9,9 +9,10 @@ Every error entry now carries:
   - FIX                (with how many days it took)
 
 Output:
-  docs/issues/000-error-catalog.txt                  (combined)
   docs/issues/phases/v1-boot-and-ssh.txt        (per-phase split)
   ...                                           (v2..v9)
+
+The issues folder contains ONLY phases/ - every error lives there.
 
 Run:  python scripts/generate_error_catalog.py
 """
@@ -266,9 +267,6 @@ def main():
                            phases=len(PHASE_INFO))
 
     out_dir = "docs/issues"
-    combined = os.path.join(out_dir, "000-error-catalog.txt")
-    write_file(combined, header, render(entries))
-
     phases_dir = os.path.join(out_dir, "phases")
     os.makedirs(phases_dir, exist_ok=True)
     for phase, (fname, title) in PHASE_INFO.items():
@@ -282,8 +280,8 @@ def main():
         ph.append(SEP)
         write_file(os.path.join(phases_dir, fname + ".txt"), header, ph)
 
-    print(f"wrote {combined}: {len(entries)} errors ({n_small} small, {n_big} big)")
-    print(f"wrote {len(PHASE_INFO)} phase files in {phases_dir}/")
+    print(f"wrote {len(PHASE_INFO)} phase files in {phases_dir}/ "
+          f"({len(entries)} errors: {n_small} small, {n_big} big)")
 
 
 if __name__ == "__main__":
