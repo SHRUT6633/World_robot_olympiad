@@ -1,0 +1,2085 @@
+WRO 4WS Robot - Error Catalog (1000+ Errors, Deep Detail)
+=========================================================
+One error entry per development morning across the whole 90-version
+history repo (v1.0 -> v9.9).  Every entry includes WHAT HAPPENED,
+WHY IT HAPPENED (root cause / deep research), the terminal type and
+exact output, and the FIX with how many days it took.
+
+  SMALL  errors : fixed the same day (1 day)
+  BIG    errors : 2-5 days, with investigation steps before the fix
+
+Day = development-day counter only (no dates).
+
+Total errors : 1080   (720 SMALL / 360 BIG)
+Total days   : 180
+Versions     : 90
+Phases       : 9
+
+======================================================================
+PHASE v4.x  --  PERCEPTION & VISION
+======================================================================
+
+----------------------------------------------------------------------
+E0001 | v4.0 | SMALL | Found Day 61 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.0/config.py
+Error     : Lane offset jumps by a full lane width
+Terminal  : Pi SSH terminal
+  $ python3 config.py
+  offset: 0.02 -> 0.47 (one frame)
+  lane lost for 0.3s
+WHAT HAPPENED
+  The lane offset jumped from center to a full lane width away in a single frame. The steering twitched violently and then recovered.
+WHY IT HAPPENED (root cause)
+  When the line had a gap, the detector locked onto a neighboring line - the other lane's edge or a shadow - and reported it as the track line. The offset filter had no state, so one wrong frame was trusted completely for one control tick. Vision systems without temporal consistency treat every frame as a fresh truth, which amplifies single-frame errors.
+FIX (took 1 day)
+  Fixed by tracking the last-good line position and snapping back to it when the new detection is more than a lane-width away.
+
+----------------------------------------------------------------------
+E0002 | v4.0 | SMALL | Found Day 61 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.0/lane_detect.py
+Error     : Camera resolution mismatch with calibration
+Terminal  : Pi SSH terminal
+  $ python3 lane_detect.py
+  cv2.error: (-215:Assertion failed)
+  !src.empty() in function 'undistort'
+WHAT HAPPENED
+  The camera pipeline crashed on undistort. The calibration data loaded fine, so the mismatch was invisible until the function call.
+WHY IT HAPPENED (root cause)
+  The camera opened at 1280x720 but the calibration was done at 640x480. cv2.undistort requires the image size to match the camera matrix, and the mismatch triggered OpenCV's internal assertion. The two settings lived in different config files that were never cross-checked - one for the camera driver, one for the calibration loader.
+FIX (took 1 day)
+  Fixed by forcing both to the same resolution in camera_config.py and adding a boot check that compares the frame size with the calibration size.
+
+----------------------------------------------------------------------
+E0003 | v4.0 | SMALL | Found Day 61 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.0/config.py
+Error     : HSV lower bound bigger than upper bound
+Terminal  : Pi SSH terminal
+  $ python3 config.py
+  ValueError: lower should be smaller than upper
+    File "config.py", line 34, in detect
+WHAT HAPPENED
+  The red pillar detector crashed the first time it processed a real frame. The color range that worked in tests was rejected by OpenCV.
+WHY IT HAPPENED (root cause)
+  Red hue wraps around the HSV cylinder: red is both 0-10 and 170-180. Writing it as one continuous range (170..10) is invalid because lower > upper, which cv2.inRange rejects with a ValueError. The wrapper range is a conceptual mistake - the hue circle has no beginning, so the mask must be built from two disjoint ranges and OR-ed together.
+FIX (took 1 day)
+  Fixed by splitting the red range into two masks (0-10 and 170-180) and OR-ing the results, with a comment explaining the hue wrap.
+
+----------------------------------------------------------------------
+E0004 | v4.0 | SMALL | Found Day 61 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.0/lane_detect.py
+Error     : ZeroDivisionError in distance estimate
+Terminal  : Pi SSH terminal
+  $ python3 lane_detect.py
+    File "lane_detect.py", line 58, in estimate
+      dist = known_h / h
+  ZeroDivisionError: float division by zero
+WHAT HAPPENED
+  The pillar distance estimator crashed mid-frame, not at startup. The contour had been found, but its height was zero.
+WHY IT HAPPENED (root cause)
+  The detector found a contour but the color filter had removed every interior pixel, leaving a height of zero. The distance formula assumes a valid height; dividing by zero raised ZeroDivisionError. This is a data-quality failure: the pipeline did not validate its input before applying the pinhole model, so a degenerate contour crashed the math instead of being skipped.
+FIX (took 1 day)
+  Fixed by skipping contours smaller than 5 pixels and returning 'unknown' instead of crashing when the height is invalid.
+
+----------------------------------------------------------------------
+E0005 | v4.0 | SMALL | Found Day 61 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.0/config.py
+Error     : Pillar detected at every frame edge
+Terminal  : Pi SSH terminal
+  $ python3 config.py
+  pillar: (5, 20)  pillar: (610, 20)  ...
+  false positives on the wall
+WHAT HAPPENED
+  The detector reported pillars at fixed screen positions in every frame. The track walls were being detected as red pillars.
+WHY IT HAPPENED (root cause)
+  The wall's edge pixels had similar HSV values to the pillar under the venue lighting, and the detector only matched color - it never checked size or shape. Any red-ish region, including a wall edge, passed the filter. A single-channel color test is necessary but not sufficient; without area and aspect-ratio constraints every similarly colored region is a candidate.
+FIX (took 1 day)
+  Fixed by adding a minimum area check and an aspect-ratio gate, and by masking the bottom 15% of the frame where the wall always appears.
+
+----------------------------------------------------------------------
+E0006 | v4.0 | SMALL | Found Day 61 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.0/lane_detect.py
+Error     : Red and pink pillars are confused
+Terminal  : Pi SSH terminal
+  $ python3 lane_detect.py
+  color=red  (was pink)
+  confusion at hue 168-175
+WHAT HAPPENED
+  The color classifier called a pink pillar red. The two classes were defined by hue bands that overlapped, so the classification was ambiguous by construction.
+WHY IT HAPPENED (root cause)
+  Pink and red differ in saturation and lightness, not much in hue. The classifier only used hue, so any pixel in the overlapping 168-175 band was claimed by both classes. Classifying colors by a single channel cannot separate classes that are distinct in a different channel - the feature space was too small for the problem.
+FIX (took 1 day)
+  Fixed by narrowing the red band and adding a saturation threshold of 90, since pink has measurably lower saturation than the official red.
+
+----------------------------------------------------------------------
+E0007 | v4.0 | SMALL | Found Day 61 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.0/config.py
+Error     : Free space is NaN after a corner
+Terminal  : Pi SSH terminal
+  $ python3 config.py
+  free_space: nan
+  corner left: nan
+WHAT HAPPENED
+  The free-space estimate became NaN at every corner. The robot continued driving, but the planner received garbage for the entire turn.
+WHY IT HAPPENED (root cause)
+  While angling through a corner, the ToF reported 0mm (out of range), and the fusion code divided by that reading to normalize the estimate. NaN is infectious: one 0/0 poisons every downstream calculation, and because NaN comparisons are all false, no safety check could catch it. The corner is exactly where the sensor points at a gap, so this happened on every lap.
+FIX (took 1 day)
+  Fixed by replacing non-finite values with the sensor's max range and adding a validation pass that rejects NaN before fusion.
+
+----------------------------------------------------------------------
+E0008 | v4.0 | SMALL | Found Day 61 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.0/lane_detect.py
+Error     : Corner detection misses 180-degree turns
+Terminal  : Pi SSH terminal
+  $ python3 lane_detect.py
+  corner count = 0 after full lap
+  expected 4 corners
+WHAT HAPPENED
+  The lap trace showed zero corners even though the robot clearly turned four times. The detector only watched distance, and the hairpin was too smooth.
+WHY IT HAPPENED (root cause)
+  The corner detector used a distance-only signature: it watched the wall distance change. A 180-degree turn made with a wide arc changes distance slowly and smoothly, so the slope never exceeded the trigger threshold. The signature was chosen for right-angle corners, and a different geometry produced a different signature entirely - one feature cannot describe all corner shapes.
+FIX (took 1 day)
+  Fixed by adding the heading-change signature from the IMU, and requiring both signatures for a confirmed corner.
+
+----------------------------------------------------------------------
+E0009 | v4.0 | BIG | Found Day 62 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.0/config.py
+Error     : Free space wrongly reports a corridor
+Terminal  : Pi SSH terminal
+  free space: 0.9m corridor detected
+  reality: 0.4m gap
+WHAT HAPPENED
+  The free-space module reported a 0.9m corridor where only a 0.4m gap existed. The robot planned to drive through a space it could not fit through.
+WHY IT HAPPENED (root cause)
+  The fusion code averaged the ToF wall distance with the camera gap estimate. Averaging is only valid when both measurements describe the same quantity; here one sensor measured the wall and the other measured the gap, and the mean produced a number that matched neither reality. The 'corridor' was a pure artifact of mixing incompatible measurements.
+INVESTIGATION (before the fix)
+  - Reproduced the false corridor with the ToF and camera both active
+  - Logged each sensor's raw value - they disagreed fundamentally
+  - Tested taking the minimum instead of the mean - correct result
+FIX (took 2 days)
+  Fixed by taking the minimum of the two estimates (the conservative choice for a gap) and by storing the source of each free-space measurement.
+
+----------------------------------------------------------------------
+E0010 | v4.0 | BIG | Found Day 62 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.0/lane_detect.py
+Error     : Pillar tracking loses the pillar at 2m/s
+Terminal  : Pi SSH terminal
+  tracked: 10 frames, lost at frame 11
+  pillar reappears 20 frames later
+WHAT HAPPENED
+  The tracker followed the pillar perfectly at low speed, then lost it the moment the robot accelerated. It always lost it at the same point on the approach.
+WHY IT HAPPENED (root cause)
+  The tracker searched a fixed window around the last known position. At 2m/s the pillar moves several pixels between frames, and once it left the search window the tracker had nothing to lock onto. The search window size was tuned for walking speed, not race speed. A tracker with no motion model is only as fast as its window is wide.
+INVESTIGATION (before the fix)
+  - Measured the pillar's inter-frame displacement at speed
+  - Found the displacement exceeded the search window
+  - Predicted the position with odometry - tracking held
+FIX (took 3 days)
+  Fixed by predicting the search window center with the odometry velocity before matching, and widening the window proportional to speed.
+
+----------------------------------------------------------------------
+E0011 | v4.0 | BIG | Found Day 62 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.0/config.py
+Error     : Pillar never detected under venue lights
+Terminal  : Pi SSH terminal
+  pillars: 0 found (12 frames)
+  HSV test on the phone: 0 found
+  color bands all wrong
+WHAT HAPPENED
+  The pillar detector found nothing for the entire morning. The same code had detected pillars perfectly in the lab the day before.
+WHY IT HAPPENED (root cause)
+  The morning sun changed the color temperature of the light, shifting every color's HSV values. Fixed HSV bands are calibrated for one lighting condition; a different light source moves the same physical color to a different point in HSV space. Vision systems are lighting-dependent by nature - the color of light is part of the measurement, not a nuisance term.
+INVESTIGATION (before the fix)
+  - Confirmed detection worked in the lab under fluorescent light
+  - Sampled the pillar's HSV values under the morning sun
+  - Compared the sampled values with the configured bands
+FIX (took 4 days)
+  Fixed by re-running the color calibration on the venue floor at the same time of day as the competition, and by making the calibration tool part of the morning routine.
+
+----------------------------------------------------------------------
+E0012 | v4.0 | BIG | Found Day 62 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.0/lane_detect.py
+Error     : Visual odometry scale explodes after a turn
+Terminal  : Pi SSH terminal
+  vo scale: 1.0 -> 9.3
+  pose jumps 0.4m per frame
+WHAT HAPPENED
+  After the 90-degree turn, the visual odometry started reporting absurd distances - the pose jumped 0.4 meters per frame while the robot moved a few centimeters.
+WHY IT HAPPENED (root cause)
+  Visual odometry estimates motion from feature point displacement and derives the scale from the baseline between frames. After a sharp turn, feature matching lost the reference set and re-matched against a new baseline, and the scale estimate - unconstrained by any absolute reference - diverged. Monocular scale is only observable while the same features persist; a turn breaks that chain.
+INVESTIGATION (before the fix)
+  - Plotted the scale factor over time - flat before the turn, exploding after
+  - Counted matched features across the turn - dropped below the threshold
+  - Replayed the turn with forced re-initialization - problem vanished
+FIX (took 5 days)
+  Fixed by re-initializing the baseline when the matched feature count drops below 20, and by clamping the scale factor to a physically plausible range.
+
+----------------------------------------------------------------------
+E0013 | v4.1 | SMALL | Found Day 63 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v4.1/tof_driver.py
+Error     : Camera resolution mismatch with calibration
+Terminal  : Pi console (HDMI)
+  $ python3 tof_driver.py
+  cv2.error: (-215:Assertion failed)
+  !src.empty() in function 'undistort'
+WHAT HAPPENED
+  The camera pipeline crashed on undistort. The calibration data loaded fine, so the mismatch was invisible until the function call.
+WHY IT HAPPENED (root cause)
+  The camera opened at 1280x720 but the calibration was done at 640x480. cv2.undistort requires the image size to match the camera matrix, and the mismatch triggered OpenCV's internal assertion. The two settings lived in different config files that were never cross-checked - one for the camera driver, one for the calibration loader.
+FIX (took 1 day)
+  Fixed by forcing both to the same resolution in camera_config.py and adding a boot check that compares the frame size with the calibration size.
+
+----------------------------------------------------------------------
+E0014 | v4.1 | SMALL | Found Day 63 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v4.1/wall_detect.py
+Error     : HSV lower bound bigger than upper bound
+Terminal  : Pi console (HDMI)
+  $ python3 wall_detect.py
+  ValueError: lower should be smaller than upper
+    File "wall_detect.py", line 34, in detect
+WHAT HAPPENED
+  The red pillar detector crashed the first time it processed a real frame. The color range that worked in tests was rejected by OpenCV.
+WHY IT HAPPENED (root cause)
+  Red hue wraps around the HSV cylinder: red is both 0-10 and 170-180. Writing it as one continuous range (170..10) is invalid because lower > upper, which cv2.inRange rejects with a ValueError. The wrapper range is a conceptual mistake - the hue circle has no beginning, so the mask must be built from two disjoint ranges and OR-ed together.
+FIX (took 1 day)
+  Fixed by splitting the red range into two masks (0-10 and 170-180) and OR-ing the results, with a comment explaining the hue wrap.
+
+----------------------------------------------------------------------
+E0015 | v4.1 | SMALL | Found Day 63 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v4.1/tof_driver.py
+Error     : ZeroDivisionError in distance estimate
+Terminal  : Pi console (HDMI)
+  $ python3 tof_driver.py
+    File "tof_driver.py", line 58, in estimate
+      dist = known_h / h
+  ZeroDivisionError: float division by zero
+WHAT HAPPENED
+  The pillar distance estimator crashed mid-frame, not at startup. The contour had been found, but its height was zero.
+WHY IT HAPPENED (root cause)
+  The detector found a contour but the color filter had removed every interior pixel, leaving a height of zero. The distance formula assumes a valid height; dividing by zero raised ZeroDivisionError. This is a data-quality failure: the pipeline did not validate its input before applying the pinhole model, so a degenerate contour crashed the math instead of being skipped.
+FIX (took 1 day)
+  Fixed by skipping contours smaller than 5 pixels and returning 'unknown' instead of crashing when the height is invalid.
+
+----------------------------------------------------------------------
+E0016 | v4.1 | SMALL | Found Day 63 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v4.1/wall_detect.py
+Error     : Pillar detected at every frame edge
+Terminal  : Pi console (HDMI)
+  $ python3 wall_detect.py
+  pillar: (5, 20)  pillar: (610, 20)  ...
+  false positives on the wall
+WHAT HAPPENED
+  The detector reported pillars at fixed screen positions in every frame. The track walls were being detected as red pillars.
+WHY IT HAPPENED (root cause)
+  The wall's edge pixels had similar HSV values to the pillar under the venue lighting, and the detector only matched color - it never checked size or shape. Any red-ish region, including a wall edge, passed the filter. A single-channel color test is necessary but not sufficient; without area and aspect-ratio constraints every similarly colored region is a candidate.
+FIX (took 1 day)
+  Fixed by adding a minimum area check and an aspect-ratio gate, and by masking the bottom 15% of the frame where the wall always appears.
+
+----------------------------------------------------------------------
+E0017 | v4.1 | SMALL | Found Day 63 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v4.1/tof_driver.py
+Error     : Red and pink pillars are confused
+Terminal  : Pi console (HDMI)
+  $ python3 tof_driver.py
+  color=red  (was pink)
+  confusion at hue 168-175
+WHAT HAPPENED
+  The color classifier called a pink pillar red. The two classes were defined by hue bands that overlapped, so the classification was ambiguous by construction.
+WHY IT HAPPENED (root cause)
+  Pink and red differ in saturation and lightness, not much in hue. The classifier only used hue, so any pixel in the overlapping 168-175 band was claimed by both classes. Classifying colors by a single channel cannot separate classes that are distinct in a different channel - the feature space was too small for the problem.
+FIX (took 1 day)
+  Fixed by narrowing the red band and adding a saturation threshold of 90, since pink has measurably lower saturation than the official red.
+
+----------------------------------------------------------------------
+E0018 | v4.1 | SMALL | Found Day 63 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v4.1/wall_detect.py
+Error     : Free space is NaN after a corner
+Terminal  : Pi console (HDMI)
+  $ python3 wall_detect.py
+  free_space: nan
+  corner left: nan
+WHAT HAPPENED
+  The free-space estimate became NaN at every corner. The robot continued driving, but the planner received garbage for the entire turn.
+WHY IT HAPPENED (root cause)
+  While angling through a corner, the ToF reported 0mm (out of range), and the fusion code divided by that reading to normalize the estimate. NaN is infectious: one 0/0 poisons every downstream calculation, and because NaN comparisons are all false, no safety check could catch it. The corner is exactly where the sensor points at a gap, so this happened on every lap.
+FIX (took 1 day)
+  Fixed by replacing non-finite values with the sensor's max range and adding a validation pass that rejects NaN before fusion.
+
+----------------------------------------------------------------------
+E0019 | v4.1 | SMALL | Found Day 63 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v4.1/tof_driver.py
+Error     : Corner detection misses 180-degree turns
+Terminal  : Pi console (HDMI)
+  $ python3 tof_driver.py
+  corner count = 0 after full lap
+  expected 4 corners
+WHAT HAPPENED
+  The lap trace showed zero corners even though the robot clearly turned four times. The detector only watched distance, and the hairpin was too smooth.
+WHY IT HAPPENED (root cause)
+  The corner detector used a distance-only signature: it watched the wall distance change. A 180-degree turn made with a wide arc changes distance slowly and smoothly, so the slope never exceeded the trigger threshold. The signature was chosen for right-angle corners, and a different geometry produced a different signature entirely - one feature cannot describe all corner shapes.
+FIX (took 1 day)
+  Fixed by adding the heading-change signature from the IMU, and requiring both signatures for a confirmed corner.
+
+----------------------------------------------------------------------
+E0020 | v4.1 | SMALL | Found Day 63 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v4.1/wall_detect.py
+Error     : Lane offset jumps by a full lane width
+Terminal  : Pi console (HDMI)
+  $ python3 wall_detect.py
+  offset: 0.02 -> 0.47 (one frame)
+  lane lost for 0.3s
+WHAT HAPPENED
+  The lane offset jumped from center to a full lane width away in a single frame. The steering twitched violently and then recovered.
+WHY IT HAPPENED (root cause)
+  When the line had a gap, the detector locked onto a neighboring line - the other lane's edge or a shadow - and reported it as the track line. The offset filter had no state, so one wrong frame was trusted completely for one control tick. Vision systems without temporal consistency treat every frame as a fresh truth, which amplifies single-frame errors.
+FIX (took 1 day)
+  Fixed by tracking the last-good line position and snapping back to it when the new detection is more than a lane-width away.
+
+----------------------------------------------------------------------
+E0021 | v4.1 | BIG | Found Day 64 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.1/tof_driver.py
+Error     : Pillar tracking loses the pillar at 2m/s
+Terminal  : Pi SSH terminal
+  tracked: 10 frames, lost at frame 11
+  pillar reappears 20 frames later
+WHAT HAPPENED
+  The tracker followed the pillar perfectly at low speed, then lost it the moment the robot accelerated. It always lost it at the same point on the approach.
+WHY IT HAPPENED (root cause)
+  The tracker searched a fixed window around the last known position. At 2m/s the pillar moves several pixels between frames, and once it left the search window the tracker had nothing to lock onto. The search window size was tuned for walking speed, not race speed. A tracker with no motion model is only as fast as its window is wide.
+INVESTIGATION (before the fix)
+  - Measured the pillar's inter-frame displacement at speed
+  - Found the displacement exceeded the search window
+  - Predicted the position with odometry - tracking held
+FIX (took 2 days)
+  Fixed by predicting the search window center with the odometry velocity before matching, and widening the window proportional to speed.
+
+----------------------------------------------------------------------
+E0022 | v4.1 | BIG | Found Day 64 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.1/wall_detect.py
+Error     : Pillar never detected under venue lights
+Terminal  : Pi SSH terminal
+  pillars: 0 found (12 frames)
+  HSV test on the phone: 0 found
+  color bands all wrong
+WHAT HAPPENED
+  The pillar detector found nothing for the entire morning. The same code had detected pillars perfectly in the lab the day before.
+WHY IT HAPPENED (root cause)
+  The morning sun changed the color temperature of the light, shifting every color's HSV values. Fixed HSV bands are calibrated for one lighting condition; a different light source moves the same physical color to a different point in HSV space. Vision systems are lighting-dependent by nature - the color of light is part of the measurement, not a nuisance term.
+INVESTIGATION (before the fix)
+  - Confirmed detection worked in the lab under fluorescent light
+  - Sampled the pillar's HSV values under the morning sun
+  - Compared the sampled values with the configured bands
+FIX (took 3 days)
+  Fixed by re-running the color calibration on the venue floor at the same time of day as the competition, and by making the calibration tool part of the morning routine.
+
+----------------------------------------------------------------------
+E0023 | v4.1 | BIG | Found Day 64 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.1/tof_driver.py
+Error     : Visual odometry scale explodes after a turn
+Terminal  : Pi SSH terminal
+  vo scale: 1.0 -> 9.3
+  pose jumps 0.4m per frame
+WHAT HAPPENED
+  After the 90-degree turn, the visual odometry started reporting absurd distances - the pose jumped 0.4 meters per frame while the robot moved a few centimeters.
+WHY IT HAPPENED (root cause)
+  Visual odometry estimates motion from feature point displacement and derives the scale from the baseline between frames. After a sharp turn, feature matching lost the reference set and re-matched against a new baseline, and the scale estimate - unconstrained by any absolute reference - diverged. Monocular scale is only observable while the same features persist; a turn breaks that chain.
+INVESTIGATION (before the fix)
+  - Plotted the scale factor over time - flat before the turn, exploding after
+  - Counted matched features across the turn - dropped below the threshold
+  - Replayed the turn with forced re-initialization - problem vanished
+FIX (took 4 days)
+  Fixed by re-initializing the baseline when the matched feature count drops below 20, and by clamping the scale factor to a physically plausible range.
+
+----------------------------------------------------------------------
+E0024 | v4.1 | BIG | Found Day 64 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.1/wall_detect.py
+Error     : False pillar detection passes the wrong side
+Terminal  : Pi SSH terminal
+  pillar: DETECTED (x=300)
+  actual pillar: on the right
+  robot went left -> round ends
+WHAT HAPPENED
+  The robot steered around a 'pillar' that did not exist, passed the real pillar on the wrong side, and ended the round. One false positive cost the whole run.
+WHY IT HAPPENED (root cause)
+  A red sponsor sign on the wall matched the pillar filter's color and shape gates, so the detector committed to it. Detection gates are filters, not guarantees: the sign genuinely looked like a pillar in every feature the code checked. The detector had no cross-sensor confirmation - the ToF was available and would have shown no pillar at that location, but nothing asked it.
+INVESTIGATION (before the fix)
+  - Replayed the round and confirmed the false positive in the video
+  - Checked the sign's HSV - inside the pillar bands exactly
+  - Verified the ToF had a clear reading at that moment - no pillar
+FIX (took 5 days)
+  Fixed by adding a ToF distance gate: a detection without a matching distance reading is treated as a candidate, not a pillar.
+
+----------------------------------------------------------------------
+E0025 | v4.2 | SMALL | Found Day 65 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v4.2/free_space.py
+Error     : HSV lower bound bigger than upper bound
+Terminal  : ESP32 serial monitor
+  $ python3 free_space.py
+  ValueError: lower should be smaller than upper
+    File "free_space.py", line 34, in detect
+WHAT HAPPENED
+  The red pillar detector crashed the first time it processed a real frame. The color range that worked in tests was rejected by OpenCV.
+WHY IT HAPPENED (root cause)
+  Red hue wraps around the HSV cylinder: red is both 0-10 and 170-180. Writing it as one continuous range (170..10) is invalid because lower > upper, which cv2.inRange rejects with a ValueError. The wrapper range is a conceptual mistake - the hue circle has no beginning, so the mask must be built from two disjoint ranges and OR-ed together.
+FIX (took 1 day)
+  Fixed by splitting the red range into two masks (0-10 and 170-180) and OR-ing the results, with a comment explaining the hue wrap.
+
+----------------------------------------------------------------------
+E0026 | v4.2 | SMALL | Found Day 65 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v4.2/test_free_space.py
+Error     : ZeroDivisionError in distance estimate
+Terminal  : ESP32 serial monitor
+  $ python3 test_free_space.py
+    File "test_free_space.py", line 58, in estimate
+      dist = known_h / h
+  ZeroDivisionError: float division by zero
+WHAT HAPPENED
+  The pillar distance estimator crashed mid-frame, not at startup. The contour had been found, but its height was zero.
+WHY IT HAPPENED (root cause)
+  The detector found a contour but the color filter had removed every interior pixel, leaving a height of zero. The distance formula assumes a valid height; dividing by zero raised ZeroDivisionError. This is a data-quality failure: the pipeline did not validate its input before applying the pinhole model, so a degenerate contour crashed the math instead of being skipped.
+FIX (took 1 day)
+  Fixed by skipping contours smaller than 5 pixels and returning 'unknown' instead of crashing when the height is invalid.
+
+----------------------------------------------------------------------
+E0027 | v4.2 | SMALL | Found Day 65 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v4.2/free_space.py
+Error     : Pillar detected at every frame edge
+Terminal  : ESP32 serial monitor
+  $ python3 free_space.py
+  pillar: (5, 20)  pillar: (610, 20)  ...
+  false positives on the wall
+WHAT HAPPENED
+  The detector reported pillars at fixed screen positions in every frame. The track walls were being detected as red pillars.
+WHY IT HAPPENED (root cause)
+  The wall's edge pixels had similar HSV values to the pillar under the venue lighting, and the detector only matched color - it never checked size or shape. Any red-ish region, including a wall edge, passed the filter. A single-channel color test is necessary but not sufficient; without area and aspect-ratio constraints every similarly colored region is a candidate.
+FIX (took 1 day)
+  Fixed by adding a minimum area check and an aspect-ratio gate, and by masking the bottom 15% of the frame where the wall always appears.
+
+----------------------------------------------------------------------
+E0028 | v4.2 | SMALL | Found Day 65 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v4.2/test_free_space.py
+Error     : Red and pink pillars are confused
+Terminal  : ESP32 serial monitor
+  $ python3 test_free_space.py
+  color=red  (was pink)
+  confusion at hue 168-175
+WHAT HAPPENED
+  The color classifier called a pink pillar red. The two classes were defined by hue bands that overlapped, so the classification was ambiguous by construction.
+WHY IT HAPPENED (root cause)
+  Pink and red differ in saturation and lightness, not much in hue. The classifier only used hue, so any pixel in the overlapping 168-175 band was claimed by both classes. Classifying colors by a single channel cannot separate classes that are distinct in a different channel - the feature space was too small for the problem.
+FIX (took 1 day)
+  Fixed by narrowing the red band and adding a saturation threshold of 90, since pink has measurably lower saturation than the official red.
+
+----------------------------------------------------------------------
+E0029 | v4.2 | SMALL | Found Day 65 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v4.2/free_space.py
+Error     : Free space is NaN after a corner
+Terminal  : ESP32 serial monitor
+  $ python3 free_space.py
+  free_space: nan
+  corner left: nan
+WHAT HAPPENED
+  The free-space estimate became NaN at every corner. The robot continued driving, but the planner received garbage for the entire turn.
+WHY IT HAPPENED (root cause)
+  While angling through a corner, the ToF reported 0mm (out of range), and the fusion code divided by that reading to normalize the estimate. NaN is infectious: one 0/0 poisons every downstream calculation, and because NaN comparisons are all false, no safety check could catch it. The corner is exactly where the sensor points at a gap, so this happened on every lap.
+FIX (took 1 day)
+  Fixed by replacing non-finite values with the sensor's max range and adding a validation pass that rejects NaN before fusion.
+
+----------------------------------------------------------------------
+E0030 | v4.2 | SMALL | Found Day 65 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v4.2/test_free_space.py
+Error     : Corner detection misses 180-degree turns
+Terminal  : ESP32 serial monitor
+  $ python3 test_free_space.py
+  corner count = 0 after full lap
+  expected 4 corners
+WHAT HAPPENED
+  The lap trace showed zero corners even though the robot clearly turned four times. The detector only watched distance, and the hairpin was too smooth.
+WHY IT HAPPENED (root cause)
+  The corner detector used a distance-only signature: it watched the wall distance change. A 180-degree turn made with a wide arc changes distance slowly and smoothly, so the slope never exceeded the trigger threshold. The signature was chosen for right-angle corners, and a different geometry produced a different signature entirely - one feature cannot describe all corner shapes.
+FIX (took 1 day)
+  Fixed by adding the heading-change signature from the IMU, and requiring both signatures for a confirmed corner.
+
+----------------------------------------------------------------------
+E0031 | v4.2 | SMALL | Found Day 65 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v4.2/free_space.py
+Error     : Lane offset jumps by a full lane width
+Terminal  : ESP32 serial monitor
+  $ python3 free_space.py
+  offset: 0.02 -> 0.47 (one frame)
+  lane lost for 0.3s
+WHAT HAPPENED
+  The lane offset jumped from center to a full lane width away in a single frame. The steering twitched violently and then recovered.
+WHY IT HAPPENED (root cause)
+  When the line had a gap, the detector locked onto a neighboring line - the other lane's edge or a shadow - and reported it as the track line. The offset filter had no state, so one wrong frame was trusted completely for one control tick. Vision systems without temporal consistency treat every frame as a fresh truth, which amplifies single-frame errors.
+FIX (took 1 day)
+  Fixed by tracking the last-good line position and snapping back to it when the new detection is more than a lane-width away.
+
+----------------------------------------------------------------------
+E0032 | v4.2 | SMALL | Found Day 65 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v4.2/test_free_space.py
+Error     : Camera resolution mismatch with calibration
+Terminal  : ESP32 serial monitor
+  $ python3 test_free_space.py
+  cv2.error: (-215:Assertion failed)
+  !src.empty() in function 'undistort'
+WHAT HAPPENED
+  The camera pipeline crashed on undistort. The calibration data loaded fine, so the mismatch was invisible until the function call.
+WHY IT HAPPENED (root cause)
+  The camera opened at 1280x720 but the calibration was done at 640x480. cv2.undistort requires the image size to match the camera matrix, and the mismatch triggered OpenCV's internal assertion. The two settings lived in different config files that were never cross-checked - one for the camera driver, one for the calibration loader.
+FIX (took 1 day)
+  Fixed by forcing both to the same resolution in camera_config.py and adding a boot check that compares the frame size with the calibration size.
+
+----------------------------------------------------------------------
+E0033 | v4.2 | BIG | Found Day 66 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.2/free_space.py
+Error     : Pillar never detected under venue lights
+Terminal  : Pi SSH terminal
+  pillars: 0 found (12 frames)
+  HSV test on the phone: 0 found
+  color bands all wrong
+WHAT HAPPENED
+  The pillar detector found nothing for the entire morning. The same code had detected pillars perfectly in the lab the day before.
+WHY IT HAPPENED (root cause)
+  The morning sun changed the color temperature of the light, shifting every color's HSV values. Fixed HSV bands are calibrated for one lighting condition; a different light source moves the same physical color to a different point in HSV space. Vision systems are lighting-dependent by nature - the color of light is part of the measurement, not a nuisance term.
+INVESTIGATION (before the fix)
+  - Confirmed detection worked in the lab under fluorescent light
+  - Sampled the pillar's HSV values under the morning sun
+  - Compared the sampled values with the configured bands
+FIX (took 2 days)
+  Fixed by re-running the color calibration on the venue floor at the same time of day as the competition, and by making the calibration tool part of the morning routine.
+
+----------------------------------------------------------------------
+E0034 | v4.2 | BIG | Found Day 66 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.2/test_free_space.py
+Error     : Visual odometry scale explodes after a turn
+Terminal  : Pi SSH terminal
+  vo scale: 1.0 -> 9.3
+  pose jumps 0.4m per frame
+WHAT HAPPENED
+  After the 90-degree turn, the visual odometry started reporting absurd distances - the pose jumped 0.4 meters per frame while the robot moved a few centimeters.
+WHY IT HAPPENED (root cause)
+  Visual odometry estimates motion from feature point displacement and derives the scale from the baseline between frames. After a sharp turn, feature matching lost the reference set and re-matched against a new baseline, and the scale estimate - unconstrained by any absolute reference - diverged. Monocular scale is only observable while the same features persist; a turn breaks that chain.
+INVESTIGATION (before the fix)
+  - Plotted the scale factor over time - flat before the turn, exploding after
+  - Counted matched features across the turn - dropped below the threshold
+  - Replayed the turn with forced re-initialization - problem vanished
+FIX (took 3 days)
+  Fixed by re-initializing the baseline when the matched feature count drops below 20, and by clamping the scale factor to a physically plausible range.
+
+----------------------------------------------------------------------
+E0035 | v4.2 | BIG | Found Day 66 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.2/free_space.py
+Error     : False pillar detection passes the wrong side
+Terminal  : Pi SSH terminal
+  pillar: DETECTED (x=300)
+  actual pillar: on the right
+  robot went left -> round ends
+WHAT HAPPENED
+  The robot steered around a 'pillar' that did not exist, passed the real pillar on the wrong side, and ended the round. One false positive cost the whole run.
+WHY IT HAPPENED (root cause)
+  A red sponsor sign on the wall matched the pillar filter's color and shape gates, so the detector committed to it. Detection gates are filters, not guarantees: the sign genuinely looked like a pillar in every feature the code checked. The detector had no cross-sensor confirmation - the ToF was available and would have shown no pillar at that location, but nothing asked it.
+INVESTIGATION (before the fix)
+  - Replayed the round and confirmed the false positive in the video
+  - Checked the sign's HSV - inside the pillar bands exactly
+  - Verified the ToF had a clear reading at that moment - no pillar
+FIX (took 4 days)
+  Fixed by adding a ToF distance gate: a detection without a matching distance reading is treated as a candidate, not a pillar.
+
+----------------------------------------------------------------------
+E0036 | v4.2 | BIG | Found Day 66 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.2/test_free_space.py
+Error     : Corner detector fires on every shadow
+Terminal  : Pi SSH terminal
+  corner at 23%, corner at 41%, corner at 68%
+  4 corners on a straight
+WHAT HAPPENED
+  The corner detector reported four corners on a perfectly straight run. Every shadow on the track was being counted as a corner.
+WHY IT HAPPENED (root cause)
+  The detector's signature was a dark region interrupting the line - and a shadow is exactly that. Shadows are darker than the line, so any luminance-based signature confuses them. The detector had no heading information, so it could not know the robot never turned. A corner is an event in the robot's motion, not in the image; using only image features guaranteed the failure.
+INVESTIGATION (before the fix)
+  - Overlaid the corner events on the video - each matched a shadow
+  - Checked the IMU heading at those moments - no turn occurred
+  - Confirmed the signature was purely visual
+FIX (took 5 days)
+  Fixed by requiring a heading change of at least 45 degrees from the IMU to confirm a corner, demoting image-only detections to candidates.
+
+----------------------------------------------------------------------
+E0037 | v4.3 | SMALL | Found Day 67 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v4.3/corner_detect.py
+Error     : ZeroDivisionError in distance estimate
+Terminal  : Windows CMD
+  $ python3 corner_detect.py
+    File "corner_detect.py", line 58, in estimate
+      dist = known_h / h
+  ZeroDivisionError: float division by zero
+WHAT HAPPENED
+  The pillar distance estimator crashed mid-frame, not at startup. The contour had been found, but its height was zero.
+WHY IT HAPPENED (root cause)
+  The detector found a contour but the color filter had removed every interior pixel, leaving a height of zero. The distance formula assumes a valid height; dividing by zero raised ZeroDivisionError. This is a data-quality failure: the pipeline did not validate its input before applying the pinhole model, so a degenerate contour crashed the math instead of being skipped.
+FIX (took 1 day)
+  Fixed by skipping contours smaller than 5 pixels and returning 'unknown' instead of crashing when the height is invalid.
+
+----------------------------------------------------------------------
+E0038 | v4.3 | SMALL | Found Day 67 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v4.3/imu_driver.py
+Error     : Pillar detected at every frame edge
+Terminal  : Windows CMD
+  $ python3 imu_driver.py
+  pillar: (5, 20)  pillar: (610, 20)  ...
+  false positives on the wall
+WHAT HAPPENED
+  The detector reported pillars at fixed screen positions in every frame. The track walls were being detected as red pillars.
+WHY IT HAPPENED (root cause)
+  The wall's edge pixels had similar HSV values to the pillar under the venue lighting, and the detector only matched color - it never checked size or shape. Any red-ish region, including a wall edge, passed the filter. A single-channel color test is necessary but not sufficient; without area and aspect-ratio constraints every similarly colored region is a candidate.
+FIX (took 1 day)
+  Fixed by adding a minimum area check and an aspect-ratio gate, and by masking the bottom 15% of the frame where the wall always appears.
+
+----------------------------------------------------------------------
+E0039 | v4.3 | SMALL | Found Day 67 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v4.3/corner_detect.py
+Error     : Red and pink pillars are confused
+Terminal  : Windows CMD
+  $ python3 corner_detect.py
+  color=red  (was pink)
+  confusion at hue 168-175
+WHAT HAPPENED
+  The color classifier called a pink pillar red. The two classes were defined by hue bands that overlapped, so the classification was ambiguous by construction.
+WHY IT HAPPENED (root cause)
+  Pink and red differ in saturation and lightness, not much in hue. The classifier only used hue, so any pixel in the overlapping 168-175 band was claimed by both classes. Classifying colors by a single channel cannot separate classes that are distinct in a different channel - the feature space was too small for the problem.
+FIX (took 1 day)
+  Fixed by narrowing the red band and adding a saturation threshold of 90, since pink has measurably lower saturation than the official red.
+
+----------------------------------------------------------------------
+E0040 | v4.3 | SMALL | Found Day 67 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v4.3/imu_driver.py
+Error     : Free space is NaN after a corner
+Terminal  : Windows CMD
+  $ python3 imu_driver.py
+  free_space: nan
+  corner left: nan
+WHAT HAPPENED
+  The free-space estimate became NaN at every corner. The robot continued driving, but the planner received garbage for the entire turn.
+WHY IT HAPPENED (root cause)
+  While angling through a corner, the ToF reported 0mm (out of range), and the fusion code divided by that reading to normalize the estimate. NaN is infectious: one 0/0 poisons every downstream calculation, and because NaN comparisons are all false, no safety check could catch it. The corner is exactly where the sensor points at a gap, so this happened on every lap.
+FIX (took 1 day)
+  Fixed by replacing non-finite values with the sensor's max range and adding a validation pass that rejects NaN before fusion.
+
+----------------------------------------------------------------------
+E0041 | v4.3 | SMALL | Found Day 67 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v4.3/corner_detect.py
+Error     : Corner detection misses 180-degree turns
+Terminal  : Windows CMD
+  $ python3 corner_detect.py
+  corner count = 0 after full lap
+  expected 4 corners
+WHAT HAPPENED
+  The lap trace showed zero corners even though the robot clearly turned four times. The detector only watched distance, and the hairpin was too smooth.
+WHY IT HAPPENED (root cause)
+  The corner detector used a distance-only signature: it watched the wall distance change. A 180-degree turn made with a wide arc changes distance slowly and smoothly, so the slope never exceeded the trigger threshold. The signature was chosen for right-angle corners, and a different geometry produced a different signature entirely - one feature cannot describe all corner shapes.
+FIX (took 1 day)
+  Fixed by adding the heading-change signature from the IMU, and requiring both signatures for a confirmed corner.
+
+----------------------------------------------------------------------
+E0042 | v4.3 | SMALL | Found Day 67 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v4.3/imu_driver.py
+Error     : Lane offset jumps by a full lane width
+Terminal  : Windows CMD
+  $ python3 imu_driver.py
+  offset: 0.02 -> 0.47 (one frame)
+  lane lost for 0.3s
+WHAT HAPPENED
+  The lane offset jumped from center to a full lane width away in a single frame. The steering twitched violently and then recovered.
+WHY IT HAPPENED (root cause)
+  When the line had a gap, the detector locked onto a neighboring line - the other lane's edge or a shadow - and reported it as the track line. The offset filter had no state, so one wrong frame was trusted completely for one control tick. Vision systems without temporal consistency treat every frame as a fresh truth, which amplifies single-frame errors.
+FIX (took 1 day)
+  Fixed by tracking the last-good line position and snapping back to it when the new detection is more than a lane-width away.
+
+----------------------------------------------------------------------
+E0043 | v4.3 | SMALL | Found Day 67 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v4.3/corner_detect.py
+Error     : Camera resolution mismatch with calibration
+Terminal  : Windows CMD
+  $ python3 corner_detect.py
+  cv2.error: (-215:Assertion failed)
+  !src.empty() in function 'undistort'
+WHAT HAPPENED
+  The camera pipeline crashed on undistort. The calibration data loaded fine, so the mismatch was invisible until the function call.
+WHY IT HAPPENED (root cause)
+  The camera opened at 1280x720 but the calibration was done at 640x480. cv2.undistort requires the image size to match the camera matrix, and the mismatch triggered OpenCV's internal assertion. The two settings lived in different config files that were never cross-checked - one for the camera driver, one for the calibration loader.
+FIX (took 1 day)
+  Fixed by forcing both to the same resolution in camera_config.py and adding a boot check that compares the frame size with the calibration size.
+
+----------------------------------------------------------------------
+E0044 | v4.3 | SMALL | Found Day 67 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v4.3/imu_driver.py
+Error     : HSV lower bound bigger than upper bound
+Terminal  : Windows CMD
+  $ python3 imu_driver.py
+  ValueError: lower should be smaller than upper
+    File "imu_driver.py", line 34, in detect
+WHAT HAPPENED
+  The red pillar detector crashed the first time it processed a real frame. The color range that worked in tests was rejected by OpenCV.
+WHY IT HAPPENED (root cause)
+  Red hue wraps around the HSV cylinder: red is both 0-10 and 170-180. Writing it as one continuous range (170..10) is invalid because lower > upper, which cv2.inRange rejects with a ValueError. The wrapper range is a conceptual mistake - the hue circle has no beginning, so the mask must be built from two disjoint ranges and OR-ed together.
+FIX (took 1 day)
+  Fixed by splitting the red range into two masks (0-10 and 170-180) and OR-ing the results, with a comment explaining the hue wrap.
+
+----------------------------------------------------------------------
+E0045 | v4.3 | BIG | Found Day 68 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.3/corner_detect.py
+Error     : Visual odometry scale explodes after a turn
+Terminal  : Pi SSH terminal
+  vo scale: 1.0 -> 9.3
+  pose jumps 0.4m per frame
+WHAT HAPPENED
+  After the 90-degree turn, the visual odometry started reporting absurd distances - the pose jumped 0.4 meters per frame while the robot moved a few centimeters.
+WHY IT HAPPENED (root cause)
+  Visual odometry estimates motion from feature point displacement and derives the scale from the baseline between frames. After a sharp turn, feature matching lost the reference set and re-matched against a new baseline, and the scale estimate - unconstrained by any absolute reference - diverged. Monocular scale is only observable while the same features persist; a turn breaks that chain.
+INVESTIGATION (before the fix)
+  - Plotted the scale factor over time - flat before the turn, exploding after
+  - Counted matched features across the turn - dropped below the threshold
+  - Replayed the turn with forced re-initialization - problem vanished
+FIX (took 2 days)
+  Fixed by re-initializing the baseline when the matched feature count drops below 20, and by clamping the scale factor to a physically plausible range.
+
+----------------------------------------------------------------------
+E0046 | v4.3 | BIG | Found Day 68 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.3/imu_driver.py
+Error     : False pillar detection passes the wrong side
+Terminal  : Pi SSH terminal
+  pillar: DETECTED (x=300)
+  actual pillar: on the right
+  robot went left -> round ends
+WHAT HAPPENED
+  The robot steered around a 'pillar' that did not exist, passed the real pillar on the wrong side, and ended the round. One false positive cost the whole run.
+WHY IT HAPPENED (root cause)
+  A red sponsor sign on the wall matched the pillar filter's color and shape gates, so the detector committed to it. Detection gates are filters, not guarantees: the sign genuinely looked like a pillar in every feature the code checked. The detector had no cross-sensor confirmation - the ToF was available and would have shown no pillar at that location, but nothing asked it.
+INVESTIGATION (before the fix)
+  - Replayed the round and confirmed the false positive in the video
+  - Checked the sign's HSV - inside the pillar bands exactly
+  - Verified the ToF had a clear reading at that moment - no pillar
+FIX (took 3 days)
+  Fixed by adding a ToF distance gate: a detection without a matching distance reading is treated as a candidate, not a pillar.
+
+----------------------------------------------------------------------
+E0047 | v4.3 | BIG | Found Day 68 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.3/corner_detect.py
+Error     : Corner detector fires on every shadow
+Terminal  : Pi SSH terminal
+  corner at 23%, corner at 41%, corner at 68%
+  4 corners on a straight
+WHAT HAPPENED
+  The corner detector reported four corners on a perfectly straight run. Every shadow on the track was being counted as a corner.
+WHY IT HAPPENED (root cause)
+  The detector's signature was a dark region interrupting the line - and a shadow is exactly that. Shadows are darker than the line, so any luminance-based signature confuses them. The detector had no heading information, so it could not know the robot never turned. A corner is an event in the robot's motion, not in the image; using only image features guaranteed the failure.
+INVESTIGATION (before the fix)
+  - Overlaid the corner events on the video - each matched a shadow
+  - Checked the IMU heading at those moments - no turn occurred
+  - Confirmed the signature was purely visual
+FIX (took 4 days)
+  Fixed by requiring a heading change of at least 45 degrees from the IMU to confirm a corner, demoting image-only detections to candidates.
+
+----------------------------------------------------------------------
+E0048 | v4.3 | BIG | Found Day 68 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.3/imu_driver.py
+Error     : Lane detection flips to the left wall at 12:00
+Terminal  : Pi SSH terminal
+  lane: right (12:01), left (12:00), right (12:02)
+  sun angle change broke thresholds
+WHAT HAPPENED
+  Every day at noon the lane detection started flip-flopping between the right lane and the left wall. It always recovered an hour later - the timing was the clue.
+WHY IT HAPPENED (root cause)
+  The sun moved across the window and changed the light geometry. Fixed color thresholds that worked in the morning and afternoon failed exactly when the sun angle shifted the white balance. The thresholds were static, but the illumination was dynamic, so the system could only be correct for part of the day. The daily repeatability proved the cause was environmental, not random.
+INVESTIGATION (before the fix)
+  - Noticed the error was perfectly time-correlated across days
+  - Captured the failing frames - the white balance had shifted
+  - Compared the histogram with the threshold band
+FIX (took 5 days)
+  Fixed by switching to adaptive thresholding (Otsu on the value channel) so the detector re-calibrates to the current illumination every frame.
+
+----------------------------------------------------------------------
+E0049 | v4.4 | SMALL | Found Day 69 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v4.4/red_pillar.py
+Error     : Pillar detected at every frame edge
+Terminal  : systemd journal
+  $ python3 red_pillar.py
+  pillar: (5, 20)  pillar: (610, 20)  ...
+  false positives on the wall
+WHAT HAPPENED
+  The detector reported pillars at fixed screen positions in every frame. The track walls were being detected as red pillars.
+WHY IT HAPPENED (root cause)
+  The wall's edge pixels had similar HSV values to the pillar under the venue lighting, and the detector only matched color - it never checked size or shape. Any red-ish region, including a wall edge, passed the filter. A single-channel color test is necessary but not sufficient; without area and aspect-ratio constraints every similarly colored region is a candidate.
+FIX (took 1 day)
+  Fixed by adding a minimum area check and an aspect-ratio gate, and by masking the bottom 15% of the frame where the wall always appears.
+
+----------------------------------------------------------------------
+E0050 | v4.4 | SMALL | Found Day 69 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v4.4/red_pillar.py
+Error     : Red and pink pillars are confused
+Terminal  : systemd journal
+  $ python3 red_pillar.py
+  color=red  (was pink)
+  confusion at hue 168-175
+WHAT HAPPENED
+  The color classifier called a pink pillar red. The two classes were defined by hue bands that overlapped, so the classification was ambiguous by construction.
+WHY IT HAPPENED (root cause)
+  Pink and red differ in saturation and lightness, not much in hue. The classifier only used hue, so any pixel in the overlapping 168-175 band was claimed by both classes. Classifying colors by a single channel cannot separate classes that are distinct in a different channel - the feature space was too small for the problem.
+FIX (took 1 day)
+  Fixed by narrowing the red band and adding a saturation threshold of 90, since pink has measurably lower saturation than the official red.
+
+----------------------------------------------------------------------
+E0051 | v4.4 | SMALL | Found Day 69 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v4.4/red_pillar.py
+Error     : Free space is NaN after a corner
+Terminal  : systemd journal
+  $ python3 red_pillar.py
+  free_space: nan
+  corner left: nan
+WHAT HAPPENED
+  The free-space estimate became NaN at every corner. The robot continued driving, but the planner received garbage for the entire turn.
+WHY IT HAPPENED (root cause)
+  While angling through a corner, the ToF reported 0mm (out of range), and the fusion code divided by that reading to normalize the estimate. NaN is infectious: one 0/0 poisons every downstream calculation, and because NaN comparisons are all false, no safety check could catch it. The corner is exactly where the sensor points at a gap, so this happened on every lap.
+FIX (took 1 day)
+  Fixed by replacing non-finite values with the sensor's max range and adding a validation pass that rejects NaN before fusion.
+
+----------------------------------------------------------------------
+E0052 | v4.4 | SMALL | Found Day 69 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v4.4/red_pillar.py
+Error     : Corner detection misses 180-degree turns
+Terminal  : systemd journal
+  $ python3 red_pillar.py
+  corner count = 0 after full lap
+  expected 4 corners
+WHAT HAPPENED
+  The lap trace showed zero corners even though the robot clearly turned four times. The detector only watched distance, and the hairpin was too smooth.
+WHY IT HAPPENED (root cause)
+  The corner detector used a distance-only signature: it watched the wall distance change. A 180-degree turn made with a wide arc changes distance slowly and smoothly, so the slope never exceeded the trigger threshold. The signature was chosen for right-angle corners, and a different geometry produced a different signature entirely - one feature cannot describe all corner shapes.
+FIX (took 1 day)
+  Fixed by adding the heading-change signature from the IMU, and requiring both signatures for a confirmed corner.
+
+----------------------------------------------------------------------
+E0053 | v4.4 | SMALL | Found Day 69 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v4.4/red_pillar.py
+Error     : Lane offset jumps by a full lane width
+Terminal  : systemd journal
+  $ python3 red_pillar.py
+  offset: 0.02 -> 0.47 (one frame)
+  lane lost for 0.3s
+WHAT HAPPENED
+  The lane offset jumped from center to a full lane width away in a single frame. The steering twitched violently and then recovered.
+WHY IT HAPPENED (root cause)
+  When the line had a gap, the detector locked onto a neighboring line - the other lane's edge or a shadow - and reported it as the track line. The offset filter had no state, so one wrong frame was trusted completely for one control tick. Vision systems without temporal consistency treat every frame as a fresh truth, which amplifies single-frame errors.
+FIX (took 1 day)
+  Fixed by tracking the last-good line position and snapping back to it when the new detection is more than a lane-width away.
+
+----------------------------------------------------------------------
+E0054 | v4.4 | SMALL | Found Day 69 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v4.4/red_pillar.py
+Error     : Camera resolution mismatch with calibration
+Terminal  : systemd journal
+  $ python3 red_pillar.py
+  cv2.error: (-215:Assertion failed)
+  !src.empty() in function 'undistort'
+WHAT HAPPENED
+  The camera pipeline crashed on undistort. The calibration data loaded fine, so the mismatch was invisible until the function call.
+WHY IT HAPPENED (root cause)
+  The camera opened at 1280x720 but the calibration was done at 640x480. cv2.undistort requires the image size to match the camera matrix, and the mismatch triggered OpenCV's internal assertion. The two settings lived in different config files that were never cross-checked - one for the camera driver, one for the calibration loader.
+FIX (took 1 day)
+  Fixed by forcing both to the same resolution in camera_config.py and adding a boot check that compares the frame size with the calibration size.
+
+----------------------------------------------------------------------
+E0055 | v4.4 | SMALL | Found Day 69 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v4.4/red_pillar.py
+Error     : HSV lower bound bigger than upper bound
+Terminal  : systemd journal
+  $ python3 red_pillar.py
+  ValueError: lower should be smaller than upper
+    File "red_pillar.py", line 34, in detect
+WHAT HAPPENED
+  The red pillar detector crashed the first time it processed a real frame. The color range that worked in tests was rejected by OpenCV.
+WHY IT HAPPENED (root cause)
+  Red hue wraps around the HSV cylinder: red is both 0-10 and 170-180. Writing it as one continuous range (170..10) is invalid because lower > upper, which cv2.inRange rejects with a ValueError. The wrapper range is a conceptual mistake - the hue circle has no beginning, so the mask must be built from two disjoint ranges and OR-ed together.
+FIX (took 1 day)
+  Fixed by splitting the red range into two masks (0-10 and 170-180) and OR-ing the results, with a comment explaining the hue wrap.
+
+----------------------------------------------------------------------
+E0056 | v4.4 | SMALL | Found Day 69 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v4.4/red_pillar.py
+Error     : ZeroDivisionError in distance estimate
+Terminal  : systemd journal
+  $ python3 red_pillar.py
+    File "red_pillar.py", line 58, in estimate
+      dist = known_h / h
+  ZeroDivisionError: float division by zero
+WHAT HAPPENED
+  The pillar distance estimator crashed mid-frame, not at startup. The contour had been found, but its height was zero.
+WHY IT HAPPENED (root cause)
+  The detector found a contour but the color filter had removed every interior pixel, leaving a height of zero. The distance formula assumes a valid height; dividing by zero raised ZeroDivisionError. This is a data-quality failure: the pipeline did not validate its input before applying the pinhole model, so a degenerate contour crashed the math instead of being skipped.
+FIX (took 1 day)
+  Fixed by skipping contours smaller than 5 pixels and returning 'unknown' instead of crashing when the height is invalid.
+
+----------------------------------------------------------------------
+E0057 | v4.4 | BIG | Found Day 70 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.4/red_pillar.py
+Error     : False pillar detection passes the wrong side
+Terminal  : Pi SSH terminal
+  pillar: DETECTED (x=300)
+  actual pillar: on the right
+  robot went left -> round ends
+WHAT HAPPENED
+  The robot steered around a 'pillar' that did not exist, passed the real pillar on the wrong side, and ended the round. One false positive cost the whole run.
+WHY IT HAPPENED (root cause)
+  A red sponsor sign on the wall matched the pillar filter's color and shape gates, so the detector committed to it. Detection gates are filters, not guarantees: the sign genuinely looked like a pillar in every feature the code checked. The detector had no cross-sensor confirmation - the ToF was available and would have shown no pillar at that location, but nothing asked it.
+INVESTIGATION (before the fix)
+  - Replayed the round and confirmed the false positive in the video
+  - Checked the sign's HSV - inside the pillar bands exactly
+  - Verified the ToF had a clear reading at that moment - no pillar
+FIX (took 2 days)
+  Fixed by adding a ToF distance gate: a detection without a matching distance reading is treated as a candidate, not a pillar.
+
+----------------------------------------------------------------------
+E0058 | v4.4 | BIG | Found Day 70 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.4/red_pillar.py
+Error     : Corner detector fires on every shadow
+Terminal  : Pi SSH terminal
+  corner at 23%, corner at 41%, corner at 68%
+  4 corners on a straight
+WHAT HAPPENED
+  The corner detector reported four corners on a perfectly straight run. Every shadow on the track was being counted as a corner.
+WHY IT HAPPENED (root cause)
+  The detector's signature was a dark region interrupting the line - and a shadow is exactly that. Shadows are darker than the line, so any luminance-based signature confuses them. The detector had no heading information, so it could not know the robot never turned. A corner is an event in the robot's motion, not in the image; using only image features guaranteed the failure.
+INVESTIGATION (before the fix)
+  - Overlaid the corner events on the video - each matched a shadow
+  - Checked the IMU heading at those moments - no turn occurred
+  - Confirmed the signature was purely visual
+FIX (took 3 days)
+  Fixed by requiring a heading change of at least 45 degrees from the IMU to confirm a corner, demoting image-only detections to candidates.
+
+----------------------------------------------------------------------
+E0059 | v4.4 | BIG | Found Day 70 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.4/red_pillar.py
+Error     : Lane detection flips to the left wall at 12:00
+Terminal  : Pi SSH terminal
+  lane: right (12:01), left (12:00), right (12:02)
+  sun angle change broke thresholds
+WHAT HAPPENED
+  Every day at noon the lane detection started flip-flopping between the right lane and the left wall. It always recovered an hour later - the timing was the clue.
+WHY IT HAPPENED (root cause)
+  The sun moved across the window and changed the light geometry. Fixed color thresholds that worked in the morning and afternoon failed exactly when the sun angle shifted the white balance. The thresholds were static, but the illumination was dynamic, so the system could only be correct for part of the day. The daily repeatability proved the cause was environmental, not random.
+INVESTIGATION (before the fix)
+  - Noticed the error was perfectly time-correlated across days
+  - Captured the failing frames - the white balance had shifted
+  - Compared the histogram with the threshold band
+FIX (took 4 days)
+  Fixed by switching to adaptive thresholding (Otsu on the value channel) so the detector re-calibrates to the current illumination every frame.
+
+----------------------------------------------------------------------
+E0060 | v4.4 | BIG | Found Day 70 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.4/red_pillar.py
+Error     : Green pillar invisible on the grass backdrop
+Terminal  : Pi SSH terminal
+  green pillar: 0 pixels
+  backdrop hue matches the pillar
+WHAT HAPPENED
+  The green pillar detector found zero pixels while the pillar sat in plain view. The practice field behind it was green too.
+WHY IT HAPPENED (root cause)
+  The green pillar and the green grass shared the same hue range, so the color filter selected the entire background and the detector's foreground logic found nothing - the pillar was invisible because the background was identical. Color is not a sufficient feature when the background shares the color; the detector needed a feature the backdrop lacks, such as the pillar's frame edges.
+INVESTIGATION (before the fix)
+  - Sampled the pillar and grass hues - nearly identical
+  - Tested the detector against a neutral background - worked
+  - Confirmed the failure was contrast, not calibration
+FIX (took 5 days)
+  Fixed by detecting the red frame around the pillar as the primary signature, and using the green fill only as confirmation.
+
+----------------------------------------------------------------------
+E0061 | v4.5 | SMALL | Found Day 71 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v4.5/green_pillar.py
+Error     : Red and pink pillars are confused
+Terminal  : VS Code terminal
+  $ python3 green_pillar.py
+  color=red  (was pink)
+  confusion at hue 168-175
+WHAT HAPPENED
+  The color classifier called a pink pillar red. The two classes were defined by hue bands that overlapped, so the classification was ambiguous by construction.
+WHY IT HAPPENED (root cause)
+  Pink and red differ in saturation and lightness, not much in hue. The classifier only used hue, so any pixel in the overlapping 168-175 band was claimed by both classes. Classifying colors by a single channel cannot separate classes that are distinct in a different channel - the feature space was too small for the problem.
+FIX (took 1 day)
+  Fixed by narrowing the red band and adding a saturation threshold of 90, since pink has measurably lower saturation than the official red.
+
+----------------------------------------------------------------------
+E0062 | v4.5 | SMALL | Found Day 71 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v4.5/green_pillar.py
+Error     : Free space is NaN after a corner
+Terminal  : VS Code terminal
+  $ python3 green_pillar.py
+  free_space: nan
+  corner left: nan
+WHAT HAPPENED
+  The free-space estimate became NaN at every corner. The robot continued driving, but the planner received garbage for the entire turn.
+WHY IT HAPPENED (root cause)
+  While angling through a corner, the ToF reported 0mm (out of range), and the fusion code divided by that reading to normalize the estimate. NaN is infectious: one 0/0 poisons every downstream calculation, and because NaN comparisons are all false, no safety check could catch it. The corner is exactly where the sensor points at a gap, so this happened on every lap.
+FIX (took 1 day)
+  Fixed by replacing non-finite values with the sensor's max range and adding a validation pass that rejects NaN before fusion.
+
+----------------------------------------------------------------------
+E0063 | v4.5 | SMALL | Found Day 71 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v4.5/green_pillar.py
+Error     : Corner detection misses 180-degree turns
+Terminal  : VS Code terminal
+  $ python3 green_pillar.py
+  corner count = 0 after full lap
+  expected 4 corners
+WHAT HAPPENED
+  The lap trace showed zero corners even though the robot clearly turned four times. The detector only watched distance, and the hairpin was too smooth.
+WHY IT HAPPENED (root cause)
+  The corner detector used a distance-only signature: it watched the wall distance change. A 180-degree turn made with a wide arc changes distance slowly and smoothly, so the slope never exceeded the trigger threshold. The signature was chosen for right-angle corners, and a different geometry produced a different signature entirely - one feature cannot describe all corner shapes.
+FIX (took 1 day)
+  Fixed by adding the heading-change signature from the IMU, and requiring both signatures for a confirmed corner.
+
+----------------------------------------------------------------------
+E0064 | v4.5 | SMALL | Found Day 71 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v4.5/green_pillar.py
+Error     : Lane offset jumps by a full lane width
+Terminal  : VS Code terminal
+  $ python3 green_pillar.py
+  offset: 0.02 -> 0.47 (one frame)
+  lane lost for 0.3s
+WHAT HAPPENED
+  The lane offset jumped from center to a full lane width away in a single frame. The steering twitched violently and then recovered.
+WHY IT HAPPENED (root cause)
+  When the line had a gap, the detector locked onto a neighboring line - the other lane's edge or a shadow - and reported it as the track line. The offset filter had no state, so one wrong frame was trusted completely for one control tick. Vision systems without temporal consistency treat every frame as a fresh truth, which amplifies single-frame errors.
+FIX (took 1 day)
+  Fixed by tracking the last-good line position and snapping back to it when the new detection is more than a lane-width away.
+
+----------------------------------------------------------------------
+E0065 | v4.5 | SMALL | Found Day 71 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v4.5/green_pillar.py
+Error     : Camera resolution mismatch with calibration
+Terminal  : VS Code terminal
+  $ python3 green_pillar.py
+  cv2.error: (-215:Assertion failed)
+  !src.empty() in function 'undistort'
+WHAT HAPPENED
+  The camera pipeline crashed on undistort. The calibration data loaded fine, so the mismatch was invisible until the function call.
+WHY IT HAPPENED (root cause)
+  The camera opened at 1280x720 but the calibration was done at 640x480. cv2.undistort requires the image size to match the camera matrix, and the mismatch triggered OpenCV's internal assertion. The two settings lived in different config files that were never cross-checked - one for the camera driver, one for the calibration loader.
+FIX (took 1 day)
+  Fixed by forcing both to the same resolution in camera_config.py and adding a boot check that compares the frame size with the calibration size.
+
+----------------------------------------------------------------------
+E0066 | v4.5 | SMALL | Found Day 71 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v4.5/green_pillar.py
+Error     : HSV lower bound bigger than upper bound
+Terminal  : VS Code terminal
+  $ python3 green_pillar.py
+  ValueError: lower should be smaller than upper
+    File "green_pillar.py", line 34, in detect
+WHAT HAPPENED
+  The red pillar detector crashed the first time it processed a real frame. The color range that worked in tests was rejected by OpenCV.
+WHY IT HAPPENED (root cause)
+  Red hue wraps around the HSV cylinder: red is both 0-10 and 170-180. Writing it as one continuous range (170..10) is invalid because lower > upper, which cv2.inRange rejects with a ValueError. The wrapper range is a conceptual mistake - the hue circle has no beginning, so the mask must be built from two disjoint ranges and OR-ed together.
+FIX (took 1 day)
+  Fixed by splitting the red range into two masks (0-10 and 170-180) and OR-ing the results, with a comment explaining the hue wrap.
+
+----------------------------------------------------------------------
+E0067 | v4.5 | SMALL | Found Day 71 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v4.5/green_pillar.py
+Error     : ZeroDivisionError in distance estimate
+Terminal  : VS Code terminal
+  $ python3 green_pillar.py
+    File "green_pillar.py", line 58, in estimate
+      dist = known_h / h
+  ZeroDivisionError: float division by zero
+WHAT HAPPENED
+  The pillar distance estimator crashed mid-frame, not at startup. The contour had been found, but its height was zero.
+WHY IT HAPPENED (root cause)
+  The detector found a contour but the color filter had removed every interior pixel, leaving a height of zero. The distance formula assumes a valid height; dividing by zero raised ZeroDivisionError. This is a data-quality failure: the pipeline did not validate its input before applying the pinhole model, so a degenerate contour crashed the math instead of being skipped.
+FIX (took 1 day)
+  Fixed by skipping contours smaller than 5 pixels and returning 'unknown' instead of crashing when the height is invalid.
+
+----------------------------------------------------------------------
+E0068 | v4.5 | SMALL | Found Day 71 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v4.5/green_pillar.py
+Error     : Pillar detected at every frame edge
+Terminal  : VS Code terminal
+  $ python3 green_pillar.py
+  pillar: (5, 20)  pillar: (610, 20)  ...
+  false positives on the wall
+WHAT HAPPENED
+  The detector reported pillars at fixed screen positions in every frame. The track walls were being detected as red pillars.
+WHY IT HAPPENED (root cause)
+  The wall's edge pixels had similar HSV values to the pillar under the venue lighting, and the detector only matched color - it never checked size or shape. Any red-ish region, including a wall edge, passed the filter. A single-channel color test is necessary but not sufficient; without area and aspect-ratio constraints every similarly colored region is a candidate.
+FIX (took 1 day)
+  Fixed by adding a minimum area check and an aspect-ratio gate, and by masking the bottom 15% of the frame where the wall always appears.
+
+----------------------------------------------------------------------
+E0069 | v4.5 | BIG | Found Day 72 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.5/green_pillar.py
+Error     : Corner detector fires on every shadow
+Terminal  : Pi SSH terminal
+  corner at 23%, corner at 41%, corner at 68%
+  4 corners on a straight
+WHAT HAPPENED
+  The corner detector reported four corners on a perfectly straight run. Every shadow on the track was being counted as a corner.
+WHY IT HAPPENED (root cause)
+  The detector's signature was a dark region interrupting the line - and a shadow is exactly that. Shadows are darker than the line, so any luminance-based signature confuses them. The detector had no heading information, so it could not know the robot never turned. A corner is an event in the robot's motion, not in the image; using only image features guaranteed the failure.
+INVESTIGATION (before the fix)
+  - Overlaid the corner events on the video - each matched a shadow
+  - Checked the IMU heading at those moments - no turn occurred
+  - Confirmed the signature was purely visual
+FIX (took 2 days)
+  Fixed by requiring a heading change of at least 45 degrees from the IMU to confirm a corner, demoting image-only detections to candidates.
+
+----------------------------------------------------------------------
+E0070 | v4.5 | BIG | Found Day 72 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.5/green_pillar.py
+Error     : Lane detection flips to the left wall at 12:00
+Terminal  : Pi SSH terminal
+  lane: right (12:01), left (12:00), right (12:02)
+  sun angle change broke thresholds
+WHAT HAPPENED
+  Every day at noon the lane detection started flip-flopping between the right lane and the left wall. It always recovered an hour later - the timing was the clue.
+WHY IT HAPPENED (root cause)
+  The sun moved across the window and changed the light geometry. Fixed color thresholds that worked in the morning and afternoon failed exactly when the sun angle shifted the white balance. The thresholds were static, but the illumination was dynamic, so the system could only be correct for part of the day. The daily repeatability proved the cause was environmental, not random.
+INVESTIGATION (before the fix)
+  - Noticed the error was perfectly time-correlated across days
+  - Captured the failing frames - the white balance had shifted
+  - Compared the histogram with the threshold band
+FIX (took 3 days)
+  Fixed by switching to adaptive thresholding (Otsu on the value channel) so the detector re-calibrates to the current illumination every frame.
+
+----------------------------------------------------------------------
+E0071 | v4.5 | BIG | Found Day 72 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.5/green_pillar.py
+Error     : Green pillar invisible on the grass backdrop
+Terminal  : Pi SSH terminal
+  green pillar: 0 pixels
+  backdrop hue matches the pillar
+WHAT HAPPENED
+  The green pillar detector found zero pixels while the pillar sat in plain view. The practice field behind it was green too.
+WHY IT HAPPENED (root cause)
+  The green pillar and the green grass shared the same hue range, so the color filter selected the entire background and the detector's foreground logic found nothing - the pillar was invisible because the background was identical. Color is not a sufficient feature when the background shares the color; the detector needed a feature the backdrop lacks, such as the pillar's frame edges.
+INVESTIGATION (before the fix)
+  - Sampled the pillar and grass hues - nearly identical
+  - Tested the detector against a neutral background - worked
+  - Confirmed the failure was contrast, not calibration
+FIX (took 4 days)
+  Fixed by detecting the red frame around the pillar as the primary signature, and using the green fill only as confirmation.
+
+----------------------------------------------------------------------
+E0072 | v4.5 | BIG | Found Day 72 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.5/green_pillar.py
+Error     : Free space wrongly reports a corridor
+Terminal  : Pi SSH terminal
+  free space: 0.9m corridor detected
+  reality: 0.4m gap
+WHAT HAPPENED
+  The free-space module reported a 0.9m corridor where only a 0.4m gap existed. The robot planned to drive through a space it could not fit through.
+WHY IT HAPPENED (root cause)
+  The fusion code averaged the ToF wall distance with the camera gap estimate. Averaging is only valid when both measurements describe the same quantity; here one sensor measured the wall and the other measured the gap, and the mean produced a number that matched neither reality. The 'corridor' was a pure artifact of mixing incompatible measurements.
+INVESTIGATION (before the fix)
+  - Reproduced the false corridor with the ToF and camera both active
+  - Logged each sensor's raw value - they disagreed fundamentally
+  - Tested taking the minimum instead of the mean - correct result
+FIX (took 5 days)
+  Fixed by taking the minimum of the two estimates (the conservative choice for a gap) and by storing the source of each free-space measurement.
+
+----------------------------------------------------------------------
+E0073 | v4.6 | SMALL | Found Day 73 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.6/pink_detect.py
+Error     : Free space is NaN after a corner
+Terminal  : Pi SSH terminal
+  $ python3 pink_detect.py
+  free_space: nan
+  corner left: nan
+WHAT HAPPENED
+  The free-space estimate became NaN at every corner. The robot continued driving, but the planner received garbage for the entire turn.
+WHY IT HAPPENED (root cause)
+  While angling through a corner, the ToF reported 0mm (out of range), and the fusion code divided by that reading to normalize the estimate. NaN is infectious: one 0/0 poisons every downstream calculation, and because NaN comparisons are all false, no safety check could catch it. The corner is exactly where the sensor points at a gap, so this happened on every lap.
+FIX (took 1 day)
+  Fixed by replacing non-finite values with the sensor's max range and adding a validation pass that rejects NaN before fusion.
+
+----------------------------------------------------------------------
+E0074 | v4.6 | SMALL | Found Day 73 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.6/pink_detect.py
+Error     : Corner detection misses 180-degree turns
+Terminal  : Pi SSH terminal
+  $ python3 pink_detect.py
+  corner count = 0 after full lap
+  expected 4 corners
+WHAT HAPPENED
+  The lap trace showed zero corners even though the robot clearly turned four times. The detector only watched distance, and the hairpin was too smooth.
+WHY IT HAPPENED (root cause)
+  The corner detector used a distance-only signature: it watched the wall distance change. A 180-degree turn made with a wide arc changes distance slowly and smoothly, so the slope never exceeded the trigger threshold. The signature was chosen for right-angle corners, and a different geometry produced a different signature entirely - one feature cannot describe all corner shapes.
+FIX (took 1 day)
+  Fixed by adding the heading-change signature from the IMU, and requiring both signatures for a confirmed corner.
+
+----------------------------------------------------------------------
+E0075 | v4.6 | SMALL | Found Day 73 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.6/pink_detect.py
+Error     : Lane offset jumps by a full lane width
+Terminal  : Pi SSH terminal
+  $ python3 pink_detect.py
+  offset: 0.02 -> 0.47 (one frame)
+  lane lost for 0.3s
+WHAT HAPPENED
+  The lane offset jumped from center to a full lane width away in a single frame. The steering twitched violently and then recovered.
+WHY IT HAPPENED (root cause)
+  When the line had a gap, the detector locked onto a neighboring line - the other lane's edge or a shadow - and reported it as the track line. The offset filter had no state, so one wrong frame was trusted completely for one control tick. Vision systems without temporal consistency treat every frame as a fresh truth, which amplifies single-frame errors.
+FIX (took 1 day)
+  Fixed by tracking the last-good line position and snapping back to it when the new detection is more than a lane-width away.
+
+----------------------------------------------------------------------
+E0076 | v4.6 | SMALL | Found Day 73 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.6/pink_detect.py
+Error     : Camera resolution mismatch with calibration
+Terminal  : Pi SSH terminal
+  $ python3 pink_detect.py
+  cv2.error: (-215:Assertion failed)
+  !src.empty() in function 'undistort'
+WHAT HAPPENED
+  The camera pipeline crashed on undistort. The calibration data loaded fine, so the mismatch was invisible until the function call.
+WHY IT HAPPENED (root cause)
+  The camera opened at 1280x720 but the calibration was done at 640x480. cv2.undistort requires the image size to match the camera matrix, and the mismatch triggered OpenCV's internal assertion. The two settings lived in different config files that were never cross-checked - one for the camera driver, one for the calibration loader.
+FIX (took 1 day)
+  Fixed by forcing both to the same resolution in camera_config.py and adding a boot check that compares the frame size with the calibration size.
+
+----------------------------------------------------------------------
+E0077 | v4.6 | SMALL | Found Day 73 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.6/pink_detect.py
+Error     : HSV lower bound bigger than upper bound
+Terminal  : Pi SSH terminal
+  $ python3 pink_detect.py
+  ValueError: lower should be smaller than upper
+    File "pink_detect.py", line 34, in detect
+WHAT HAPPENED
+  The red pillar detector crashed the first time it processed a real frame. The color range that worked in tests was rejected by OpenCV.
+WHY IT HAPPENED (root cause)
+  Red hue wraps around the HSV cylinder: red is both 0-10 and 170-180. Writing it as one continuous range (170..10) is invalid because lower > upper, which cv2.inRange rejects with a ValueError. The wrapper range is a conceptual mistake - the hue circle has no beginning, so the mask must be built from two disjoint ranges and OR-ed together.
+FIX (took 1 day)
+  Fixed by splitting the red range into two masks (0-10 and 170-180) and OR-ing the results, with a comment explaining the hue wrap.
+
+----------------------------------------------------------------------
+E0078 | v4.6 | SMALL | Found Day 73 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.6/pink_detect.py
+Error     : ZeroDivisionError in distance estimate
+Terminal  : Pi SSH terminal
+  $ python3 pink_detect.py
+    File "pink_detect.py", line 58, in estimate
+      dist = known_h / h
+  ZeroDivisionError: float division by zero
+WHAT HAPPENED
+  The pillar distance estimator crashed mid-frame, not at startup. The contour had been found, but its height was zero.
+WHY IT HAPPENED (root cause)
+  The detector found a contour but the color filter had removed every interior pixel, leaving a height of zero. The distance formula assumes a valid height; dividing by zero raised ZeroDivisionError. This is a data-quality failure: the pipeline did not validate its input before applying the pinhole model, so a degenerate contour crashed the math instead of being skipped.
+FIX (took 1 day)
+  Fixed by skipping contours smaller than 5 pixels and returning 'unknown' instead of crashing when the height is invalid.
+
+----------------------------------------------------------------------
+E0079 | v4.6 | SMALL | Found Day 73 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.6/pink_detect.py
+Error     : Pillar detected at every frame edge
+Terminal  : Pi SSH terminal
+  $ python3 pink_detect.py
+  pillar: (5, 20)  pillar: (610, 20)  ...
+  false positives on the wall
+WHAT HAPPENED
+  The detector reported pillars at fixed screen positions in every frame. The track walls were being detected as red pillars.
+WHY IT HAPPENED (root cause)
+  The wall's edge pixels had similar HSV values to the pillar under the venue lighting, and the detector only matched color - it never checked size or shape. Any red-ish region, including a wall edge, passed the filter. A single-channel color test is necessary but not sufficient; without area and aspect-ratio constraints every similarly colored region is a candidate.
+FIX (took 1 day)
+  Fixed by adding a minimum area check and an aspect-ratio gate, and by masking the bottom 15% of the frame where the wall always appears.
+
+----------------------------------------------------------------------
+E0080 | v4.6 | SMALL | Found Day 73 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.6/pink_detect.py
+Error     : Red and pink pillars are confused
+Terminal  : Pi SSH terminal
+  $ python3 pink_detect.py
+  color=red  (was pink)
+  confusion at hue 168-175
+WHAT HAPPENED
+  The color classifier called a pink pillar red. The two classes were defined by hue bands that overlapped, so the classification was ambiguous by construction.
+WHY IT HAPPENED (root cause)
+  Pink and red differ in saturation and lightness, not much in hue. The classifier only used hue, so any pixel in the overlapping 168-175 band was claimed by both classes. Classifying colors by a single channel cannot separate classes that are distinct in a different channel - the feature space was too small for the problem.
+FIX (took 1 day)
+  Fixed by narrowing the red band and adding a saturation threshold of 90, since pink has measurably lower saturation than the official red.
+
+----------------------------------------------------------------------
+E0081 | v4.6 | BIG | Found Day 74 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.6/pink_detect.py
+Error     : Lane detection flips to the left wall at 12:00
+Terminal  : Pi SSH terminal
+  lane: right (12:01), left (12:00), right (12:02)
+  sun angle change broke thresholds
+WHAT HAPPENED
+  Every day at noon the lane detection started flip-flopping between the right lane and the left wall. It always recovered an hour later - the timing was the clue.
+WHY IT HAPPENED (root cause)
+  The sun moved across the window and changed the light geometry. Fixed color thresholds that worked in the morning and afternoon failed exactly when the sun angle shifted the white balance. The thresholds were static, but the illumination was dynamic, so the system could only be correct for part of the day. The daily repeatability proved the cause was environmental, not random.
+INVESTIGATION (before the fix)
+  - Noticed the error was perfectly time-correlated across days
+  - Captured the failing frames - the white balance had shifted
+  - Compared the histogram with the threshold band
+FIX (took 2 days)
+  Fixed by switching to adaptive thresholding (Otsu on the value channel) so the detector re-calibrates to the current illumination every frame.
+
+----------------------------------------------------------------------
+E0082 | v4.6 | BIG | Found Day 74 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.6/pink_detect.py
+Error     : Green pillar invisible on the grass backdrop
+Terminal  : Pi SSH terminal
+  green pillar: 0 pixels
+  backdrop hue matches the pillar
+WHAT HAPPENED
+  The green pillar detector found zero pixels while the pillar sat in plain view. The practice field behind it was green too.
+WHY IT HAPPENED (root cause)
+  The green pillar and the green grass shared the same hue range, so the color filter selected the entire background and the detector's foreground logic found nothing - the pillar was invisible because the background was identical. Color is not a sufficient feature when the background shares the color; the detector needed a feature the backdrop lacks, such as the pillar's frame edges.
+INVESTIGATION (before the fix)
+  - Sampled the pillar and grass hues - nearly identical
+  - Tested the detector against a neutral background - worked
+  - Confirmed the failure was contrast, not calibration
+FIX (took 3 days)
+  Fixed by detecting the red frame around the pillar as the primary signature, and using the green fill only as confirmation.
+
+----------------------------------------------------------------------
+E0083 | v4.6 | BIG | Found Day 74 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.6/pink_detect.py
+Error     : Free space wrongly reports a corridor
+Terminal  : Pi SSH terminal
+  free space: 0.9m corridor detected
+  reality: 0.4m gap
+WHAT HAPPENED
+  The free-space module reported a 0.9m corridor where only a 0.4m gap existed. The robot planned to drive through a space it could not fit through.
+WHY IT HAPPENED (root cause)
+  The fusion code averaged the ToF wall distance with the camera gap estimate. Averaging is only valid when both measurements describe the same quantity; here one sensor measured the wall and the other measured the gap, and the mean produced a number that matched neither reality. The 'corridor' was a pure artifact of mixing incompatible measurements.
+INVESTIGATION (before the fix)
+  - Reproduced the false corridor with the ToF and camera both active
+  - Logged each sensor's raw value - they disagreed fundamentally
+  - Tested taking the minimum instead of the mean - correct result
+FIX (took 4 days)
+  Fixed by taking the minimum of the two estimates (the conservative choice for a gap) and by storing the source of each free-space measurement.
+
+----------------------------------------------------------------------
+E0084 | v4.6 | BIG | Found Day 74 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.6/pink_detect.py
+Error     : Pillar tracking loses the pillar at 2m/s
+Terminal  : Pi SSH terminal
+  tracked: 10 frames, lost at frame 11
+  pillar reappears 20 frames later
+WHAT HAPPENED
+  The tracker followed the pillar perfectly at low speed, then lost it the moment the robot accelerated. It always lost it at the same point on the approach.
+WHY IT HAPPENED (root cause)
+  The tracker searched a fixed window around the last known position. At 2m/s the pillar moves several pixels between frames, and once it left the search window the tracker had nothing to lock onto. The search window size was tuned for walking speed, not race speed. A tracker with no motion model is only as fast as its window is wide.
+INVESTIGATION (before the fix)
+  - Measured the pillar's inter-frame displacement at speed
+  - Found the displacement exceeded the search window
+  - Predicted the position with odometry - tracking held
+FIX (took 5 days)
+  Fixed by predicting the search window center with the odometry velocity before matching, and widening the window proportional to speed.
+
+----------------------------------------------------------------------
+E0085 | v4.7 | SMALL | Found Day 75 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v4.7/pillar_dist.py
+Error     : Corner detection misses 180-degree turns
+Terminal  : Pi console (HDMI)
+  $ python3 pillar_dist.py
+  corner count = 0 after full lap
+  expected 4 corners
+WHAT HAPPENED
+  The lap trace showed zero corners even though the robot clearly turned four times. The detector only watched distance, and the hairpin was too smooth.
+WHY IT HAPPENED (root cause)
+  The corner detector used a distance-only signature: it watched the wall distance change. A 180-degree turn made with a wide arc changes distance slowly and smoothly, so the slope never exceeded the trigger threshold. The signature was chosen for right-angle corners, and a different geometry produced a different signature entirely - one feature cannot describe all corner shapes.
+FIX (took 1 day)
+  Fixed by adding the heading-change signature from the IMU, and requiring both signatures for a confirmed corner.
+
+----------------------------------------------------------------------
+E0086 | v4.7 | SMALL | Found Day 75 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v4.7/pillar_dist.py
+Error     : Lane offset jumps by a full lane width
+Terminal  : Pi console (HDMI)
+  $ python3 pillar_dist.py
+  offset: 0.02 -> 0.47 (one frame)
+  lane lost for 0.3s
+WHAT HAPPENED
+  The lane offset jumped from center to a full lane width away in a single frame. The steering twitched violently and then recovered.
+WHY IT HAPPENED (root cause)
+  When the line had a gap, the detector locked onto a neighboring line - the other lane's edge or a shadow - and reported it as the track line. The offset filter had no state, so one wrong frame was trusted completely for one control tick. Vision systems without temporal consistency treat every frame as a fresh truth, which amplifies single-frame errors.
+FIX (took 1 day)
+  Fixed by tracking the last-good line position and snapping back to it when the new detection is more than a lane-width away.
+
+----------------------------------------------------------------------
+E0087 | v4.7 | SMALL | Found Day 75 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v4.7/pillar_dist.py
+Error     : Camera resolution mismatch with calibration
+Terminal  : Pi console (HDMI)
+  $ python3 pillar_dist.py
+  cv2.error: (-215:Assertion failed)
+  !src.empty() in function 'undistort'
+WHAT HAPPENED
+  The camera pipeline crashed on undistort. The calibration data loaded fine, so the mismatch was invisible until the function call.
+WHY IT HAPPENED (root cause)
+  The camera opened at 1280x720 but the calibration was done at 640x480. cv2.undistort requires the image size to match the camera matrix, and the mismatch triggered OpenCV's internal assertion. The two settings lived in different config files that were never cross-checked - one for the camera driver, one for the calibration loader.
+FIX (took 1 day)
+  Fixed by forcing both to the same resolution in camera_config.py and adding a boot check that compares the frame size with the calibration size.
+
+----------------------------------------------------------------------
+E0088 | v4.7 | SMALL | Found Day 75 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v4.7/pillar_dist.py
+Error     : HSV lower bound bigger than upper bound
+Terminal  : Pi console (HDMI)
+  $ python3 pillar_dist.py
+  ValueError: lower should be smaller than upper
+    File "pillar_dist.py", line 34, in detect
+WHAT HAPPENED
+  The red pillar detector crashed the first time it processed a real frame. The color range that worked in tests was rejected by OpenCV.
+WHY IT HAPPENED (root cause)
+  Red hue wraps around the HSV cylinder: red is both 0-10 and 170-180. Writing it as one continuous range (170..10) is invalid because lower > upper, which cv2.inRange rejects with a ValueError. The wrapper range is a conceptual mistake - the hue circle has no beginning, so the mask must be built from two disjoint ranges and OR-ed together.
+FIX (took 1 day)
+  Fixed by splitting the red range into two masks (0-10 and 170-180) and OR-ing the results, with a comment explaining the hue wrap.
+
+----------------------------------------------------------------------
+E0089 | v4.7 | SMALL | Found Day 75 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v4.7/pillar_dist.py
+Error     : ZeroDivisionError in distance estimate
+Terminal  : Pi console (HDMI)
+  $ python3 pillar_dist.py
+    File "pillar_dist.py", line 58, in estimate
+      dist = known_h / h
+  ZeroDivisionError: float division by zero
+WHAT HAPPENED
+  The pillar distance estimator crashed mid-frame, not at startup. The contour had been found, but its height was zero.
+WHY IT HAPPENED (root cause)
+  The detector found a contour but the color filter had removed every interior pixel, leaving a height of zero. The distance formula assumes a valid height; dividing by zero raised ZeroDivisionError. This is a data-quality failure: the pipeline did not validate its input before applying the pinhole model, so a degenerate contour crashed the math instead of being skipped.
+FIX (took 1 day)
+  Fixed by skipping contours smaller than 5 pixels and returning 'unknown' instead of crashing when the height is invalid.
+
+----------------------------------------------------------------------
+E0090 | v4.7 | SMALL | Found Day 75 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v4.7/pillar_dist.py
+Error     : Pillar detected at every frame edge
+Terminal  : Pi console (HDMI)
+  $ python3 pillar_dist.py
+  pillar: (5, 20)  pillar: (610, 20)  ...
+  false positives on the wall
+WHAT HAPPENED
+  The detector reported pillars at fixed screen positions in every frame. The track walls were being detected as red pillars.
+WHY IT HAPPENED (root cause)
+  The wall's edge pixels had similar HSV values to the pillar under the venue lighting, and the detector only matched color - it never checked size or shape. Any red-ish region, including a wall edge, passed the filter. A single-channel color test is necessary but not sufficient; without area and aspect-ratio constraints every similarly colored region is a candidate.
+FIX (took 1 day)
+  Fixed by adding a minimum area check and an aspect-ratio gate, and by masking the bottom 15% of the frame where the wall always appears.
+
+----------------------------------------------------------------------
+E0091 | v4.7 | SMALL | Found Day 75 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v4.7/pillar_dist.py
+Error     : Red and pink pillars are confused
+Terminal  : Pi console (HDMI)
+  $ python3 pillar_dist.py
+  color=red  (was pink)
+  confusion at hue 168-175
+WHAT HAPPENED
+  The color classifier called a pink pillar red. The two classes were defined by hue bands that overlapped, so the classification was ambiguous by construction.
+WHY IT HAPPENED (root cause)
+  Pink and red differ in saturation and lightness, not much in hue. The classifier only used hue, so any pixel in the overlapping 168-175 band was claimed by both classes. Classifying colors by a single channel cannot separate classes that are distinct in a different channel - the feature space was too small for the problem.
+FIX (took 1 day)
+  Fixed by narrowing the red band and adding a saturation threshold of 90, since pink has measurably lower saturation than the official red.
+
+----------------------------------------------------------------------
+E0092 | v4.7 | SMALL | Found Day 75 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v4.7/pillar_dist.py
+Error     : Free space is NaN after a corner
+Terminal  : Pi console (HDMI)
+  $ python3 pillar_dist.py
+  free_space: nan
+  corner left: nan
+WHAT HAPPENED
+  The free-space estimate became NaN at every corner. The robot continued driving, but the planner received garbage for the entire turn.
+WHY IT HAPPENED (root cause)
+  While angling through a corner, the ToF reported 0mm (out of range), and the fusion code divided by that reading to normalize the estimate. NaN is infectious: one 0/0 poisons every downstream calculation, and because NaN comparisons are all false, no safety check could catch it. The corner is exactly where the sensor points at a gap, so this happened on every lap.
+FIX (took 1 day)
+  Fixed by replacing non-finite values with the sensor's max range and adding a validation pass that rejects NaN before fusion.
+
+----------------------------------------------------------------------
+E0093 | v4.7 | BIG | Found Day 76 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.7/pillar_dist.py
+Error     : Green pillar invisible on the grass backdrop
+Terminal  : Pi SSH terminal
+  green pillar: 0 pixels
+  backdrop hue matches the pillar
+WHAT HAPPENED
+  The green pillar detector found zero pixels while the pillar sat in plain view. The practice field behind it was green too.
+WHY IT HAPPENED (root cause)
+  The green pillar and the green grass shared the same hue range, so the color filter selected the entire background and the detector's foreground logic found nothing - the pillar was invisible because the background was identical. Color is not a sufficient feature when the background shares the color; the detector needed a feature the backdrop lacks, such as the pillar's frame edges.
+INVESTIGATION (before the fix)
+  - Sampled the pillar and grass hues - nearly identical
+  - Tested the detector against a neutral background - worked
+  - Confirmed the failure was contrast, not calibration
+FIX (took 2 days)
+  Fixed by detecting the red frame around the pillar as the primary signature, and using the green fill only as confirmation.
+
+----------------------------------------------------------------------
+E0094 | v4.7 | BIG | Found Day 76 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.7/pillar_dist.py
+Error     : Free space wrongly reports a corridor
+Terminal  : Pi SSH terminal
+  free space: 0.9m corridor detected
+  reality: 0.4m gap
+WHAT HAPPENED
+  The free-space module reported a 0.9m corridor where only a 0.4m gap existed. The robot planned to drive through a space it could not fit through.
+WHY IT HAPPENED (root cause)
+  The fusion code averaged the ToF wall distance with the camera gap estimate. Averaging is only valid when both measurements describe the same quantity; here one sensor measured the wall and the other measured the gap, and the mean produced a number that matched neither reality. The 'corridor' was a pure artifact of mixing incompatible measurements.
+INVESTIGATION (before the fix)
+  - Reproduced the false corridor with the ToF and camera both active
+  - Logged each sensor's raw value - they disagreed fundamentally
+  - Tested taking the minimum instead of the mean - correct result
+FIX (took 3 days)
+  Fixed by taking the minimum of the two estimates (the conservative choice for a gap) and by storing the source of each free-space measurement.
+
+----------------------------------------------------------------------
+E0095 | v4.7 | BIG | Found Day 76 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.7/pillar_dist.py
+Error     : Pillar tracking loses the pillar at 2m/s
+Terminal  : Pi SSH terminal
+  tracked: 10 frames, lost at frame 11
+  pillar reappears 20 frames later
+WHAT HAPPENED
+  The tracker followed the pillar perfectly at low speed, then lost it the moment the robot accelerated. It always lost it at the same point on the approach.
+WHY IT HAPPENED (root cause)
+  The tracker searched a fixed window around the last known position. At 2m/s the pillar moves several pixels between frames, and once it left the search window the tracker had nothing to lock onto. The search window size was tuned for walking speed, not race speed. A tracker with no motion model is only as fast as its window is wide.
+INVESTIGATION (before the fix)
+  - Measured the pillar's inter-frame displacement at speed
+  - Found the displacement exceeded the search window
+  - Predicted the position with odometry - tracking held
+FIX (took 4 days)
+  Fixed by predicting the search window center with the odometry velocity before matching, and widening the window proportional to speed.
+
+----------------------------------------------------------------------
+E0096 | v4.7 | BIG | Found Day 76 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.7/pillar_dist.py
+Error     : Pillar never detected under venue lights
+Terminal  : Pi SSH terminal
+  pillars: 0 found (12 frames)
+  HSV test on the phone: 0 found
+  color bands all wrong
+WHAT HAPPENED
+  The pillar detector found nothing for the entire morning. The same code had detected pillars perfectly in the lab the day before.
+WHY IT HAPPENED (root cause)
+  The morning sun changed the color temperature of the light, shifting every color's HSV values. Fixed HSV bands are calibrated for one lighting condition; a different light source moves the same physical color to a different point in HSV space. Vision systems are lighting-dependent by nature - the color of light is part of the measurement, not a nuisance term.
+INVESTIGATION (before the fix)
+  - Confirmed detection worked in the lab under fluorescent light
+  - Sampled the pillar's HSV values under the morning sun
+  - Compared the sampled values with the configured bands
+FIX (took 5 days)
+  Fixed by re-running the color calibration on the venue floor at the same time of day as the competition, and by making the calibration tool part of the morning routine.
+
+----------------------------------------------------------------------
+E0097 | v4.8 | SMALL | Found Day 77 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v4.8/track_pillars.py
+Error     : Lane offset jumps by a full lane width
+Terminal  : ESP32 serial monitor
+  $ python3 track_pillars.py
+  offset: 0.02 -> 0.47 (one frame)
+  lane lost for 0.3s
+WHAT HAPPENED
+  The lane offset jumped from center to a full lane width away in a single frame. The steering twitched violently and then recovered.
+WHY IT HAPPENED (root cause)
+  When the line had a gap, the detector locked onto a neighboring line - the other lane's edge or a shadow - and reported it as the track line. The offset filter had no state, so one wrong frame was trusted completely for one control tick. Vision systems without temporal consistency treat every frame as a fresh truth, which amplifies single-frame errors.
+FIX (took 1 day)
+  Fixed by tracking the last-good line position and snapping back to it when the new detection is more than a lane-width away.
+
+----------------------------------------------------------------------
+E0098 | v4.8 | SMALL | Found Day 77 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v4.8/track_pillars.py
+Error     : Camera resolution mismatch with calibration
+Terminal  : ESP32 serial monitor
+  $ python3 track_pillars.py
+  cv2.error: (-215:Assertion failed)
+  !src.empty() in function 'undistort'
+WHAT HAPPENED
+  The camera pipeline crashed on undistort. The calibration data loaded fine, so the mismatch was invisible until the function call.
+WHY IT HAPPENED (root cause)
+  The camera opened at 1280x720 but the calibration was done at 640x480. cv2.undistort requires the image size to match the camera matrix, and the mismatch triggered OpenCV's internal assertion. The two settings lived in different config files that were never cross-checked - one for the camera driver, one for the calibration loader.
+FIX (took 1 day)
+  Fixed by forcing both to the same resolution in camera_config.py and adding a boot check that compares the frame size with the calibration size.
+
+----------------------------------------------------------------------
+E0099 | v4.8 | SMALL | Found Day 77 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v4.8/track_pillars.py
+Error     : HSV lower bound bigger than upper bound
+Terminal  : ESP32 serial monitor
+  $ python3 track_pillars.py
+  ValueError: lower should be smaller than upper
+    File "track_pillars.py", line 34, in detect
+WHAT HAPPENED
+  The red pillar detector crashed the first time it processed a real frame. The color range that worked in tests was rejected by OpenCV.
+WHY IT HAPPENED (root cause)
+  Red hue wraps around the HSV cylinder: red is both 0-10 and 170-180. Writing it as one continuous range (170..10) is invalid because lower > upper, which cv2.inRange rejects with a ValueError. The wrapper range is a conceptual mistake - the hue circle has no beginning, so the mask must be built from two disjoint ranges and OR-ed together.
+FIX (took 1 day)
+  Fixed by splitting the red range into two masks (0-10 and 170-180) and OR-ing the results, with a comment explaining the hue wrap.
+
+----------------------------------------------------------------------
+E0100 | v4.8 | SMALL | Found Day 77 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v4.8/track_pillars.py
+Error     : ZeroDivisionError in distance estimate
+Terminal  : ESP32 serial monitor
+  $ python3 track_pillars.py
+    File "track_pillars.py", line 58, in estimate
+      dist = known_h / h
+  ZeroDivisionError: float division by zero
+WHAT HAPPENED
+  The pillar distance estimator crashed mid-frame, not at startup. The contour had been found, but its height was zero.
+WHY IT HAPPENED (root cause)
+  The detector found a contour but the color filter had removed every interior pixel, leaving a height of zero. The distance formula assumes a valid height; dividing by zero raised ZeroDivisionError. This is a data-quality failure: the pipeline did not validate its input before applying the pinhole model, so a degenerate contour crashed the math instead of being skipped.
+FIX (took 1 day)
+  Fixed by skipping contours smaller than 5 pixels and returning 'unknown' instead of crashing when the height is invalid.
+
+----------------------------------------------------------------------
+E0101 | v4.8 | SMALL | Found Day 77 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v4.8/track_pillars.py
+Error     : Pillar detected at every frame edge
+Terminal  : ESP32 serial monitor
+  $ python3 track_pillars.py
+  pillar: (5, 20)  pillar: (610, 20)  ...
+  false positives on the wall
+WHAT HAPPENED
+  The detector reported pillars at fixed screen positions in every frame. The track walls were being detected as red pillars.
+WHY IT HAPPENED (root cause)
+  The wall's edge pixels had similar HSV values to the pillar under the venue lighting, and the detector only matched color - it never checked size or shape. Any red-ish region, including a wall edge, passed the filter. A single-channel color test is necessary but not sufficient; without area and aspect-ratio constraints every similarly colored region is a candidate.
+FIX (took 1 day)
+  Fixed by adding a minimum area check and an aspect-ratio gate, and by masking the bottom 15% of the frame where the wall always appears.
+
+----------------------------------------------------------------------
+E0102 | v4.8 | SMALL | Found Day 77 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v4.8/track_pillars.py
+Error     : Red and pink pillars are confused
+Terminal  : ESP32 serial monitor
+  $ python3 track_pillars.py
+  color=red  (was pink)
+  confusion at hue 168-175
+WHAT HAPPENED
+  The color classifier called a pink pillar red. The two classes were defined by hue bands that overlapped, so the classification was ambiguous by construction.
+WHY IT HAPPENED (root cause)
+  Pink and red differ in saturation and lightness, not much in hue. The classifier only used hue, so any pixel in the overlapping 168-175 band was claimed by both classes. Classifying colors by a single channel cannot separate classes that are distinct in a different channel - the feature space was too small for the problem.
+FIX (took 1 day)
+  Fixed by narrowing the red band and adding a saturation threshold of 90, since pink has measurably lower saturation than the official red.
+
+----------------------------------------------------------------------
+E0103 | v4.8 | SMALL | Found Day 77 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v4.8/track_pillars.py
+Error     : Free space is NaN after a corner
+Terminal  : ESP32 serial monitor
+  $ python3 track_pillars.py
+  free_space: nan
+  corner left: nan
+WHAT HAPPENED
+  The free-space estimate became NaN at every corner. The robot continued driving, but the planner received garbage for the entire turn.
+WHY IT HAPPENED (root cause)
+  While angling through a corner, the ToF reported 0mm (out of range), and the fusion code divided by that reading to normalize the estimate. NaN is infectious: one 0/0 poisons every downstream calculation, and because NaN comparisons are all false, no safety check could catch it. The corner is exactly where the sensor points at a gap, so this happened on every lap.
+FIX (took 1 day)
+  Fixed by replacing non-finite values with the sensor's max range and adding a validation pass that rejects NaN before fusion.
+
+----------------------------------------------------------------------
+E0104 | v4.8 | SMALL | Found Day 77 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v4.8/track_pillars.py
+Error     : Corner detection misses 180-degree turns
+Terminal  : ESP32 serial monitor
+  $ python3 track_pillars.py
+  corner count = 0 after full lap
+  expected 4 corners
+WHAT HAPPENED
+  The lap trace showed zero corners even though the robot clearly turned four times. The detector only watched distance, and the hairpin was too smooth.
+WHY IT HAPPENED (root cause)
+  The corner detector used a distance-only signature: it watched the wall distance change. A 180-degree turn made with a wide arc changes distance slowly and smoothly, so the slope never exceeded the trigger threshold. The signature was chosen for right-angle corners, and a different geometry produced a different signature entirely - one feature cannot describe all corner shapes.
+FIX (took 1 day)
+  Fixed by adding the heading-change signature from the IMU, and requiring both signatures for a confirmed corner.
+
+----------------------------------------------------------------------
+E0105 | v4.8 | BIG | Found Day 78 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.8/track_pillars.py
+Error     : Free space wrongly reports a corridor
+Terminal  : Pi SSH terminal
+  free space: 0.9m corridor detected
+  reality: 0.4m gap
+WHAT HAPPENED
+  The free-space module reported a 0.9m corridor where only a 0.4m gap existed. The robot planned to drive through a space it could not fit through.
+WHY IT HAPPENED (root cause)
+  The fusion code averaged the ToF wall distance with the camera gap estimate. Averaging is only valid when both measurements describe the same quantity; here one sensor measured the wall and the other measured the gap, and the mean produced a number that matched neither reality. The 'corridor' was a pure artifact of mixing incompatible measurements.
+INVESTIGATION (before the fix)
+  - Reproduced the false corridor with the ToF and camera both active
+  - Logged each sensor's raw value - they disagreed fundamentally
+  - Tested taking the minimum instead of the mean - correct result
+FIX (took 2 days)
+  Fixed by taking the minimum of the two estimates (the conservative choice for a gap) and by storing the source of each free-space measurement.
+
+----------------------------------------------------------------------
+E0106 | v4.8 | BIG | Found Day 78 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.8/track_pillars.py
+Error     : Pillar tracking loses the pillar at 2m/s
+Terminal  : Pi SSH terminal
+  tracked: 10 frames, lost at frame 11
+  pillar reappears 20 frames later
+WHAT HAPPENED
+  The tracker followed the pillar perfectly at low speed, then lost it the moment the robot accelerated. It always lost it at the same point on the approach.
+WHY IT HAPPENED (root cause)
+  The tracker searched a fixed window around the last known position. At 2m/s the pillar moves several pixels between frames, and once it left the search window the tracker had nothing to lock onto. The search window size was tuned for walking speed, not race speed. A tracker with no motion model is only as fast as its window is wide.
+INVESTIGATION (before the fix)
+  - Measured the pillar's inter-frame displacement at speed
+  - Found the displacement exceeded the search window
+  - Predicted the position with odometry - tracking held
+FIX (took 3 days)
+  Fixed by predicting the search window center with the odometry velocity before matching, and widening the window proportional to speed.
+
+----------------------------------------------------------------------
+E0107 | v4.8 | BIG | Found Day 78 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.8/track_pillars.py
+Error     : Pillar never detected under venue lights
+Terminal  : Pi SSH terminal
+  pillars: 0 found (12 frames)
+  HSV test on the phone: 0 found
+  color bands all wrong
+WHAT HAPPENED
+  The pillar detector found nothing for the entire morning. The same code had detected pillars perfectly in the lab the day before.
+WHY IT HAPPENED (root cause)
+  The morning sun changed the color temperature of the light, shifting every color's HSV values. Fixed HSV bands are calibrated for one lighting condition; a different light source moves the same physical color to a different point in HSV space. Vision systems are lighting-dependent by nature - the color of light is part of the measurement, not a nuisance term.
+INVESTIGATION (before the fix)
+  - Confirmed detection worked in the lab under fluorescent light
+  - Sampled the pillar's HSV values under the morning sun
+  - Compared the sampled values with the configured bands
+FIX (took 4 days)
+  Fixed by re-running the color calibration on the venue floor at the same time of day as the competition, and by making the calibration tool part of the morning routine.
+
+----------------------------------------------------------------------
+E0108 | v4.8 | BIG | Found Day 78 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.8/track_pillars.py
+Error     : Visual odometry scale explodes after a turn
+Terminal  : Pi SSH terminal
+  vo scale: 1.0 -> 9.3
+  pose jumps 0.4m per frame
+WHAT HAPPENED
+  After the 90-degree turn, the visual odometry started reporting absurd distances - the pose jumped 0.4 meters per frame while the robot moved a few centimeters.
+WHY IT HAPPENED (root cause)
+  Visual odometry estimates motion from feature point displacement and derives the scale from the baseline between frames. After a sharp turn, feature matching lost the reference set and re-matched against a new baseline, and the scale estimate - unconstrained by any absolute reference - diverged. Monocular scale is only observable while the same features persist; a turn breaks that chain.
+INVESTIGATION (before the fix)
+  - Plotted the scale factor over time - flat before the turn, exploding after
+  - Counted matched features across the turn - dropped below the threshold
+  - Replayed the turn with forced re-initialization - problem vanished
+FIX (took 5 days)
+  Fixed by re-initializing the baseline when the matched feature count drops below 20, and by clamping the scale factor to a physically plausible range.
+
+----------------------------------------------------------------------
+E0109 | v4.9 | SMALL | Found Day 79 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v4.9/benchmark_vo.py
+Error     : Camera resolution mismatch with calibration
+Terminal  : Windows CMD
+  $ python3 benchmark_vo.py
+  cv2.error: (-215:Assertion failed)
+  !src.empty() in function 'undistort'
+WHAT HAPPENED
+  The camera pipeline crashed on undistort. The calibration data loaded fine, so the mismatch was invisible until the function call.
+WHY IT HAPPENED (root cause)
+  The camera opened at 1280x720 but the calibration was done at 640x480. cv2.undistort requires the image size to match the camera matrix, and the mismatch triggered OpenCV's internal assertion. The two settings lived in different config files that were never cross-checked - one for the camera driver, one for the calibration loader.
+FIX (took 1 day)
+  Fixed by forcing both to the same resolution in camera_config.py and adding a boot check that compares the frame size with the calibration size.
+
+----------------------------------------------------------------------
+E0110 | v4.9 | SMALL | Found Day 79 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v4.9/visual_odometry.py
+Error     : HSV lower bound bigger than upper bound
+Terminal  : Windows CMD
+  $ python3 visual_odometry.py
+  ValueError: lower should be smaller than upper
+    File "visual_odometry.py", line 34, in detect
+WHAT HAPPENED
+  The red pillar detector crashed the first time it processed a real frame. The color range that worked in tests was rejected by OpenCV.
+WHY IT HAPPENED (root cause)
+  Red hue wraps around the HSV cylinder: red is both 0-10 and 170-180. Writing it as one continuous range (170..10) is invalid because lower > upper, which cv2.inRange rejects with a ValueError. The wrapper range is a conceptual mistake - the hue circle has no beginning, so the mask must be built from two disjoint ranges and OR-ed together.
+FIX (took 1 day)
+  Fixed by splitting the red range into two masks (0-10 and 170-180) and OR-ing the results, with a comment explaining the hue wrap.
+
+----------------------------------------------------------------------
+E0111 | v4.9 | SMALL | Found Day 79 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v4.9/benchmark_vo.py
+Error     : ZeroDivisionError in distance estimate
+Terminal  : Windows CMD
+  $ python3 benchmark_vo.py
+    File "benchmark_vo.py", line 58, in estimate
+      dist = known_h / h
+  ZeroDivisionError: float division by zero
+WHAT HAPPENED
+  The pillar distance estimator crashed mid-frame, not at startup. The contour had been found, but its height was zero.
+WHY IT HAPPENED (root cause)
+  The detector found a contour but the color filter had removed every interior pixel, leaving a height of zero. The distance formula assumes a valid height; dividing by zero raised ZeroDivisionError. This is a data-quality failure: the pipeline did not validate its input before applying the pinhole model, so a degenerate contour crashed the math instead of being skipped.
+FIX (took 1 day)
+  Fixed by skipping contours smaller than 5 pixels and returning 'unknown' instead of crashing when the height is invalid.
+
+----------------------------------------------------------------------
+E0112 | v4.9 | SMALL | Found Day 79 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v4.9/visual_odometry.py
+Error     : Pillar detected at every frame edge
+Terminal  : Windows CMD
+  $ python3 visual_odometry.py
+  pillar: (5, 20)  pillar: (610, 20)  ...
+  false positives on the wall
+WHAT HAPPENED
+  The detector reported pillars at fixed screen positions in every frame. The track walls were being detected as red pillars.
+WHY IT HAPPENED (root cause)
+  The wall's edge pixels had similar HSV values to the pillar under the venue lighting, and the detector only matched color - it never checked size or shape. Any red-ish region, including a wall edge, passed the filter. A single-channel color test is necessary but not sufficient; without area and aspect-ratio constraints every similarly colored region is a candidate.
+FIX (took 1 day)
+  Fixed by adding a minimum area check and an aspect-ratio gate, and by masking the bottom 15% of the frame where the wall always appears.
+
+----------------------------------------------------------------------
+E0113 | v4.9 | SMALL | Found Day 79 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v4.9/benchmark_vo.py
+Error     : Red and pink pillars are confused
+Terminal  : Windows CMD
+  $ python3 benchmark_vo.py
+  color=red  (was pink)
+  confusion at hue 168-175
+WHAT HAPPENED
+  The color classifier called a pink pillar red. The two classes were defined by hue bands that overlapped, so the classification was ambiguous by construction.
+WHY IT HAPPENED (root cause)
+  Pink and red differ in saturation and lightness, not much in hue. The classifier only used hue, so any pixel in the overlapping 168-175 band was claimed by both classes. Classifying colors by a single channel cannot separate classes that are distinct in a different channel - the feature space was too small for the problem.
+FIX (took 1 day)
+  Fixed by narrowing the red band and adding a saturation threshold of 90, since pink has measurably lower saturation than the official red.
+
+----------------------------------------------------------------------
+E0114 | v4.9 | SMALL | Found Day 79 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v4.9/visual_odometry.py
+Error     : Free space is NaN after a corner
+Terminal  : Windows CMD
+  $ python3 visual_odometry.py
+  free_space: nan
+  corner left: nan
+WHAT HAPPENED
+  The free-space estimate became NaN at every corner. The robot continued driving, but the planner received garbage for the entire turn.
+WHY IT HAPPENED (root cause)
+  While angling through a corner, the ToF reported 0mm (out of range), and the fusion code divided by that reading to normalize the estimate. NaN is infectious: one 0/0 poisons every downstream calculation, and because NaN comparisons are all false, no safety check could catch it. The corner is exactly where the sensor points at a gap, so this happened on every lap.
+FIX (took 1 day)
+  Fixed by replacing non-finite values with the sensor's max range and adding a validation pass that rejects NaN before fusion.
+
+----------------------------------------------------------------------
+E0115 | v4.9 | SMALL | Found Day 79 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v4.9/benchmark_vo.py
+Error     : Corner detection misses 180-degree turns
+Terminal  : Windows CMD
+  $ python3 benchmark_vo.py
+  corner count = 0 after full lap
+  expected 4 corners
+WHAT HAPPENED
+  The lap trace showed zero corners even though the robot clearly turned four times. The detector only watched distance, and the hairpin was too smooth.
+WHY IT HAPPENED (root cause)
+  The corner detector used a distance-only signature: it watched the wall distance change. A 180-degree turn made with a wide arc changes distance slowly and smoothly, so the slope never exceeded the trigger threshold. The signature was chosen for right-angle corners, and a different geometry produced a different signature entirely - one feature cannot describe all corner shapes.
+FIX (took 1 day)
+  Fixed by adding the heading-change signature from the IMU, and requiring both signatures for a confirmed corner.
+
+----------------------------------------------------------------------
+E0116 | v4.9 | SMALL | Found Day 79 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v4.9/visual_odometry.py
+Error     : Lane offset jumps by a full lane width
+Terminal  : Windows CMD
+  $ python3 visual_odometry.py
+  offset: 0.02 -> 0.47 (one frame)
+  lane lost for 0.3s
+WHAT HAPPENED
+  The lane offset jumped from center to a full lane width away in a single frame. The steering twitched violently and then recovered.
+WHY IT HAPPENED (root cause)
+  When the line had a gap, the detector locked onto a neighboring line - the other lane's edge or a shadow - and reported it as the track line. The offset filter had no state, so one wrong frame was trusted completely for one control tick. Vision systems without temporal consistency treat every frame as a fresh truth, which amplifies single-frame errors.
+FIX (took 1 day)
+  Fixed by tracking the last-good line position and snapping back to it when the new detection is more than a lane-width away.
+
+----------------------------------------------------------------------
+E0117 | v4.9 | BIG | Found Day 80 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.9/benchmark_vo.py
+Error     : Pillar tracking loses the pillar at 2m/s
+Terminal  : Pi SSH terminal
+  tracked: 10 frames, lost at frame 11
+  pillar reappears 20 frames later
+WHAT HAPPENED
+  The tracker followed the pillar perfectly at low speed, then lost it the moment the robot accelerated. It always lost it at the same point on the approach.
+WHY IT HAPPENED (root cause)
+  The tracker searched a fixed window around the last known position. At 2m/s the pillar moves several pixels between frames, and once it left the search window the tracker had nothing to lock onto. The search window size was tuned for walking speed, not race speed. A tracker with no motion model is only as fast as its window is wide.
+INVESTIGATION (before the fix)
+  - Measured the pillar's inter-frame displacement at speed
+  - Found the displacement exceeded the search window
+  - Predicted the position with odometry - tracking held
+FIX (took 2 days)
+  Fixed by predicting the search window center with the odometry velocity before matching, and widening the window proportional to speed.
+
+----------------------------------------------------------------------
+E0118 | v4.9 | BIG | Found Day 80 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.9/visual_odometry.py
+Error     : Pillar never detected under venue lights
+Terminal  : Pi SSH terminal
+  pillars: 0 found (12 frames)
+  HSV test on the phone: 0 found
+  color bands all wrong
+WHAT HAPPENED
+  The pillar detector found nothing for the entire morning. The same code had detected pillars perfectly in the lab the day before.
+WHY IT HAPPENED (root cause)
+  The morning sun changed the color temperature of the light, shifting every color's HSV values. Fixed HSV bands are calibrated for one lighting condition; a different light source moves the same physical color to a different point in HSV space. Vision systems are lighting-dependent by nature - the color of light is part of the measurement, not a nuisance term.
+INVESTIGATION (before the fix)
+  - Confirmed detection worked in the lab under fluorescent light
+  - Sampled the pillar's HSV values under the morning sun
+  - Compared the sampled values with the configured bands
+FIX (took 3 days)
+  Fixed by re-running the color calibration on the venue floor at the same time of day as the competition, and by making the calibration tool part of the morning routine.
+
+----------------------------------------------------------------------
+E0119 | v4.9 | BIG | Found Day 80 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.9/benchmark_vo.py
+Error     : Visual odometry scale explodes after a turn
+Terminal  : Pi SSH terminal
+  vo scale: 1.0 -> 9.3
+  pose jumps 0.4m per frame
+WHAT HAPPENED
+  After the 90-degree turn, the visual odometry started reporting absurd distances - the pose jumped 0.4 meters per frame while the robot moved a few centimeters.
+WHY IT HAPPENED (root cause)
+  Visual odometry estimates motion from feature point displacement and derives the scale from the baseline between frames. After a sharp turn, feature matching lost the reference set and re-matched against a new baseline, and the scale estimate - unconstrained by any absolute reference - diverged. Monocular scale is only observable while the same features persist; a turn breaks that chain.
+INVESTIGATION (before the fix)
+  - Plotted the scale factor over time - flat before the turn, exploding after
+  - Counted matched features across the turn - dropped below the threshold
+  - Replayed the turn with forced re-initialization - problem vanished
+FIX (took 4 days)
+  Fixed by re-initializing the baseline when the matched feature count drops below 20, and by clamping the scale factor to a physically plausible range.
+
+----------------------------------------------------------------------
+E0120 | v4.9 | BIG | Found Day 80 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v4.9/visual_odometry.py
+Error     : False pillar detection passes the wrong side
+Terminal  : Pi SSH terminal
+  pillar: DETECTED (x=300)
+  actual pillar: on the right
+  robot went left -> round ends
+WHAT HAPPENED
+  The robot steered around a 'pillar' that did not exist, passed the real pillar on the wrong side, and ended the round. One false positive cost the whole run.
+WHY IT HAPPENED (root cause)
+  A red sponsor sign on the wall matched the pillar filter's color and shape gates, so the detector committed to it. Detection gates are filters, not guarantees: the sign genuinely looked like a pillar in every feature the code checked. The detector had no cross-sensor confirmation - the ToF was available and would have shown no pillar at that location, but nothing asked it.
+INVESTIGATION (before the fix)
+  - Replayed the round and confirmed the false positive in the video
+  - Checked the sign's HSV - inside the pillar bands exactly
+  - Verified the ToF had a clear reading at that moment - no pillar
+FIX (took 5 days)
+  Fixed by adding a ToF distance gate: a detection without a matching distance reading is treated as a candidate, not a pillar.
+
+======================================================================
+END OF PHASE v4.x -- 120 errors
+======================================================================

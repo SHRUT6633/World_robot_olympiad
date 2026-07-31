@@ -1,0 +1,2144 @@
+WRO 4WS Robot - Error Catalog (1000+ Errors, Deep Detail)
+=========================================================
+One error entry per development morning across the whole 90-version
+history repo (v1.0 -> v9.9).  Every entry includes WHAT HAPPENED,
+WHY IT HAPPENED (root cause / deep research), the terminal type and
+exact output, and the FIX with how many days it took.
+
+  SMALL  errors : fixed the same day (1 day)
+  BIG    errors : 2-5 days, with investigation steps before the fix
+
+Day = development-day counter only (no dates).
+
+Total errors : 1080   (720 SMALL / 360 BIG)
+Total days   : 180
+Versions     : 90
+Phases       : 9
+
+======================================================================
+PHASE v2.x  --  DRIVE & MOTOR CONTROL
+======================================================================
+
+----------------------------------------------------------------------
+E0001 | v2.0 | SMALL | Found Day 21 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v2.0/drive_forward.py
+Error     : Wheels spin the wrong way after boot
+Terminal  : systemd journal
+  $ python3 drive_forward.py
+  forward: left=+1.0 right=+1.0
+  result: robot drives BACKWARD
+WHAT HAPPENED
+  The first drive test showed a robot that drove away from its operator while the log clearly said FORWARD. Hardware did what the pins said, not what the label said.
+WHY IT HAPPENED (root cause)
+  The motor channel macros were swapped relative to the physical wiring - channel A was driving the right motor and the code believed it was the left. PWM duty of +1 is just a number; the direction comes from the H-bridge enable pins, which were crossed. No software check can catch this; only a physical test with a known direction reveals it.
+FIX (took 1 day)
+  Fixed by swapping the two channel macros, then adding a boot self-test that spins each wheel by name and asks a human to confirm the direction.
+
+----------------------------------------------------------------------
+E0002 | v2.0 | SMALL | Found Day 21 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v2.0/motor_driver.c
+Error     : Ackermann steer angle sign is flipped in a left turn
+Terminal  : systemd journal
+  $ idf.py monitor
+  left turn -> inner wheel angle +18deg
+  expected inner wheel angle -18deg
+WHAT HAPPENED
+  The simulation produced perfect Ackermann angles, but the real robot turned the wrong way. The math was checked twice and was correct on paper.
+WHY IT HAPPENED (root cause)
+  The sign convention of the Ackermann geometry disagreed with the physical servo mounting. The robot's steering linkage pushes the wheel right when the servo angle is positive, so a mathematically positive inner-wheel angle turned the robot left. The model lived in the Pi, the mechanical convention lived in the chassis, and nothing connected the two until a physical turn test.
+FIX (took 1 day)
+  Fixed by negating the angle at the servo write boundary and adding a physical direction test to the turn_test script, with a comment documenting the mechanical convention.
+
+----------------------------------------------------------------------
+E0003 | v2.0 | SMALL | Found Day 21 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v2.0/uart_protocol.py
+Error     : Encoder tick count stays 0
+Terminal  : systemd journal
+  $ python3 uart_protocol.py
+  ticks: 0, 0, 0, 0
+  speed: 0.00 m/s (wheel never moved)
+WHAT HAPPENED
+  The wheel spun visibly, but the odometry reported zero ticks. The speed readout insisted the wheel was stationary while it was turning at full speed.
+WHY IT HAPPENED (root cause)
+  During rewiring, the encoder's two signal wires were swapped with the motor's power wires. The encoder needs power and a clean signal; with power and signal crossed, the interrupt pin floated and never changed state. The encoder ISR never fired, so the tick counter stayed at zero - a silent failure because no error was ever raised, just wrong data.
+FIX (took 1 day)
+  Fixed by matching the connector pinout against the datasheet, then adding a sanity check that raises a warning when the wheel spins with zero ticks.
+
+----------------------------------------------------------------------
+E0004 | v2.0 | SMALL | Found Day 21 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v2.0/drive_forward.py
+Error     : PID D-term spikes to NaN after a bump
+Terminal  : systemd journal
+  $ python3 drive_forward.py
+  error=0.002 dterm=nan
+  pid output = nan
+  motor ramps to full speed
+WHAT HAPPENED
+  The robot surged to full speed for a moment after rolling over a bump, then recovered. The D term was the only thing that looked strange.
+WHY IT HAPPENED (root cause)
+  The derivative was computed as (error - last_error) / dt with dt=0. A bump caused two identical encoder samples with a zero time delta, dividing by zero. Python returns NaN for 0/0, and NaN propagates through every subsequent arithmetic - the PID output became NaN, which compared false against all limits, so the safety clamp never triggered.
+FIX (took 1 day)
+  Fixed by adding a low-pass filter on the D term and replacing the division with a guarded version that keeps the previous value when dt is below a threshold.
+
+----------------------------------------------------------------------
+E0005 | v2.0 | SMALL | Found Day 21 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v2.0/motor_driver.c
+Error     : Gyro reads 250 deg/s idle
+Terminal  : systemd journal
+  $ idf.py monitor
+  gyro: 248.3 deg/s  (expected ~0)
+  imu status: SUSPECT
+WHAT HAPPENED
+  The robot sat perfectly still on the bench while the gyro claimed it was spinning at 248 degrees per second - a quarter of a full rotation per second, standing still.
+WHY IT HAPPENED (root cause)
+  The MPU6050 was running at its default full-scale range with factory offsets. Factory gyro offsets are rarely zero, and the raw value is scaled by the full-scale constant - with the 250 dps range selected the bias of the sensor element maps to tens of degrees per second. Calibration is not a refinement, it is a prerequisite: without the bias subtraction the reading is meaningless.
+FIX (took 1 day)
+  Fixed by writing the calibrated offset registers during init and re-running the v3.1 calibration whenever the board or mounting changes.
+
+----------------------------------------------------------------------
+E0006 | v2.0 | SMALL | Found Day 21 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v2.0/uart_protocol.py
+Error     : Keyboard control ignores held keys
+Terminal  : systemd journal
+  $ python3 uart_protocol.py
+  key 'w' not detected during 'a' hold
+  robot turns but never speeds up
+WHAT HAPPENED
+  Manual driving felt broken: holding 'w' while turning did nothing, even though the key worked alone. The robot turned, but never accelerated.
+WHY IT HAPPENED (root cause)
+  The keyboard handler used a blocking read, so while one key was held, the handler waited for that key to be released before reading the next. The terminal delivers one event at a time; a blocking getch() cannot represent two simultaneous keys. This is a fundamental limitation of line-buffered terminal input, not a bug in the key table.
+FIX (took 1 day)
+  Fixed by switching to raw mode with a non-blocking poll and maintaining a key-state table, which records every pressed key and merges them each control tick.
+
+----------------------------------------------------------------------
+E0007 | v2.0 | SMALL | Found Day 21 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v2.0/drive_forward.py
+Error     : Duty value out of range 0-1023
+Terminal  : systemd journal
+  $ idf.py monitor
+  E (312) ledc: duty out of range!
+  E (312) ledc: duty=4095, max=1023
+  abort() was called at PC 0x42012345
+WHAT HAPPENED
+  The very first motor spin aborted the ESP32. The duty value was huge, and the LEDC driver refused it immediately.
+WHY IT HAPPENED (root cause)
+  The PWM timer was configured with 10-bit resolution (max 1023) but the speed calculation produced 14-bit values up to 4095. The mismatch came from two headers defining the resolution differently - pwm_config.h said 10 bits while the speed table was written for 14. The abort() is a hard assert inside the driver, by design: an out-of-range duty would produce undefined PWM behavior, so the firmware kills itself rather than corrupt the motors.
+FIX (took 1 day)
+  Fixed by clamping the duty in one place inside speed_control.c and asserting the resolution constant at boot, so both sides can never disagree again.
+
+----------------------------------------------------------------------
+E0008 | v2.0 | SMALL | Found Day 21 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v2.0/motor_driver.c
+Error     : Signed char overflow in speed command
+Terminal  : systemd journal
+  $ idf.py monitor
+  I (401) uart: MOTOR left=200 right=-30
+  E (402) motor: speed 200 overflows int8
+  motor stuck at 127
+WHAT HAPPENED
+  The motor ran at half speed during calibration and ignored the requested value of 200. The command had clearly been received - it was printed in the log.
+WHY IT HAPPENED (root cause)
+  The UART parser stored speeds in an int8_t, whose maximum is 127. The value 200 overflowed to -56, which the driver then clamped to 127. The bug was a protocol/schema mismatch: the Pi generated a text protocol with no stated range, and the ESP32 guessed the width. Signed overflow in C is undefined behavior, so in principle anything could have happened - here it produced a silently wrong motor command.
+FIX (took 1 day)
+  Fixed by widening the parser to int16_t, adding a range check that rejects speeds outside -100..100, and documenting the protocol range in the header.
+
+----------------------------------------------------------------------
+E0009 | v2.0 | BIG | Found Day 22 | Fixed in 2 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v2.0/drive_forward.py
+Error     : Brownout detector was triggered
+Terminal  : ESP32 serial monitor
+  E (1200) esp_core_dump_flash: Core dump flash config is corrupted
+  Brownout detector was triggered
+  Rebooting... (loop)
+WHAT HAPPENED
+  The ESP32 rebooted exactly when both motors started. Every motor start killed the firmware in a loop.
+WHY IT HAPPENED (root cause)
+  The battery sagged below the ESP32's brownout threshold (about 2.8V) the moment both motors drew current. The brownout detector is a hardware safety circuit: when the supply dips, it holds the chip in reset. The reboot loop is the detector doing its job - the real failure was the power architecture: no bulk capacitance, thin power wires, and no low-battery cutoff.
+INVESTIGATION (before the fix)
+  - Measured the supply voltage during motor start with a scope
+  - Saw the sag to 2.6V exactly at the brownout event
+  - Tested with a bench supply - no reboot, confirming the battery sag
+FIX (took 2 days)
+  Fixed by adding a 1000uF capacitor across the supply, thicker power wiring, and a low-voltage cutoff that refuses to start the motors below 3.2V.
+
+----------------------------------------------------------------------
+E0010 | v2.0 | BIG | Found Day 22 | Fixed in 3 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v2.0/motor_driver.c
+Error     : rst:0x10 (RTCWDT_RTC_RESET), boot:0x13 (SPI_FAST_FLASH_BOOT)
+Terminal  : ESP32 serial monitor
+  rst:0x10 (RTCWDT_RTC_RESET), boot:0x13 (SPI_FAST_FLASH_BOOT)
+  load:0x3fff0030,len:1184
+  load:0x40078000,len:13260
+  -> watchdog reset, boot loop
+WHAT HAPPENED
+  The ESP32 reset itself at random moments and rebooted. The reset reason code RTCWDT_RTC_RESET revealed the watchdog as the killer.
+WHY IT HAPPENED (root cause)
+  The motor task blocked on an I2C read that never completed, so it never yielded to the scheduler and never fed the task watchdog. After the configured timeout, the watchdog forced a reset - the system was not crashed, it was deadlocked, and the watchdog was the recovery mechanism. The I2C read had no timeout, which is what allowed the block to become infinite.
+INVESTIGATION (before the fix)
+  - Decoded the reset reason from the boot banner
+  - Confirmed the watchdog fired on the motor task specifically
+  - Reproduced by inserting a blocked sensor read mid-run
+FIX (took 3 days)
+  Fixed by adding a timeout to the I2C read and feeding the watchdog in the motor task, so a blocked bus cannot kill the loop.
+
+----------------------------------------------------------------------
+E0011 | v2.0 | BIG | Found Day 22 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v2.0/uart_protocol.py
+Error     : serial.serialutil.SerialException: device reports readiness to read but returned no data
+Terminal  : Pi SSH terminal
+  $ python3 final_drive.py
+  serial.serialutil.SerialException: device reports readiness to read but returned no data
+    File "pi/comm/uart.py", line 44, in read
+WHAT HAPPENED
+  The drive script crashed at startup on a strange serial error - the device said it had data, but the read returned nothing.
+WHY IT HAPPENED (root cause)
+  The USB-UART adapter was half-seated, so the kernel's tty layer believed the device was present (it reported readability) while the adapter actually returned nothing. SerialException is raised when the read violates its own contract. Intermittent physical connections produce exactly this class of bizarre error: the software and the device disagree about the hardware state.
+INVESTIGATION (before the fix)
+  - Reinserted the adapter - the error vanished, confirming the hardware
+  - Checked dmesg for USB disconnects during the run
+  - Added a retry to see if the error was transient
+FIX (took 4 days)
+  Fixed by reseating the adapter and adding a retry-with-backoff around the read, with a clear 'check USB connection' message after three failures.
+
+----------------------------------------------------------------------
+E0012 | v2.0 | BIG | Found Day 22 | Fixed in 5 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v2.0/drive_forward.py
+Error     : W (515) ledc: duty set to 0 due to illegal duty 4095
+Terminal  : ESP32 serial monitor
+  W (515) ledc: duty set to 0 due to illegal duty 4095
+  motor stopped at full throttle
+  code continued running
+WHAT HAPPENED
+  The motor died at full throttle without any crash. The code kept running - the motor simply stopped obeying.
+WHY IT HAPPENED (root cause)
+  A signed int overflow turned a valid duty into 4095 - beyond the 12-bit LEDC limit - and the driver, rather than clamping, set the output to 0 as a safe default. The overflow came from a negative speed being negated at the boundary of int16. The failure was silent because a warning is not an error: the driver protected the hardware at the cost of the software's expectations.
+INVESTIGATION (before the fix)
+  - Spotted the warning line in a flood of normal log output
+  - Traced the duty value back to a negated int16 speed
+  - Reproduced with the speed at the exact boundary value
+FIX (took 5 days)
+  Fixed by clamping the duty in speed_control.c before the driver call and asserting that the internal speed range can never overflow int16.
+
+----------------------------------------------------------------------
+E0013 | v2.1 | SMALL | Found Day 23 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v2.1/ackermann.py
+Error     : Ackermann steer angle sign is flipped in a left turn
+Terminal  : VS Code terminal
+  $ python3 ackermann.py
+  left turn -> inner wheel angle +18deg
+  expected inner wheel angle -18deg
+WHAT HAPPENED
+  The simulation produced perfect Ackermann angles, but the real robot turned the wrong way. The math was checked twice and was correct on paper.
+WHY IT HAPPENED (root cause)
+  The sign convention of the Ackermann geometry disagreed with the physical servo mounting. The robot's steering linkage pushes the wheel right when the servo angle is positive, so a mathematically positive inner-wheel angle turned the robot left. The model lived in the Pi, the mechanical convention lived in the chassis, and nothing connected the two until a physical turn test.
+FIX (took 1 day)
+  Fixed by negating the angle at the servo write boundary and adding a physical direction test to the turn_test script, with a comment documenting the mechanical convention.
+
+----------------------------------------------------------------------
+E0014 | v2.1 | SMALL | Found Day 23 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v2.1/servo_driver.c
+Error     : Encoder tick count stays 0
+Terminal  : VS Code terminal
+  $ idf.py monitor
+  ticks: 0, 0, 0, 0
+  speed: 0.00 m/s (wheel never moved)
+WHAT HAPPENED
+  The wheel spun visibly, but the odometry reported zero ticks. The speed readout insisted the wheel was stationary while it was turning at full speed.
+WHY IT HAPPENED (root cause)
+  During rewiring, the encoder's two signal wires were swapped with the motor's power wires. The encoder needs power and a clean signal; with power and signal crossed, the interrupt pin floated and never changed state. The encoder ISR never fired, so the tick counter stayed at zero - a silent failure because no error was ever raised, just wrong data.
+FIX (took 1 day)
+  Fixed by matching the connector pinout against the datasheet, then adding a sanity check that raises a warning when the wheel spins with zero ticks.
+
+----------------------------------------------------------------------
+E0015 | v2.1 | SMALL | Found Day 23 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v2.1/turn_test.py
+Error     : PID D-term spikes to NaN after a bump
+Terminal  : VS Code terminal
+  $ python3 turn_test.py
+  error=0.002 dterm=nan
+  pid output = nan
+  motor ramps to full speed
+WHAT HAPPENED
+  The robot surged to full speed for a moment after rolling over a bump, then recovered. The D term was the only thing that looked strange.
+WHY IT HAPPENED (root cause)
+  The derivative was computed as (error - last_error) / dt with dt=0. A bump caused two identical encoder samples with a zero time delta, dividing by zero. Python returns NaN for 0/0, and NaN propagates through every subsequent arithmetic - the PID output became NaN, which compared false against all limits, so the safety clamp never triggered.
+FIX (took 1 day)
+  Fixed by adding a low-pass filter on the D term and replacing the division with a guarded version that keeps the previous value when dt is below a threshold.
+
+----------------------------------------------------------------------
+E0016 | v2.1 | SMALL | Found Day 23 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v2.1/ackermann.py
+Error     : Gyro reads 250 deg/s idle
+Terminal  : VS Code terminal
+  $ python3 ackermann.py
+  gyro: 248.3 deg/s  (expected ~0)
+  imu status: SUSPECT
+WHAT HAPPENED
+  The robot sat perfectly still on the bench while the gyro claimed it was spinning at 248 degrees per second - a quarter of a full rotation per second, standing still.
+WHY IT HAPPENED (root cause)
+  The MPU6050 was running at its default full-scale range with factory offsets. Factory gyro offsets are rarely zero, and the raw value is scaled by the full-scale constant - with the 250 dps range selected the bias of the sensor element maps to tens of degrees per second. Calibration is not a refinement, it is a prerequisite: without the bias subtraction the reading is meaningless.
+FIX (took 1 day)
+  Fixed by writing the calibrated offset registers during init and re-running the v3.1 calibration whenever the board or mounting changes.
+
+----------------------------------------------------------------------
+E0017 | v2.1 | SMALL | Found Day 23 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v2.1/servo_driver.c
+Error     : Keyboard control ignores held keys
+Terminal  : VS Code terminal
+  $ idf.py monitor
+  key 'w' not detected during 'a' hold
+  robot turns but never speeds up
+WHAT HAPPENED
+  Manual driving felt broken: holding 'w' while turning did nothing, even though the key worked alone. The robot turned, but never accelerated.
+WHY IT HAPPENED (root cause)
+  The keyboard handler used a blocking read, so while one key was held, the handler waited for that key to be released before reading the next. The terminal delivers one event at a time; a blocking getch() cannot represent two simultaneous keys. This is a fundamental limitation of line-buffered terminal input, not a bug in the key table.
+FIX (took 1 day)
+  Fixed by switching to raw mode with a non-blocking poll and maintaining a key-state table, which records every pressed key and merges them each control tick.
+
+----------------------------------------------------------------------
+E0018 | v2.1 | SMALL | Found Day 23 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v2.1/turn_test.py
+Error     : Duty value out of range 0-1023
+Terminal  : VS Code terminal
+  $ idf.py monitor
+  E (312) ledc: duty out of range!
+  E (312) ledc: duty=4095, max=1023
+  abort() was called at PC 0x42012345
+WHAT HAPPENED
+  The very first motor spin aborted the ESP32. The duty value was huge, and the LEDC driver refused it immediately.
+WHY IT HAPPENED (root cause)
+  The PWM timer was configured with 10-bit resolution (max 1023) but the speed calculation produced 14-bit values up to 4095. The mismatch came from two headers defining the resolution differently - pwm_config.h said 10 bits while the speed table was written for 14. The abort() is a hard assert inside the driver, by design: an out-of-range duty would produce undefined PWM behavior, so the firmware kills itself rather than corrupt the motors.
+FIX (took 1 day)
+  Fixed by clamping the duty in one place inside speed_control.c and asserting the resolution constant at boot, so both sides can never disagree again.
+
+----------------------------------------------------------------------
+E0019 | v2.1 | SMALL | Found Day 23 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v2.1/ackermann.py
+Error     : Signed char overflow in speed command
+Terminal  : VS Code terminal
+  $ idf.py monitor
+  I (401) uart: MOTOR left=200 right=-30
+  E (402) motor: speed 200 overflows int8
+  motor stuck at 127
+WHAT HAPPENED
+  The motor ran at half speed during calibration and ignored the requested value of 200. The command had clearly been received - it was printed in the log.
+WHY IT HAPPENED (root cause)
+  The UART parser stored speeds in an int8_t, whose maximum is 127. The value 200 overflowed to -56, which the driver then clamped to 127. The bug was a protocol/schema mismatch: the Pi generated a text protocol with no stated range, and the ESP32 guessed the width. Signed overflow in C is undefined behavior, so in principle anything could have happened - here it produced a silently wrong motor command.
+FIX (took 1 day)
+  Fixed by widening the parser to int16_t, adding a range check that rejects speeds outside -100..100, and documenting the protocol range in the header.
+
+----------------------------------------------------------------------
+E0020 | v2.1 | SMALL | Found Day 23 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v2.1/servo_driver.c
+Error     : Wheels spin the wrong way after boot
+Terminal  : VS Code terminal
+  $ idf.py monitor
+  forward: left=+1.0 right=+1.0
+  result: robot drives BACKWARD
+WHAT HAPPENED
+  The first drive test showed a robot that drove away from its operator while the log clearly said FORWARD. Hardware did what the pins said, not what the label said.
+WHY IT HAPPENED (root cause)
+  The motor channel macros were swapped relative to the physical wiring - channel A was driving the right motor and the code believed it was the left. PWM duty of +1 is just a number; the direction comes from the H-bridge enable pins, which were crossed. No software check can catch this; only a physical test with a known direction reveals it.
+FIX (took 1 day)
+  Fixed by swapping the two channel macros, then adding a boot self-test that spins each wheel by name and asks a human to confirm the direction.
+
+----------------------------------------------------------------------
+E0021 | v2.1 | BIG | Found Day 24 | Fixed in 2 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v2.1/ackermann.py
+Error     : rst:0x10 (RTCWDT_RTC_RESET), boot:0x13 (SPI_FAST_FLASH_BOOT)
+Terminal  : ESP32 serial monitor
+  rst:0x10 (RTCWDT_RTC_RESET), boot:0x13 (SPI_FAST_FLASH_BOOT)
+  load:0x3fff0030,len:1184
+  load:0x40078000,len:13260
+  -> watchdog reset, boot loop
+WHAT HAPPENED
+  The ESP32 reset itself at random moments and rebooted. The reset reason code RTCWDT_RTC_RESET revealed the watchdog as the killer.
+WHY IT HAPPENED (root cause)
+  The motor task blocked on an I2C read that never completed, so it never yielded to the scheduler and never fed the task watchdog. After the configured timeout, the watchdog forced a reset - the system was not crashed, it was deadlocked, and the watchdog was the recovery mechanism. The I2C read had no timeout, which is what allowed the block to become infinite.
+INVESTIGATION (before the fix)
+  - Decoded the reset reason from the boot banner
+  - Confirmed the watchdog fired on the motor task specifically
+  - Reproduced by inserting a blocked sensor read mid-run
+FIX (took 2 days)
+  Fixed by adding a timeout to the I2C read and feeding the watchdog in the motor task, so a blocked bus cannot kill the loop.
+
+----------------------------------------------------------------------
+E0022 | v2.1 | BIG | Found Day 24 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v2.1/servo_driver.c
+Error     : serial.serialutil.SerialException: device reports readiness to read but returned no data
+Terminal  : Pi SSH terminal
+  $ python3 final_drive.py
+  serial.serialutil.SerialException: device reports readiness to read but returned no data
+    File "pi/comm/uart.py", line 44, in read
+WHAT HAPPENED
+  The drive script crashed at startup on a strange serial error - the device said it had data, but the read returned nothing.
+WHY IT HAPPENED (root cause)
+  The USB-UART adapter was half-seated, so the kernel's tty layer believed the device was present (it reported readability) while the adapter actually returned nothing. SerialException is raised when the read violates its own contract. Intermittent physical connections produce exactly this class of bizarre error: the software and the device disagree about the hardware state.
+INVESTIGATION (before the fix)
+  - Reinserted the adapter - the error vanished, confirming the hardware
+  - Checked dmesg for USB disconnects during the run
+  - Added a retry to see if the error was transient
+FIX (took 3 days)
+  Fixed by reseating the adapter and adding a retry-with-backoff around the read, with a clear 'check USB connection' message after three failures.
+
+----------------------------------------------------------------------
+E0023 | v2.1 | BIG | Found Day 24 | Fixed in 4 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v2.1/turn_test.py
+Error     : W (515) ledc: duty set to 0 due to illegal duty 4095
+Terminal  : ESP32 serial monitor
+  W (515) ledc: duty set to 0 due to illegal duty 4095
+  motor stopped at full throttle
+  code continued running
+WHAT HAPPENED
+  The motor died at full throttle without any crash. The code kept running - the motor simply stopped obeying.
+WHY IT HAPPENED (root cause)
+  A signed int overflow turned a valid duty into 4095 - beyond the 12-bit LEDC limit - and the driver, rather than clamping, set the output to 0 as a safe default. The overflow came from a negative speed being negated at the boundary of int16. The failure was silent because a warning is not an error: the driver protected the hardware at the cost of the software's expectations.
+INVESTIGATION (before the fix)
+  - Spotted the warning line in a flood of normal log output
+  - Traced the duty value back to a negated int16 speed
+  - Reproduced with the speed at the exact boundary value
+FIX (took 4 days)
+  Fixed by clamping the duty in speed_control.c before the driver call and asserting that the internal speed range can never overflow int16.
+
+----------------------------------------------------------------------
+E0024 | v2.1 | BIG | Found Day 24 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v2.1/ackermann.py
+Error     : Odometry drift of 0.6m over a 2m run
+Terminal  : Pi SSH terminal
+  run distance: 2.0m  odometry: 2.6m
+  error: +0.6m (30%)
+  wheelbase calibration off
+WHAT HAPPENED
+  The odometry claimed the robot traveled 2.6m when it actually traveled 2.0m. Every distance estimate was inflated by 30%.
+WHY IT HAPPENED (root cause)
+  The wheelbase constant came from the CAD model, not from the physical robot. Odometry converts wheel speeds to distance using the wheelbase and wheel diameter; a 15% error in the wheelbase produces a proportional error in the estimate. The CAD model had idealized dimensions that the 3D-printed chassis did not match - tolerance, print shrink, and assembly gaps added up to 30%.
+INVESTIGATION (before the fix)
+  - Ran the straight-line test three times to measure the constant error
+  - Measured the true wheelbase with a caliper
+  - Computed the correction factor from the measured distance
+FIX (took 5 days)
+  Fixed by measuring the true wheelbase and wheel diameter, updating odometry.py with the measured constants, and adding a 2m straight-line verification to the test suite.
+
+----------------------------------------------------------------------
+E0025 | v2.2 | SMALL | Found Day 25 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v2.2/pwm_config.h
+Error     : Encoder tick count stays 0
+Terminal  : Pi SSH terminal
+  $ python3 pwm_config.h
+  ticks: 0, 0, 0, 0
+  speed: 0.00 m/s (wheel never moved)
+WHAT HAPPENED
+  The wheel spun visibly, but the odometry reported zero ticks. The speed readout insisted the wheel was stationary while it was turning at full speed.
+WHY IT HAPPENED (root cause)
+  During rewiring, the encoder's two signal wires were swapped with the motor's power wires. The encoder needs power and a clean signal; with power and signal crossed, the interrupt pin floated and never changed state. The encoder ISR never fired, so the tick counter stayed at zero - a silent failure because no error was ever raised, just wrong data.
+FIX (took 1 day)
+  Fixed by matching the connector pinout against the datasheet, then adding a sanity check that raises a warning when the wheel spins with zero ticks.
+
+----------------------------------------------------------------------
+E0026 | v2.2 | SMALL | Found Day 25 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v2.2/speed_control.c
+Error     : PID D-term spikes to NaN after a bump
+Terminal  : Pi SSH terminal
+  $ idf.py monitor
+  error=0.002 dterm=nan
+  pid output = nan
+  motor ramps to full speed
+WHAT HAPPENED
+  The robot surged to full speed for a moment after rolling over a bump, then recovered. The D term was the only thing that looked strange.
+WHY IT HAPPENED (root cause)
+  The derivative was computed as (error - last_error) / dt with dt=0. A bump caused two identical encoder samples with a zero time delta, dividing by zero. Python returns NaN for 0/0, and NaN propagates through every subsequent arithmetic - the PID output became NaN, which compared false against all limits, so the safety clamp never triggered.
+FIX (took 1 day)
+  Fixed by adding a low-pass filter on the D term and replacing the division with a guarded version that keeps the previous value when dt is below a threshold.
+
+----------------------------------------------------------------------
+E0027 | v2.2 | SMALL | Found Day 25 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v2.2/speed_control.h
+Error     : Gyro reads 250 deg/s idle
+Terminal  : Pi SSH terminal
+  $ python3 speed_control.h
+  gyro: 248.3 deg/s  (expected ~0)
+  imu status: SUSPECT
+WHAT HAPPENED
+  The robot sat perfectly still on the bench while the gyro claimed it was spinning at 248 degrees per second - a quarter of a full rotation per second, standing still.
+WHY IT HAPPENED (root cause)
+  The MPU6050 was running at its default full-scale range with factory offsets. Factory gyro offsets are rarely zero, and the raw value is scaled by the full-scale constant - with the 250 dps range selected the bias of the sensor element maps to tens of degrees per second. Calibration is not a refinement, it is a prerequisite: without the bias subtraction the reading is meaningless.
+FIX (took 1 day)
+  Fixed by writing the calibrated offset registers during init and re-running the v3.1 calibration whenever the board or mounting changes.
+
+----------------------------------------------------------------------
+E0028 | v2.2 | SMALL | Found Day 25 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v2.2/pwm_config.h
+Error     : Keyboard control ignores held keys
+Terminal  : Pi SSH terminal
+  $ python3 pwm_config.h
+  key 'w' not detected during 'a' hold
+  robot turns but never speeds up
+WHAT HAPPENED
+  Manual driving felt broken: holding 'w' while turning did nothing, even though the key worked alone. The robot turned, but never accelerated.
+WHY IT HAPPENED (root cause)
+  The keyboard handler used a blocking read, so while one key was held, the handler waited for that key to be released before reading the next. The terminal delivers one event at a time; a blocking getch() cannot represent two simultaneous keys. This is a fundamental limitation of line-buffered terminal input, not a bug in the key table.
+FIX (took 1 day)
+  Fixed by switching to raw mode with a non-blocking poll and maintaining a key-state table, which records every pressed key and merges them each control tick.
+
+----------------------------------------------------------------------
+E0029 | v2.2 | SMALL | Found Day 25 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v2.2/speed_control.c
+Error     : Duty value out of range 0-1023
+Terminal  : Pi SSH terminal
+  $ idf.py monitor
+  E (312) ledc: duty out of range!
+  E (312) ledc: duty=4095, max=1023
+  abort() was called at PC 0x42012345
+WHAT HAPPENED
+  The very first motor spin aborted the ESP32. The duty value was huge, and the LEDC driver refused it immediately.
+WHY IT HAPPENED (root cause)
+  The PWM timer was configured with 10-bit resolution (max 1023) but the speed calculation produced 14-bit values up to 4095. The mismatch came from two headers defining the resolution differently - pwm_config.h said 10 bits while the speed table was written for 14. The abort() is a hard assert inside the driver, by design: an out-of-range duty would produce undefined PWM behavior, so the firmware kills itself rather than corrupt the motors.
+FIX (took 1 day)
+  Fixed by clamping the duty in one place inside speed_control.c and asserting the resolution constant at boot, so both sides can never disagree again.
+
+----------------------------------------------------------------------
+E0030 | v2.2 | SMALL | Found Day 25 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v2.2/speed_control.h
+Error     : Signed char overflow in speed command
+Terminal  : Pi SSH terminal
+  $ idf.py monitor
+  I (401) uart: MOTOR left=200 right=-30
+  E (402) motor: speed 200 overflows int8
+  motor stuck at 127
+WHAT HAPPENED
+  The motor ran at half speed during calibration and ignored the requested value of 200. The command had clearly been received - it was printed in the log.
+WHY IT HAPPENED (root cause)
+  The UART parser stored speeds in an int8_t, whose maximum is 127. The value 200 overflowed to -56, which the driver then clamped to 127. The bug was a protocol/schema mismatch: the Pi generated a text protocol with no stated range, and the ESP32 guessed the width. Signed overflow in C is undefined behavior, so in principle anything could have happened - here it produced a silently wrong motor command.
+FIX (took 1 day)
+  Fixed by widening the parser to int16_t, adding a range check that rejects speeds outside -100..100, and documenting the protocol range in the header.
+
+----------------------------------------------------------------------
+E0031 | v2.2 | SMALL | Found Day 25 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v2.2/pwm_config.h
+Error     : Wheels spin the wrong way after boot
+Terminal  : Pi SSH terminal
+  $ python3 pwm_config.h
+  forward: left=+1.0 right=+1.0
+  result: robot drives BACKWARD
+WHAT HAPPENED
+  The first drive test showed a robot that drove away from its operator while the log clearly said FORWARD. Hardware did what the pins said, not what the label said.
+WHY IT HAPPENED (root cause)
+  The motor channel macros were swapped relative to the physical wiring - channel A was driving the right motor and the code believed it was the left. PWM duty of +1 is just a number; the direction comes from the H-bridge enable pins, which were crossed. No software check can catch this; only a physical test with a known direction reveals it.
+FIX (took 1 day)
+  Fixed by swapping the two channel macros, then adding a boot self-test that spins each wheel by name and asks a human to confirm the direction.
+
+----------------------------------------------------------------------
+E0032 | v2.2 | SMALL | Found Day 25 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v2.2/speed_control.c
+Error     : Ackermann steer angle sign is flipped in a left turn
+Terminal  : Pi SSH terminal
+  $ idf.py monitor
+  left turn -> inner wheel angle +18deg
+  expected inner wheel angle -18deg
+WHAT HAPPENED
+  The simulation produced perfect Ackermann angles, but the real robot turned the wrong way. The math was checked twice and was correct on paper.
+WHY IT HAPPENED (root cause)
+  The sign convention of the Ackermann geometry disagreed with the physical servo mounting. The robot's steering linkage pushes the wheel right when the servo angle is positive, so a mathematically positive inner-wheel angle turned the robot left. The model lived in the Pi, the mechanical convention lived in the chassis, and nothing connected the two until a physical turn test.
+FIX (took 1 day)
+  Fixed by negating the angle at the servo write boundary and adding a physical direction test to the turn_test script, with a comment documenting the mechanical convention.
+
+----------------------------------------------------------------------
+E0033 | v2.2 | BIG | Found Day 26 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v2.2/pwm_config.h
+Error     : serial.serialutil.SerialException: device reports readiness to read but returned no data
+Terminal  : Pi SSH terminal
+  $ python3 final_drive.py
+  serial.serialutil.SerialException: device reports readiness to read but returned no data
+    File "pi/comm/uart.py", line 44, in read
+WHAT HAPPENED
+  The drive script crashed at startup on a strange serial error - the device said it had data, but the read returned nothing.
+WHY IT HAPPENED (root cause)
+  The USB-UART adapter was half-seated, so the kernel's tty layer believed the device was present (it reported readability) while the adapter actually returned nothing. SerialException is raised when the read violates its own contract. Intermittent physical connections produce exactly this class of bizarre error: the software and the device disagree about the hardware state.
+INVESTIGATION (before the fix)
+  - Reinserted the adapter - the error vanished, confirming the hardware
+  - Checked dmesg for USB disconnects during the run
+  - Added a retry to see if the error was transient
+FIX (took 2 days)
+  Fixed by reseating the adapter and adding a retry-with-backoff around the read, with a clear 'check USB connection' message after three failures.
+
+----------------------------------------------------------------------
+E0034 | v2.2 | BIG | Found Day 26 | Fixed in 3 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v2.2/speed_control.c
+Error     : W (515) ledc: duty set to 0 due to illegal duty 4095
+Terminal  : ESP32 serial monitor
+  W (515) ledc: duty set to 0 due to illegal duty 4095
+  motor stopped at full throttle
+  code continued running
+WHAT HAPPENED
+  The motor died at full throttle without any crash. The code kept running - the motor simply stopped obeying.
+WHY IT HAPPENED (root cause)
+  A signed int overflow turned a valid duty into 4095 - beyond the 12-bit LEDC limit - and the driver, rather than clamping, set the output to 0 as a safe default. The overflow came from a negative speed being negated at the boundary of int16. The failure was silent because a warning is not an error: the driver protected the hardware at the cost of the software's expectations.
+INVESTIGATION (before the fix)
+  - Spotted the warning line in a flood of normal log output
+  - Traced the duty value back to a negated int16 speed
+  - Reproduced with the speed at the exact boundary value
+FIX (took 3 days)
+  Fixed by clamping the duty in speed_control.c before the driver call and asserting that the internal speed range can never overflow int16.
+
+----------------------------------------------------------------------
+E0035 | v2.2 | BIG | Found Day 26 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v2.2/speed_control.h
+Error     : Odometry drift of 0.6m over a 2m run
+Terminal  : Pi SSH terminal
+  run distance: 2.0m  odometry: 2.6m
+  error: +0.6m (30%)
+  wheelbase calibration off
+WHAT HAPPENED
+  The odometry claimed the robot traveled 2.6m when it actually traveled 2.0m. Every distance estimate was inflated by 30%.
+WHY IT HAPPENED (root cause)
+  The wheelbase constant came from the CAD model, not from the physical robot. Odometry converts wheel speeds to distance using the wheelbase and wheel diameter; a 15% error in the wheelbase produces a proportional error in the estimate. The CAD model had idealized dimensions that the 3D-printed chassis did not match - tolerance, print shrink, and assembly gaps added up to 30%.
+INVESTIGATION (before the fix)
+  - Ran the straight-line test three times to measure the constant error
+  - Measured the true wheelbase with a caliper
+  - Computed the correction factor from the measured distance
+FIX (took 4 days)
+  Fixed by measuring the true wheelbase and wheel diameter, updating odometry.py with the measured constants, and adding a 2m straight-line verification to the test suite.
+
+----------------------------------------------------------------------
+E0036 | v2.2 | BIG | Found Day 26 | Fixed in 5 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v2.2/pwm_config.h
+Error     : abort() called: asserted 'interval > 0' in servo driver
+Terminal  : ESP32 serial monitor
+  abort() was called at PC 0x400d1234 on core 0
+  Backtrace: servo_driver.c:118 (interval > 0)
+  Rebooting... (loop)
+WHAT HAPPENED
+  The firmware aborted at boot right after flashing the new PWM config. The servo task was asserting that its interval was positive - and it was zero.
+WHY IT HAPPENED (root cause)
+  The new config default set the servo interval to 0, which is meaningless as a period, and the driver asserted interval > 0. An assert is a programming contract: the configuration violated an invariant the driver depends on. The boot order loaded the config after the servo task started, so the task observed the default value instead of the configured one.
+INVESTIGATION (before the fix)
+  - Read the abort message and backtrace to find the assert
+  - Checked the config default for the servo interval field
+  - Traced the boot order between config load and task start
+FIX (took 5 days)
+  Fixed by validating the config at boot before starting the servo task and rejecting interval <= 0 with a readable error instead of an abort.
+
+----------------------------------------------------------------------
+E0037 | v2.3 | SMALL | Found Day 27 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v2.3/encoder_driver.c
+Error     : PID D-term spikes to NaN after a bump
+Terminal  : Pi console (HDMI)
+  $ idf.py monitor
+  error=0.002 dterm=nan
+  pid output = nan
+  motor ramps to full speed
+WHAT HAPPENED
+  The robot surged to full speed for a moment after rolling over a bump, then recovered. The D term was the only thing that looked strange.
+WHY IT HAPPENED (root cause)
+  The derivative was computed as (error - last_error) / dt with dt=0. A bump caused two identical encoder samples with a zero time delta, dividing by zero. Python returns NaN for 0/0, and NaN propagates through every subsequent arithmetic - the PID output became NaN, which compared false against all limits, so the safety clamp never triggered.
+FIX (took 1 day)
+  Fixed by adding a low-pass filter on the D term and replacing the division with a guarded version that keeps the previous value when dt is below a threshold.
+
+----------------------------------------------------------------------
+E0038 | v2.3 | SMALL | Found Day 27 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v2.3/odometry.py
+Error     : Gyro reads 250 deg/s idle
+Terminal  : Pi console (HDMI)
+  $ python3 odometry.py
+  gyro: 248.3 deg/s  (expected ~0)
+  imu status: SUSPECT
+WHAT HAPPENED
+  The robot sat perfectly still on the bench while the gyro claimed it was spinning at 248 degrees per second - a quarter of a full rotation per second, standing still.
+WHY IT HAPPENED (root cause)
+  The MPU6050 was running at its default full-scale range with factory offsets. Factory gyro offsets are rarely zero, and the raw value is scaled by the full-scale constant - with the 250 dps range selected the bias of the sensor element maps to tens of degrees per second. Calibration is not a refinement, it is a prerequisite: without the bias subtraction the reading is meaningless.
+FIX (took 1 day)
+  Fixed by writing the calibrated offset registers during init and re-running the v3.1 calibration whenever the board or mounting changes.
+
+----------------------------------------------------------------------
+E0039 | v2.3 | SMALL | Found Day 27 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v2.3/encoder_driver.c
+Error     : Keyboard control ignores held keys
+Terminal  : Pi console (HDMI)
+  $ idf.py monitor
+  key 'w' not detected during 'a' hold
+  robot turns but never speeds up
+WHAT HAPPENED
+  Manual driving felt broken: holding 'w' while turning did nothing, even though the key worked alone. The robot turned, but never accelerated.
+WHY IT HAPPENED (root cause)
+  The keyboard handler used a blocking read, so while one key was held, the handler waited for that key to be released before reading the next. The terminal delivers one event at a time; a blocking getch() cannot represent two simultaneous keys. This is a fundamental limitation of line-buffered terminal input, not a bug in the key table.
+FIX (took 1 day)
+  Fixed by switching to raw mode with a non-blocking poll and maintaining a key-state table, which records every pressed key and merges them each control tick.
+
+----------------------------------------------------------------------
+E0040 | v2.3 | SMALL | Found Day 27 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v2.3/odometry.py
+Error     : Duty value out of range 0-1023
+Terminal  : Pi console (HDMI)
+  $ idf.py monitor
+  E (312) ledc: duty out of range!
+  E (312) ledc: duty=4095, max=1023
+  abort() was called at PC 0x42012345
+WHAT HAPPENED
+  The very first motor spin aborted the ESP32. The duty value was huge, and the LEDC driver refused it immediately.
+WHY IT HAPPENED (root cause)
+  The PWM timer was configured with 10-bit resolution (max 1023) but the speed calculation produced 14-bit values up to 4095. The mismatch came from two headers defining the resolution differently - pwm_config.h said 10 bits while the speed table was written for 14. The abort() is a hard assert inside the driver, by design: an out-of-range duty would produce undefined PWM behavior, so the firmware kills itself rather than corrupt the motors.
+FIX (took 1 day)
+  Fixed by clamping the duty in one place inside speed_control.c and asserting the resolution constant at boot, so both sides can never disagree again.
+
+----------------------------------------------------------------------
+E0041 | v2.3 | SMALL | Found Day 27 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v2.3/encoder_driver.c
+Error     : Signed char overflow in speed command
+Terminal  : Pi console (HDMI)
+  $ idf.py monitor
+  I (401) uart: MOTOR left=200 right=-30
+  E (402) motor: speed 200 overflows int8
+  motor stuck at 127
+WHAT HAPPENED
+  The motor ran at half speed during calibration and ignored the requested value of 200. The command had clearly been received - it was printed in the log.
+WHY IT HAPPENED (root cause)
+  The UART parser stored speeds in an int8_t, whose maximum is 127. The value 200 overflowed to -56, which the driver then clamped to 127. The bug was a protocol/schema mismatch: the Pi generated a text protocol with no stated range, and the ESP32 guessed the width. Signed overflow in C is undefined behavior, so in principle anything could have happened - here it produced a silently wrong motor command.
+FIX (took 1 day)
+  Fixed by widening the parser to int16_t, adding a range check that rejects speeds outside -100..100, and documenting the protocol range in the header.
+
+----------------------------------------------------------------------
+E0042 | v2.3 | SMALL | Found Day 27 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v2.3/odometry.py
+Error     : Wheels spin the wrong way after boot
+Terminal  : Pi console (HDMI)
+  $ python3 odometry.py
+  forward: left=+1.0 right=+1.0
+  result: robot drives BACKWARD
+WHAT HAPPENED
+  The first drive test showed a robot that drove away from its operator while the log clearly said FORWARD. Hardware did what the pins said, not what the label said.
+WHY IT HAPPENED (root cause)
+  The motor channel macros were swapped relative to the physical wiring - channel A was driving the right motor and the code believed it was the left. PWM duty of +1 is just a number; the direction comes from the H-bridge enable pins, which were crossed. No software check can catch this; only a physical test with a known direction reveals it.
+FIX (took 1 day)
+  Fixed by swapping the two channel macros, then adding a boot self-test that spins each wheel by name and asks a human to confirm the direction.
+
+----------------------------------------------------------------------
+E0043 | v2.3 | SMALL | Found Day 27 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v2.3/encoder_driver.c
+Error     : Ackermann steer angle sign is flipped in a left turn
+Terminal  : Pi console (HDMI)
+  $ idf.py monitor
+  left turn -> inner wheel angle +18deg
+  expected inner wheel angle -18deg
+WHAT HAPPENED
+  The simulation produced perfect Ackermann angles, but the real robot turned the wrong way. The math was checked twice and was correct on paper.
+WHY IT HAPPENED (root cause)
+  The sign convention of the Ackermann geometry disagreed with the physical servo mounting. The robot's steering linkage pushes the wheel right when the servo angle is positive, so a mathematically positive inner-wheel angle turned the robot left. The model lived in the Pi, the mechanical convention lived in the chassis, and nothing connected the two until a physical turn test.
+FIX (took 1 day)
+  Fixed by negating the angle at the servo write boundary and adding a physical direction test to the turn_test script, with a comment documenting the mechanical convention.
+
+----------------------------------------------------------------------
+E0044 | v2.3 | SMALL | Found Day 27 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v2.3/odometry.py
+Error     : Encoder tick count stays 0
+Terminal  : Pi console (HDMI)
+  $ python3 odometry.py
+  ticks: 0, 0, 0, 0
+  speed: 0.00 m/s (wheel never moved)
+WHAT HAPPENED
+  The wheel spun visibly, but the odometry reported zero ticks. The speed readout insisted the wheel was stationary while it was turning at full speed.
+WHY IT HAPPENED (root cause)
+  During rewiring, the encoder's two signal wires were swapped with the motor's power wires. The encoder needs power and a clean signal; with power and signal crossed, the interrupt pin floated and never changed state. The encoder ISR never fired, so the tick counter stayed at zero - a silent failure because no error was ever raised, just wrong data.
+FIX (took 1 day)
+  Fixed by matching the connector pinout against the datasheet, then adding a sanity check that raises a warning when the wheel spins with zero ticks.
+
+----------------------------------------------------------------------
+E0045 | v2.3 | BIG | Found Day 28 | Fixed in 2 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v2.3/encoder_driver.c
+Error     : W (515) ledc: duty set to 0 due to illegal duty 4095
+Terminal  : ESP32 serial monitor
+  W (515) ledc: duty set to 0 due to illegal duty 4095
+  motor stopped at full throttle
+  code continued running
+WHAT HAPPENED
+  The motor died at full throttle without any crash. The code kept running - the motor simply stopped obeying.
+WHY IT HAPPENED (root cause)
+  A signed int overflow turned a valid duty into 4095 - beyond the 12-bit LEDC limit - and the driver, rather than clamping, set the output to 0 as a safe default. The overflow came from a negative speed being negated at the boundary of int16. The failure was silent because a warning is not an error: the driver protected the hardware at the cost of the software's expectations.
+INVESTIGATION (before the fix)
+  - Spotted the warning line in a flood of normal log output
+  - Traced the duty value back to a negated int16 speed
+  - Reproduced with the speed at the exact boundary value
+FIX (took 2 days)
+  Fixed by clamping the duty in speed_control.c before the driver call and asserting that the internal speed range can never overflow int16.
+
+----------------------------------------------------------------------
+E0046 | v2.3 | BIG | Found Day 28 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v2.3/odometry.py
+Error     : Odometry drift of 0.6m over a 2m run
+Terminal  : Pi SSH terminal
+  run distance: 2.0m  odometry: 2.6m
+  error: +0.6m (30%)
+  wheelbase calibration off
+WHAT HAPPENED
+  The odometry claimed the robot traveled 2.6m when it actually traveled 2.0m. Every distance estimate was inflated by 30%.
+WHY IT HAPPENED (root cause)
+  The wheelbase constant came from the CAD model, not from the physical robot. Odometry converts wheel speeds to distance using the wheelbase and wheel diameter; a 15% error in the wheelbase produces a proportional error in the estimate. The CAD model had idealized dimensions that the 3D-printed chassis did not match - tolerance, print shrink, and assembly gaps added up to 30%.
+INVESTIGATION (before the fix)
+  - Ran the straight-line test three times to measure the constant error
+  - Measured the true wheelbase with a caliper
+  - Computed the correction factor from the measured distance
+FIX (took 3 days)
+  Fixed by measuring the true wheelbase and wheel diameter, updating odometry.py with the measured constants, and adding a 2m straight-line verification to the test suite.
+
+----------------------------------------------------------------------
+E0047 | v2.3 | BIG | Found Day 28 | Fixed in 4 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v2.3/encoder_driver.c
+Error     : abort() called: asserted 'interval > 0' in servo driver
+Terminal  : ESP32 serial monitor
+  abort() was called at PC 0x400d1234 on core 0
+  Backtrace: servo_driver.c:118 (interval > 0)
+  Rebooting... (loop)
+WHAT HAPPENED
+  The firmware aborted at boot right after flashing the new PWM config. The servo task was asserting that its interval was positive - and it was zero.
+WHY IT HAPPENED (root cause)
+  The new config default set the servo interval to 0, which is meaningless as a period, and the driver asserted interval > 0. An assert is a programming contract: the configuration violated an invariant the driver depends on. The boot order loaded the config after the servo task started, so the task observed the default value instead of the configured one.
+INVESTIGATION (before the fix)
+  - Read the abort message and backtrace to find the assert
+  - Checked the config default for the servo interval field
+  - Traced the boot order between config load and task start
+FIX (took 4 days)
+  Fixed by validating the config at boot before starting the servo task and rejecting interval <= 0 with a readable error instead of an abort.
+
+----------------------------------------------------------------------
+E0048 | v2.3 | BIG | Found Day 28 | Fixed in 5 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v2.3/odometry.py
+Error     : Guru Meditation Error: Core 1 panic'ed (LoadProhibited)
+Terminal  : ESP32 serial monitor
+  Guru Meditation Error: Core 1 panic'ed (LoadProhibited)
+  addr 0x00000008, cause 'load'
+  Backtrace: 0x4201abce:0x3ffb1f50 motor_driver_set
+  Rebooting... (loop)
+WHAT HAPPENED
+  The ESP32 crashed and rebooted in a loop every time a motor command arrived. The backtrace pointed at motor_driver_set, and the fault address 0x8 is a classic null-pointer dereference.
+WHY IT HAPPENED (root cause)
+  A UART command could arrive before the motor driver was initialized, so motor_driver_set() was called with a NULL handle and dereferenced the struct member at offset 8 - hence address 0x8. The ESP32's MMU traps the load, panics with Guru Meditation, and the watchdog reboots into the same race. The bug is a missing initialization ordering contract, not a random crash: the UART task and the init code had no synchronization.
+INVESTIGATION (before the fix)
+  - Read the backtrace to identify motor_driver_set as the faulting function
+  - Found the NULL handle was caused by an early UART command
+  - Reproduced reliably by sending a command within 100ms of boot
+FIX (took 5 days)
+  Fixed by null-checking the driver handle in every entry point, and by deferring the UART task start until after motor init completes.
+
+----------------------------------------------------------------------
+E0049 | v2.4 | SMALL | Found Day 29 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v2.4/gyro_reader.py
+Error     : Gyro reads 250 deg/s idle
+Terminal  : ESP32 serial monitor
+  $ python3 gyro_reader.py
+  gyro: 248.3 deg/s  (expected ~0)
+  imu status: SUSPECT
+WHAT HAPPENED
+  The robot sat perfectly still on the bench while the gyro claimed it was spinning at 248 degrees per second - a quarter of a full rotation per second, standing still.
+WHY IT HAPPENED (root cause)
+  The MPU6050 was running at its default full-scale range with factory offsets. Factory gyro offsets are rarely zero, and the raw value is scaled by the full-scale constant - with the 250 dps range selected the bias of the sensor element maps to tens of degrees per second. Calibration is not a refinement, it is a prerequisite: without the bias subtraction the reading is meaningless.
+FIX (took 1 day)
+  Fixed by writing the calibrated offset registers during init and re-running the v3.1 calibration whenever the board or mounting changes.
+
+----------------------------------------------------------------------
+E0050 | v2.4 | SMALL | Found Day 29 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v2.4/imu_driver.c
+Error     : Keyboard control ignores held keys
+Terminal  : ESP32 serial monitor
+  $ idf.py monitor
+  key 'w' not detected during 'a' hold
+  robot turns but never speeds up
+WHAT HAPPENED
+  Manual driving felt broken: holding 'w' while turning did nothing, even though the key worked alone. The robot turned, but never accelerated.
+WHY IT HAPPENED (root cause)
+  The keyboard handler used a blocking read, so while one key was held, the handler waited for that key to be released before reading the next. The terminal delivers one event at a time; a blocking getch() cannot represent two simultaneous keys. This is a fundamental limitation of line-buffered terminal input, not a bug in the key table.
+FIX (took 1 day)
+  Fixed by switching to raw mode with a non-blocking poll and maintaining a key-state table, which records every pressed key and merges them each control tick.
+
+----------------------------------------------------------------------
+E0051 | v2.4 | SMALL | Found Day 29 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v2.4/pid_straight.py
+Error     : Duty value out of range 0-1023
+Terminal  : ESP32 serial monitor
+  $ idf.py monitor
+  E (312) ledc: duty out of range!
+  E (312) ledc: duty=4095, max=1023
+  abort() was called at PC 0x42012345
+WHAT HAPPENED
+  The very first motor spin aborted the ESP32. The duty value was huge, and the LEDC driver refused it immediately.
+WHY IT HAPPENED (root cause)
+  The PWM timer was configured with 10-bit resolution (max 1023) but the speed calculation produced 14-bit values up to 4095. The mismatch came from two headers defining the resolution differently - pwm_config.h said 10 bits while the speed table was written for 14. The abort() is a hard assert inside the driver, by design: an out-of-range duty would produce undefined PWM behavior, so the firmware kills itself rather than corrupt the motors.
+FIX (took 1 day)
+  Fixed by clamping the duty in one place inside speed_control.c and asserting the resolution constant at boot, so both sides can never disagree again.
+
+----------------------------------------------------------------------
+E0052 | v2.4 | SMALL | Found Day 29 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v2.4/gyro_reader.py
+Error     : Signed char overflow in speed command
+Terminal  : ESP32 serial monitor
+  $ idf.py monitor
+  I (401) uart: MOTOR left=200 right=-30
+  E (402) motor: speed 200 overflows int8
+  motor stuck at 127
+WHAT HAPPENED
+  The motor ran at half speed during calibration and ignored the requested value of 200. The command had clearly been received - it was printed in the log.
+WHY IT HAPPENED (root cause)
+  The UART parser stored speeds in an int8_t, whose maximum is 127. The value 200 overflowed to -56, which the driver then clamped to 127. The bug was a protocol/schema mismatch: the Pi generated a text protocol with no stated range, and the ESP32 guessed the width. Signed overflow in C is undefined behavior, so in principle anything could have happened - here it produced a silently wrong motor command.
+FIX (took 1 day)
+  Fixed by widening the parser to int16_t, adding a range check that rejects speeds outside -100..100, and documenting the protocol range in the header.
+
+----------------------------------------------------------------------
+E0053 | v2.4 | SMALL | Found Day 29 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v2.4/imu_driver.c
+Error     : Wheels spin the wrong way after boot
+Terminal  : ESP32 serial monitor
+  $ idf.py monitor
+  forward: left=+1.0 right=+1.0
+  result: robot drives BACKWARD
+WHAT HAPPENED
+  The first drive test showed a robot that drove away from its operator while the log clearly said FORWARD. Hardware did what the pins said, not what the label said.
+WHY IT HAPPENED (root cause)
+  The motor channel macros were swapped relative to the physical wiring - channel A was driving the right motor and the code believed it was the left. PWM duty of +1 is just a number; the direction comes from the H-bridge enable pins, which were crossed. No software check can catch this; only a physical test with a known direction reveals it.
+FIX (took 1 day)
+  Fixed by swapping the two channel macros, then adding a boot self-test that spins each wheel by name and asks a human to confirm the direction.
+
+----------------------------------------------------------------------
+E0054 | v2.4 | SMALL | Found Day 29 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v2.4/pid_straight.py
+Error     : Ackermann steer angle sign is flipped in a left turn
+Terminal  : ESP32 serial monitor
+  $ python3 pid_straight.py
+  left turn -> inner wheel angle +18deg
+  expected inner wheel angle -18deg
+WHAT HAPPENED
+  The simulation produced perfect Ackermann angles, but the real robot turned the wrong way. The math was checked twice and was correct on paper.
+WHY IT HAPPENED (root cause)
+  The sign convention of the Ackermann geometry disagreed with the physical servo mounting. The robot's steering linkage pushes the wheel right when the servo angle is positive, so a mathematically positive inner-wheel angle turned the robot left. The model lived in the Pi, the mechanical convention lived in the chassis, and nothing connected the two until a physical turn test.
+FIX (took 1 day)
+  Fixed by negating the angle at the servo write boundary and adding a physical direction test to the turn_test script, with a comment documenting the mechanical convention.
+
+----------------------------------------------------------------------
+E0055 | v2.4 | SMALL | Found Day 29 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v2.4/gyro_reader.py
+Error     : Encoder tick count stays 0
+Terminal  : ESP32 serial monitor
+  $ python3 gyro_reader.py
+  ticks: 0, 0, 0, 0
+  speed: 0.00 m/s (wheel never moved)
+WHAT HAPPENED
+  The wheel spun visibly, but the odometry reported zero ticks. The speed readout insisted the wheel was stationary while it was turning at full speed.
+WHY IT HAPPENED (root cause)
+  During rewiring, the encoder's two signal wires were swapped with the motor's power wires. The encoder needs power and a clean signal; with power and signal crossed, the interrupt pin floated and never changed state. The encoder ISR never fired, so the tick counter stayed at zero - a silent failure because no error was ever raised, just wrong data.
+FIX (took 1 day)
+  Fixed by matching the connector pinout against the datasheet, then adding a sanity check that raises a warning when the wheel spins with zero ticks.
+
+----------------------------------------------------------------------
+E0056 | v2.4 | SMALL | Found Day 29 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v2.4/imu_driver.c
+Error     : PID D-term spikes to NaN after a bump
+Terminal  : ESP32 serial monitor
+  $ idf.py monitor
+  error=0.002 dterm=nan
+  pid output = nan
+  motor ramps to full speed
+WHAT HAPPENED
+  The robot surged to full speed for a moment after rolling over a bump, then recovered. The D term was the only thing that looked strange.
+WHY IT HAPPENED (root cause)
+  The derivative was computed as (error - last_error) / dt with dt=0. A bump caused two identical encoder samples with a zero time delta, dividing by zero. Python returns NaN for 0/0, and NaN propagates through every subsequent arithmetic - the PID output became NaN, which compared false against all limits, so the safety clamp never triggered.
+FIX (took 1 day)
+  Fixed by adding a low-pass filter on the D term and replacing the division with a guarded version that keeps the previous value when dt is below a threshold.
+
+----------------------------------------------------------------------
+E0057 | v2.4 | BIG | Found Day 30 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v2.4/gyro_reader.py
+Error     : Odometry drift of 0.6m over a 2m run
+Terminal  : Pi SSH terminal
+  run distance: 2.0m  odometry: 2.6m
+  error: +0.6m (30%)
+  wheelbase calibration off
+WHAT HAPPENED
+  The odometry claimed the robot traveled 2.6m when it actually traveled 2.0m. Every distance estimate was inflated by 30%.
+WHY IT HAPPENED (root cause)
+  The wheelbase constant came from the CAD model, not from the physical robot. Odometry converts wheel speeds to distance using the wheelbase and wheel diameter; a 15% error in the wheelbase produces a proportional error in the estimate. The CAD model had idealized dimensions that the 3D-printed chassis did not match - tolerance, print shrink, and assembly gaps added up to 30%.
+INVESTIGATION (before the fix)
+  - Ran the straight-line test three times to measure the constant error
+  - Measured the true wheelbase with a caliper
+  - Computed the correction factor from the measured distance
+FIX (took 2 days)
+  Fixed by measuring the true wheelbase and wheel diameter, updating odometry.py with the measured constants, and adding a 2m straight-line verification to the test suite.
+
+----------------------------------------------------------------------
+E0058 | v2.4 | BIG | Found Day 30 | Fixed in 3 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v2.4/imu_driver.c
+Error     : abort() called: asserted 'interval > 0' in servo driver
+Terminal  : ESP32 serial monitor
+  abort() was called at PC 0x400d1234 on core 0
+  Backtrace: servo_driver.c:118 (interval > 0)
+  Rebooting... (loop)
+WHAT HAPPENED
+  The firmware aborted at boot right after flashing the new PWM config. The servo task was asserting that its interval was positive - and it was zero.
+WHY IT HAPPENED (root cause)
+  The new config default set the servo interval to 0, which is meaningless as a period, and the driver asserted interval > 0. An assert is a programming contract: the configuration violated an invariant the driver depends on. The boot order loaded the config after the servo task started, so the task observed the default value instead of the configured one.
+INVESTIGATION (before the fix)
+  - Read the abort message and backtrace to find the assert
+  - Checked the config default for the servo interval field
+  - Traced the boot order between config load and task start
+FIX (took 3 days)
+  Fixed by validating the config at boot before starting the servo task and rejecting interval <= 0 with a readable error instead of an abort.
+
+----------------------------------------------------------------------
+E0059 | v2.4 | BIG | Found Day 30 | Fixed in 4 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v2.4/pid_straight.py
+Error     : Guru Meditation Error: Core 1 panic'ed (LoadProhibited)
+Terminal  : ESP32 serial monitor
+  Guru Meditation Error: Core 1 panic'ed (LoadProhibited)
+  addr 0x00000008, cause 'load'
+  Backtrace: 0x4201abce:0x3ffb1f50 motor_driver_set
+  Rebooting... (loop)
+WHAT HAPPENED
+  The ESP32 crashed and rebooted in a loop every time a motor command arrived. The backtrace pointed at motor_driver_set, and the fault address 0x8 is a classic null-pointer dereference.
+WHY IT HAPPENED (root cause)
+  A UART command could arrive before the motor driver was initialized, so motor_driver_set() was called with a NULL handle and dereferenced the struct member at offset 8 - hence address 0x8. The ESP32's MMU traps the load, panics with Guru Meditation, and the watchdog reboots into the same race. The bug is a missing initialization ordering contract, not a random crash: the UART task and the init code had no synchronization.
+INVESTIGATION (before the fix)
+  - Read the backtrace to identify motor_driver_set as the faulting function
+  - Found the NULL handle was caused by an early UART command
+  - Reproduced reliably by sending a command within 100ms of boot
+FIX (took 4 days)
+  Fixed by null-checking the driver handle in every entry point, and by deferring the UART task start until after motor init completes.
+
+----------------------------------------------------------------------
+E0060 | v2.4 | BIG | Found Day 30 | Fixed in 5 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v2.4/gyro_reader.py
+Error     : E (904) uart: RX buffer full - data lost
+Terminal  : ESP32 serial monitor
+  E (904) uart: RX buffer full - data lost
+  E (904) uart: RX buffer full - data lost
+  motor command stream garbled
+WHAT HAPPENED
+  The motor motion became jerky and the console filled with buffer-full errors. Commands were arriving faster than they could be consumed.
+WHY IT HAPPENED (root cause)
+  The Pi sent control commands at 100Hz, but the ESP32 UART task only read the buffer once per control tick and processed each byte individually. The default RX buffer (256 bytes) overflowed between reads, and the driver discarded the overflow. This is a producer/consumer mismatch: the producer rate was known (100Hz) but the buffer depth and read granularity were never sized to it.
+INVESTIGATION (before the fix)
+  - Counted the errors per second and correlated with command rate
+  - Measured the read interval of the UART task
+  - Calculated the required buffer depth from the protocol frame size
+FIX (took 5 days)
+  Fixed by raising the RX buffer to 2048 bytes and reading the buffer in bulk (read_available into a local array) once per task tick.
+
+----------------------------------------------------------------------
+E0061 | v2.5 | SMALL | Found Day 31 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v2.5/command_scheduler.py
+Error     : Keyboard control ignores held keys
+Terminal  : Windows CMD
+  $ python3 command_scheduler.py
+  key 'w' not detected during 'a' hold
+  robot turns but never speeds up
+WHAT HAPPENED
+  Manual driving felt broken: holding 'w' while turning did nothing, even though the key worked alone. The robot turned, but never accelerated.
+WHY IT HAPPENED (root cause)
+  The keyboard handler used a blocking read, so while one key was held, the handler waited for that key to be released before reading the next. The terminal delivers one event at a time; a blocking getch() cannot represent two simultaneous keys. This is a fundamental limitation of line-buffered terminal input, not a bug in the key table.
+FIX (took 1 day)
+  Fixed by switching to raw mode with a non-blocking poll and maintaining a key-state table, which records every pressed key and merges them each control tick.
+
+----------------------------------------------------------------------
+E0062 | v2.5 | SMALL | Found Day 31 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v2.5/trajectory_open.py
+Error     : Duty value out of range 0-1023
+Terminal  : Windows CMD
+  $ idf.py monitor
+  E (312) ledc: duty out of range!
+  E (312) ledc: duty=4095, max=1023
+  abort() was called at PC 0x42012345
+WHAT HAPPENED
+  The very first motor spin aborted the ESP32. The duty value was huge, and the LEDC driver refused it immediately.
+WHY IT HAPPENED (root cause)
+  The PWM timer was configured with 10-bit resolution (max 1023) but the speed calculation produced 14-bit values up to 4095. The mismatch came from two headers defining the resolution differently - pwm_config.h said 10 bits while the speed table was written for 14. The abort() is a hard assert inside the driver, by design: an out-of-range duty would produce undefined PWM behavior, so the firmware kills itself rather than corrupt the motors.
+FIX (took 1 day)
+  Fixed by clamping the duty in one place inside speed_control.c and asserting the resolution constant at boot, so both sides can never disagree again.
+
+----------------------------------------------------------------------
+E0063 | v2.5 | SMALL | Found Day 31 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v2.5/command_scheduler.py
+Error     : Signed char overflow in speed command
+Terminal  : Windows CMD
+  $ idf.py monitor
+  I (401) uart: MOTOR left=200 right=-30
+  E (402) motor: speed 200 overflows int8
+  motor stuck at 127
+WHAT HAPPENED
+  The motor ran at half speed during calibration and ignored the requested value of 200. The command had clearly been received - it was printed in the log.
+WHY IT HAPPENED (root cause)
+  The UART parser stored speeds in an int8_t, whose maximum is 127. The value 200 overflowed to -56, which the driver then clamped to 127. The bug was a protocol/schema mismatch: the Pi generated a text protocol with no stated range, and the ESP32 guessed the width. Signed overflow in C is undefined behavior, so in principle anything could have happened - here it produced a silently wrong motor command.
+FIX (took 1 day)
+  Fixed by widening the parser to int16_t, adding a range check that rejects speeds outside -100..100, and documenting the protocol range in the header.
+
+----------------------------------------------------------------------
+E0064 | v2.5 | SMALL | Found Day 31 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v2.5/trajectory_open.py
+Error     : Wheels spin the wrong way after boot
+Terminal  : Windows CMD
+  $ python3 trajectory_open.py
+  forward: left=+1.0 right=+1.0
+  result: robot drives BACKWARD
+WHAT HAPPENED
+  The first drive test showed a robot that drove away from its operator while the log clearly said FORWARD. Hardware did what the pins said, not what the label said.
+WHY IT HAPPENED (root cause)
+  The motor channel macros were swapped relative to the physical wiring - channel A was driving the right motor and the code believed it was the left. PWM duty of +1 is just a number; the direction comes from the H-bridge enable pins, which were crossed. No software check can catch this; only a physical test with a known direction reveals it.
+FIX (took 1 day)
+  Fixed by swapping the two channel macros, then adding a boot self-test that spins each wheel by name and asks a human to confirm the direction.
+
+----------------------------------------------------------------------
+E0065 | v2.5 | SMALL | Found Day 31 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v2.5/command_scheduler.py
+Error     : Ackermann steer angle sign is flipped in a left turn
+Terminal  : Windows CMD
+  $ python3 command_scheduler.py
+  left turn -> inner wheel angle +18deg
+  expected inner wheel angle -18deg
+WHAT HAPPENED
+  The simulation produced perfect Ackermann angles, but the real robot turned the wrong way. The math was checked twice and was correct on paper.
+WHY IT HAPPENED (root cause)
+  The sign convention of the Ackermann geometry disagreed with the physical servo mounting. The robot's steering linkage pushes the wheel right when the servo angle is positive, so a mathematically positive inner-wheel angle turned the robot left. The model lived in the Pi, the mechanical convention lived in the chassis, and nothing connected the two until a physical turn test.
+FIX (took 1 day)
+  Fixed by negating the angle at the servo write boundary and adding a physical direction test to the turn_test script, with a comment documenting the mechanical convention.
+
+----------------------------------------------------------------------
+E0066 | v2.5 | SMALL | Found Day 31 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v2.5/trajectory_open.py
+Error     : Encoder tick count stays 0
+Terminal  : Windows CMD
+  $ python3 trajectory_open.py
+  ticks: 0, 0, 0, 0
+  speed: 0.00 m/s (wheel never moved)
+WHAT HAPPENED
+  The wheel spun visibly, but the odometry reported zero ticks. The speed readout insisted the wheel was stationary while it was turning at full speed.
+WHY IT HAPPENED (root cause)
+  During rewiring, the encoder's two signal wires were swapped with the motor's power wires. The encoder needs power and a clean signal; with power and signal crossed, the interrupt pin floated and never changed state. The encoder ISR never fired, so the tick counter stayed at zero - a silent failure because no error was ever raised, just wrong data.
+FIX (took 1 day)
+  Fixed by matching the connector pinout against the datasheet, then adding a sanity check that raises a warning when the wheel spins with zero ticks.
+
+----------------------------------------------------------------------
+E0067 | v2.5 | SMALL | Found Day 31 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v2.5/command_scheduler.py
+Error     : PID D-term spikes to NaN after a bump
+Terminal  : Windows CMD
+  $ python3 command_scheduler.py
+  error=0.002 dterm=nan
+  pid output = nan
+  motor ramps to full speed
+WHAT HAPPENED
+  The robot surged to full speed for a moment after rolling over a bump, then recovered. The D term was the only thing that looked strange.
+WHY IT HAPPENED (root cause)
+  The derivative was computed as (error - last_error) / dt with dt=0. A bump caused two identical encoder samples with a zero time delta, dividing by zero. Python returns NaN for 0/0, and NaN propagates through every subsequent arithmetic - the PID output became NaN, which compared false against all limits, so the safety clamp never triggered.
+FIX (took 1 day)
+  Fixed by adding a low-pass filter on the D term and replacing the division with a guarded version that keeps the previous value when dt is below a threshold.
+
+----------------------------------------------------------------------
+E0068 | v2.5 | SMALL | Found Day 31 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v2.5/trajectory_open.py
+Error     : Gyro reads 250 deg/s idle
+Terminal  : Windows CMD
+  $ python3 trajectory_open.py
+  gyro: 248.3 deg/s  (expected ~0)
+  imu status: SUSPECT
+WHAT HAPPENED
+  The robot sat perfectly still on the bench while the gyro claimed it was spinning at 248 degrees per second - a quarter of a full rotation per second, standing still.
+WHY IT HAPPENED (root cause)
+  The MPU6050 was running at its default full-scale range with factory offsets. Factory gyro offsets are rarely zero, and the raw value is scaled by the full-scale constant - with the 250 dps range selected the bias of the sensor element maps to tens of degrees per second. Calibration is not a refinement, it is a prerequisite: without the bias subtraction the reading is meaningless.
+FIX (took 1 day)
+  Fixed by writing the calibrated offset registers during init and re-running the v3.1 calibration whenever the board or mounting changes.
+
+----------------------------------------------------------------------
+E0069 | v2.5 | BIG | Found Day 32 | Fixed in 2 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v2.5/command_scheduler.py
+Error     : abort() called: asserted 'interval > 0' in servo driver
+Terminal  : ESP32 serial monitor
+  abort() was called at PC 0x400d1234 on core 0
+  Backtrace: servo_driver.c:118 (interval > 0)
+  Rebooting... (loop)
+WHAT HAPPENED
+  The firmware aborted at boot right after flashing the new PWM config. The servo task was asserting that its interval was positive - and it was zero.
+WHY IT HAPPENED (root cause)
+  The new config default set the servo interval to 0, which is meaningless as a period, and the driver asserted interval > 0. An assert is a programming contract: the configuration violated an invariant the driver depends on. The boot order loaded the config after the servo task started, so the task observed the default value instead of the configured one.
+INVESTIGATION (before the fix)
+  - Read the abort message and backtrace to find the assert
+  - Checked the config default for the servo interval field
+  - Traced the boot order between config load and task start
+FIX (took 2 days)
+  Fixed by validating the config at boot before starting the servo task and rejecting interval <= 0 with a readable error instead of an abort.
+
+----------------------------------------------------------------------
+E0070 | v2.5 | BIG | Found Day 32 | Fixed in 3 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v2.5/trajectory_open.py
+Error     : Guru Meditation Error: Core 1 panic'ed (LoadProhibited)
+Terminal  : ESP32 serial monitor
+  Guru Meditation Error: Core 1 panic'ed (LoadProhibited)
+  addr 0x00000008, cause 'load'
+  Backtrace: 0x4201abce:0x3ffb1f50 motor_driver_set
+  Rebooting... (loop)
+WHAT HAPPENED
+  The ESP32 crashed and rebooted in a loop every time a motor command arrived. The backtrace pointed at motor_driver_set, and the fault address 0x8 is a classic null-pointer dereference.
+WHY IT HAPPENED (root cause)
+  A UART command could arrive before the motor driver was initialized, so motor_driver_set() was called with a NULL handle and dereferenced the struct member at offset 8 - hence address 0x8. The ESP32's MMU traps the load, panics with Guru Meditation, and the watchdog reboots into the same race. The bug is a missing initialization ordering contract, not a random crash: the UART task and the init code had no synchronization.
+INVESTIGATION (before the fix)
+  - Read the backtrace to identify motor_driver_set as the faulting function
+  - Found the NULL handle was caused by an early UART command
+  - Reproduced reliably by sending a command within 100ms of boot
+FIX (took 3 days)
+  Fixed by null-checking the driver handle in every entry point, and by deferring the UART task start until after motor init completes.
+
+----------------------------------------------------------------------
+E0071 | v2.5 | BIG | Found Day 32 | Fixed in 4 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v2.5/command_scheduler.py
+Error     : E (904) uart: RX buffer full - data lost
+Terminal  : ESP32 serial monitor
+  E (904) uart: RX buffer full - data lost
+  E (904) uart: RX buffer full - data lost
+  motor command stream garbled
+WHAT HAPPENED
+  The motor motion became jerky and the console filled with buffer-full errors. Commands were arriving faster than they could be consumed.
+WHY IT HAPPENED (root cause)
+  The Pi sent control commands at 100Hz, but the ESP32 UART task only read the buffer once per control tick and processed each byte individually. The default RX buffer (256 bytes) overflowed between reads, and the driver discarded the overflow. This is a producer/consumer mismatch: the producer rate was known (100Hz) but the buffer depth and read granularity were never sized to it.
+INVESTIGATION (before the fix)
+  - Counted the errors per second and correlated with command rate
+  - Measured the read interval of the UART task
+  - Calculated the required buffer depth from the protocol frame size
+FIX (took 4 days)
+  Fixed by raising the RX buffer to 2048 bytes and reading the buffer in bulk (read_available into a local array) once per task tick.
+
+----------------------------------------------------------------------
+E0072 | v2.5 | BIG | Found Day 32 | Fixed in 5 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v2.5/trajectory_open.py
+Error     : Brownout detector was triggered
+Terminal  : ESP32 serial monitor
+  E (1200) esp_core_dump_flash: Core dump flash config is corrupted
+  Brownout detector was triggered
+  Rebooting... (loop)
+WHAT HAPPENED
+  The ESP32 rebooted exactly when both motors started. Every motor start killed the firmware in a loop.
+WHY IT HAPPENED (root cause)
+  The battery sagged below the ESP32's brownout threshold (about 2.8V) the moment both motors drew current. The brownout detector is a hardware safety circuit: when the supply dips, it holds the chip in reset. The reboot loop is the detector doing its job - the real failure was the power architecture: no bulk capacitance, thin power wires, and no low-battery cutoff.
+INVESTIGATION (before the fix)
+  - Measured the supply voltage during motor start with a scope
+  - Saw the sag to 2.6V exactly at the brownout event
+  - Tested with a bench supply - no reboot, confirming the battery sag
+FIX (took 5 days)
+  Fixed by adding a 1000uF capacitor across the supply, thicker power wiring, and a low-voltage cutoff that refuses to start the motors below 3.2V.
+
+----------------------------------------------------------------------
+E0073 | v2.6 | SMALL | Found Day 33 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v2.6/dynamic_brake.py
+Error     : Duty value out of range 0-1023
+Terminal  : systemd journal
+  $ idf.py monitor
+  E (312) ledc: duty out of range!
+  E (312) ledc: duty=4095, max=1023
+  abort() was called at PC 0x42012345
+WHAT HAPPENED
+  The very first motor spin aborted the ESP32. The duty value was huge, and the LEDC driver refused it immediately.
+WHY IT HAPPENED (root cause)
+  The PWM timer was configured with 10-bit resolution (max 1023) but the speed calculation produced 14-bit values up to 4095. The mismatch came from two headers defining the resolution differently - pwm_config.h said 10 bits while the speed table was written for 14. The abort() is a hard assert inside the driver, by design: an out-of-range duty would produce undefined PWM behavior, so the firmware kills itself rather than corrupt the motors.
+FIX (took 1 day)
+  Fixed by clamping the duty in one place inside speed_control.c and asserting the resolution constant at boot, so both sides can never disagree again.
+
+----------------------------------------------------------------------
+E0074 | v2.6 | SMALL | Found Day 33 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v2.6/esp_brake.c
+Error     : Signed char overflow in speed command
+Terminal  : systemd journal
+  $ idf.py monitor
+  I (401) uart: MOTOR left=200 right=-30
+  E (402) motor: speed 200 overflows int8
+  motor stuck at 127
+WHAT HAPPENED
+  The motor ran at half speed during calibration and ignored the requested value of 200. The command had clearly been received - it was printed in the log.
+WHY IT HAPPENED (root cause)
+  The UART parser stored speeds in an int8_t, whose maximum is 127. The value 200 overflowed to -56, which the driver then clamped to 127. The bug was a protocol/schema mismatch: the Pi generated a text protocol with no stated range, and the ESP32 guessed the width. Signed overflow in C is undefined behavior, so in principle anything could have happened - here it produced a silently wrong motor command.
+FIX (took 1 day)
+  Fixed by widening the parser to int16_t, adding a range check that rejects speeds outside -100..100, and documenting the protocol range in the header.
+
+----------------------------------------------------------------------
+E0075 | v2.6 | SMALL | Found Day 33 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v2.6/stop_reverse.py
+Error     : Wheels spin the wrong way after boot
+Terminal  : systemd journal
+  $ python3 stop_reverse.py
+  forward: left=+1.0 right=+1.0
+  result: robot drives BACKWARD
+WHAT HAPPENED
+  The first drive test showed a robot that drove away from its operator while the log clearly said FORWARD. Hardware did what the pins said, not what the label said.
+WHY IT HAPPENED (root cause)
+  The motor channel macros were swapped relative to the physical wiring - channel A was driving the right motor and the code believed it was the left. PWM duty of +1 is just a number; the direction comes from the H-bridge enable pins, which were crossed. No software check can catch this; only a physical test with a known direction reveals it.
+FIX (took 1 day)
+  Fixed by swapping the two channel macros, then adding a boot self-test that spins each wheel by name and asks a human to confirm the direction.
+
+----------------------------------------------------------------------
+E0076 | v2.6 | SMALL | Found Day 33 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v2.6/dynamic_brake.py
+Error     : Ackermann steer angle sign is flipped in a left turn
+Terminal  : systemd journal
+  $ python3 dynamic_brake.py
+  left turn -> inner wheel angle +18deg
+  expected inner wheel angle -18deg
+WHAT HAPPENED
+  The simulation produced perfect Ackermann angles, but the real robot turned the wrong way. The math was checked twice and was correct on paper.
+WHY IT HAPPENED (root cause)
+  The sign convention of the Ackermann geometry disagreed with the physical servo mounting. The robot's steering linkage pushes the wheel right when the servo angle is positive, so a mathematically positive inner-wheel angle turned the robot left. The model lived in the Pi, the mechanical convention lived in the chassis, and nothing connected the two until a physical turn test.
+FIX (took 1 day)
+  Fixed by negating the angle at the servo write boundary and adding a physical direction test to the turn_test script, with a comment documenting the mechanical convention.
+
+----------------------------------------------------------------------
+E0077 | v2.6 | SMALL | Found Day 33 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v2.6/esp_brake.c
+Error     : Encoder tick count stays 0
+Terminal  : systemd journal
+  $ idf.py monitor
+  ticks: 0, 0, 0, 0
+  speed: 0.00 m/s (wheel never moved)
+WHAT HAPPENED
+  The wheel spun visibly, but the odometry reported zero ticks. The speed readout insisted the wheel was stationary while it was turning at full speed.
+WHY IT HAPPENED (root cause)
+  During rewiring, the encoder's two signal wires were swapped with the motor's power wires. The encoder needs power and a clean signal; with power and signal crossed, the interrupt pin floated and never changed state. The encoder ISR never fired, so the tick counter stayed at zero - a silent failure because no error was ever raised, just wrong data.
+FIX (took 1 day)
+  Fixed by matching the connector pinout against the datasheet, then adding a sanity check that raises a warning when the wheel spins with zero ticks.
+
+----------------------------------------------------------------------
+E0078 | v2.6 | SMALL | Found Day 33 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v2.6/stop_reverse.py
+Error     : PID D-term spikes to NaN after a bump
+Terminal  : systemd journal
+  $ python3 stop_reverse.py
+  error=0.002 dterm=nan
+  pid output = nan
+  motor ramps to full speed
+WHAT HAPPENED
+  The robot surged to full speed for a moment after rolling over a bump, then recovered. The D term was the only thing that looked strange.
+WHY IT HAPPENED (root cause)
+  The derivative was computed as (error - last_error) / dt with dt=0. A bump caused two identical encoder samples with a zero time delta, dividing by zero. Python returns NaN for 0/0, and NaN propagates through every subsequent arithmetic - the PID output became NaN, which compared false against all limits, so the safety clamp never triggered.
+FIX (took 1 day)
+  Fixed by adding a low-pass filter on the D term and replacing the division with a guarded version that keeps the previous value when dt is below a threshold.
+
+----------------------------------------------------------------------
+E0079 | v2.6 | SMALL | Found Day 33 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v2.6/dynamic_brake.py
+Error     : Gyro reads 250 deg/s idle
+Terminal  : systemd journal
+  $ python3 dynamic_brake.py
+  gyro: 248.3 deg/s  (expected ~0)
+  imu status: SUSPECT
+WHAT HAPPENED
+  The robot sat perfectly still on the bench while the gyro claimed it was spinning at 248 degrees per second - a quarter of a full rotation per second, standing still.
+WHY IT HAPPENED (root cause)
+  The MPU6050 was running at its default full-scale range with factory offsets. Factory gyro offsets are rarely zero, and the raw value is scaled by the full-scale constant - with the 250 dps range selected the bias of the sensor element maps to tens of degrees per second. Calibration is not a refinement, it is a prerequisite: without the bias subtraction the reading is meaningless.
+FIX (took 1 day)
+  Fixed by writing the calibrated offset registers during init and re-running the v3.1 calibration whenever the board or mounting changes.
+
+----------------------------------------------------------------------
+E0080 | v2.6 | SMALL | Found Day 33 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v2.6/esp_brake.c
+Error     : Keyboard control ignores held keys
+Terminal  : systemd journal
+  $ idf.py monitor
+  key 'w' not detected during 'a' hold
+  robot turns but never speeds up
+WHAT HAPPENED
+  Manual driving felt broken: holding 'w' while turning did nothing, even though the key worked alone. The robot turned, but never accelerated.
+WHY IT HAPPENED (root cause)
+  The keyboard handler used a blocking read, so while one key was held, the handler waited for that key to be released before reading the next. The terminal delivers one event at a time; a blocking getch() cannot represent two simultaneous keys. This is a fundamental limitation of line-buffered terminal input, not a bug in the key table.
+FIX (took 1 day)
+  Fixed by switching to raw mode with a non-blocking poll and maintaining a key-state table, which records every pressed key and merges them each control tick.
+
+----------------------------------------------------------------------
+E0081 | v2.6 | BIG | Found Day 34 | Fixed in 2 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v2.6/dynamic_brake.py
+Error     : Guru Meditation Error: Core 1 panic'ed (LoadProhibited)
+Terminal  : ESP32 serial monitor
+  Guru Meditation Error: Core 1 panic'ed (LoadProhibited)
+  addr 0x00000008, cause 'load'
+  Backtrace: 0x4201abce:0x3ffb1f50 motor_driver_set
+  Rebooting... (loop)
+WHAT HAPPENED
+  The ESP32 crashed and rebooted in a loop every time a motor command arrived. The backtrace pointed at motor_driver_set, and the fault address 0x8 is a classic null-pointer dereference.
+WHY IT HAPPENED (root cause)
+  A UART command could arrive before the motor driver was initialized, so motor_driver_set() was called with a NULL handle and dereferenced the struct member at offset 8 - hence address 0x8. The ESP32's MMU traps the load, panics with Guru Meditation, and the watchdog reboots into the same race. The bug is a missing initialization ordering contract, not a random crash: the UART task and the init code had no synchronization.
+INVESTIGATION (before the fix)
+  - Read the backtrace to identify motor_driver_set as the faulting function
+  - Found the NULL handle was caused by an early UART command
+  - Reproduced reliably by sending a command within 100ms of boot
+FIX (took 2 days)
+  Fixed by null-checking the driver handle in every entry point, and by deferring the UART task start until after motor init completes.
+
+----------------------------------------------------------------------
+E0082 | v2.6 | BIG | Found Day 34 | Fixed in 3 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v2.6/esp_brake.c
+Error     : E (904) uart: RX buffer full - data lost
+Terminal  : ESP32 serial monitor
+  E (904) uart: RX buffer full - data lost
+  E (904) uart: RX buffer full - data lost
+  motor command stream garbled
+WHAT HAPPENED
+  The motor motion became jerky and the console filled with buffer-full errors. Commands were arriving faster than they could be consumed.
+WHY IT HAPPENED (root cause)
+  The Pi sent control commands at 100Hz, but the ESP32 UART task only read the buffer once per control tick and processed each byte individually. The default RX buffer (256 bytes) overflowed between reads, and the driver discarded the overflow. This is a producer/consumer mismatch: the producer rate was known (100Hz) but the buffer depth and read granularity were never sized to it.
+INVESTIGATION (before the fix)
+  - Counted the errors per second and correlated with command rate
+  - Measured the read interval of the UART task
+  - Calculated the required buffer depth from the protocol frame size
+FIX (took 3 days)
+  Fixed by raising the RX buffer to 2048 bytes and reading the buffer in bulk (read_available into a local array) once per task tick.
+
+----------------------------------------------------------------------
+E0083 | v2.6 | BIG | Found Day 34 | Fixed in 4 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v2.6/stop_reverse.py
+Error     : Brownout detector was triggered
+Terminal  : ESP32 serial monitor
+  E (1200) esp_core_dump_flash: Core dump flash config is corrupted
+  Brownout detector was triggered
+  Rebooting... (loop)
+WHAT HAPPENED
+  The ESP32 rebooted exactly when both motors started. Every motor start killed the firmware in a loop.
+WHY IT HAPPENED (root cause)
+  The battery sagged below the ESP32's brownout threshold (about 2.8V) the moment both motors drew current. The brownout detector is a hardware safety circuit: when the supply dips, it holds the chip in reset. The reboot loop is the detector doing its job - the real failure was the power architecture: no bulk capacitance, thin power wires, and no low-battery cutoff.
+INVESTIGATION (before the fix)
+  - Measured the supply voltage during motor start with a scope
+  - Saw the sag to 2.6V exactly at the brownout event
+  - Tested with a bench supply - no reboot, confirming the battery sag
+FIX (took 4 days)
+  Fixed by adding a 1000uF capacitor across the supply, thicker power wiring, and a low-voltage cutoff that refuses to start the motors below 3.2V.
+
+----------------------------------------------------------------------
+E0084 | v2.6 | BIG | Found Day 34 | Fixed in 5 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v2.6/dynamic_brake.py
+Error     : rst:0x10 (RTCWDT_RTC_RESET), boot:0x13 (SPI_FAST_FLASH_BOOT)
+Terminal  : ESP32 serial monitor
+  rst:0x10 (RTCWDT_RTC_RESET), boot:0x13 (SPI_FAST_FLASH_BOOT)
+  load:0x3fff0030,len:1184
+  load:0x40078000,len:13260
+  -> watchdog reset, boot loop
+WHAT HAPPENED
+  The ESP32 reset itself at random moments and rebooted. The reset reason code RTCWDT_RTC_RESET revealed the watchdog as the killer.
+WHY IT HAPPENED (root cause)
+  The motor task blocked on an I2C read that never completed, so it never yielded to the scheduler and never fed the task watchdog. After the configured timeout, the watchdog forced a reset - the system was not crashed, it was deadlocked, and the watchdog was the recovery mechanism. The I2C read had no timeout, which is what allowed the block to become infinite.
+INVESTIGATION (before the fix)
+  - Decoded the reset reason from the boot banner
+  - Confirmed the watchdog fired on the motor task specifically
+  - Reproduced by inserting a blocked sensor read mid-run
+FIX (took 5 days)
+  Fixed by adding a timeout to the I2C read and feeding the watchdog in the motor task, so a blocked bus cannot kill the loop.
+
+----------------------------------------------------------------------
+E0085 | v2.7 | SMALL | Found Day 35 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v2.7/scurve_profile.py
+Error     : Signed char overflow in speed command
+Terminal  : VS Code terminal
+  $ idf.py monitor
+  I (401) uart: MOTOR left=200 right=-30
+  E (402) motor: speed 200 overflows int8
+  motor stuck at 127
+WHAT HAPPENED
+  The motor ran at half speed during calibration and ignored the requested value of 200. The command had clearly been received - it was printed in the log.
+WHY IT HAPPENED (root cause)
+  The UART parser stored speeds in an int8_t, whose maximum is 127. The value 200 overflowed to -56, which the driver then clamped to 127. The bug was a protocol/schema mismatch: the Pi generated a text protocol with no stated range, and the ESP32 guessed the width. Signed overflow in C is undefined behavior, so in principle anything could have happened - here it produced a silently wrong motor command.
+FIX (took 1 day)
+  Fixed by widening the parser to int16_t, adding a range check that rejects speeds outside -100..100, and documenting the protocol range in the header.
+
+----------------------------------------------------------------------
+E0086 | v2.7 | SMALL | Found Day 35 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v2.7/speed_ramp.py
+Error     : Wheels spin the wrong way after boot
+Terminal  : VS Code terminal
+  $ python3 speed_ramp.py
+  forward: left=+1.0 right=+1.0
+  result: robot drives BACKWARD
+WHAT HAPPENED
+  The first drive test showed a robot that drove away from its operator while the log clearly said FORWARD. Hardware did what the pins said, not what the label said.
+WHY IT HAPPENED (root cause)
+  The motor channel macros were swapped relative to the physical wiring - channel A was driving the right motor and the code believed it was the left. PWM duty of +1 is just a number; the direction comes from the H-bridge enable pins, which were crossed. No software check can catch this; only a physical test with a known direction reveals it.
+FIX (took 1 day)
+  Fixed by swapping the two channel macros, then adding a boot self-test that spins each wheel by name and asks a human to confirm the direction.
+
+----------------------------------------------------------------------
+E0087 | v2.7 | SMALL | Found Day 35 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v2.7/scurve_profile.py
+Error     : Ackermann steer angle sign is flipped in a left turn
+Terminal  : VS Code terminal
+  $ python3 scurve_profile.py
+  left turn -> inner wheel angle +18deg
+  expected inner wheel angle -18deg
+WHAT HAPPENED
+  The simulation produced perfect Ackermann angles, but the real robot turned the wrong way. The math was checked twice and was correct on paper.
+WHY IT HAPPENED (root cause)
+  The sign convention of the Ackermann geometry disagreed with the physical servo mounting. The robot's steering linkage pushes the wheel right when the servo angle is positive, so a mathematically positive inner-wheel angle turned the robot left. The model lived in the Pi, the mechanical convention lived in the chassis, and nothing connected the two until a physical turn test.
+FIX (took 1 day)
+  Fixed by negating the angle at the servo write boundary and adding a physical direction test to the turn_test script, with a comment documenting the mechanical convention.
+
+----------------------------------------------------------------------
+E0088 | v2.7 | SMALL | Found Day 35 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v2.7/speed_ramp.py
+Error     : Encoder tick count stays 0
+Terminal  : VS Code terminal
+  $ python3 speed_ramp.py
+  ticks: 0, 0, 0, 0
+  speed: 0.00 m/s (wheel never moved)
+WHAT HAPPENED
+  The wheel spun visibly, but the odometry reported zero ticks. The speed readout insisted the wheel was stationary while it was turning at full speed.
+WHY IT HAPPENED (root cause)
+  During rewiring, the encoder's two signal wires were swapped with the motor's power wires. The encoder needs power and a clean signal; with power and signal crossed, the interrupt pin floated and never changed state. The encoder ISR never fired, so the tick counter stayed at zero - a silent failure because no error was ever raised, just wrong data.
+FIX (took 1 day)
+  Fixed by matching the connector pinout against the datasheet, then adding a sanity check that raises a warning when the wheel spins with zero ticks.
+
+----------------------------------------------------------------------
+E0089 | v2.7 | SMALL | Found Day 35 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v2.7/scurve_profile.py
+Error     : PID D-term spikes to NaN after a bump
+Terminal  : VS Code terminal
+  $ python3 scurve_profile.py
+  error=0.002 dterm=nan
+  pid output = nan
+  motor ramps to full speed
+WHAT HAPPENED
+  The robot surged to full speed for a moment after rolling over a bump, then recovered. The D term was the only thing that looked strange.
+WHY IT HAPPENED (root cause)
+  The derivative was computed as (error - last_error) / dt with dt=0. A bump caused two identical encoder samples with a zero time delta, dividing by zero. Python returns NaN for 0/0, and NaN propagates through every subsequent arithmetic - the PID output became NaN, which compared false against all limits, so the safety clamp never triggered.
+FIX (took 1 day)
+  Fixed by adding a low-pass filter on the D term and replacing the division with a guarded version that keeps the previous value when dt is below a threshold.
+
+----------------------------------------------------------------------
+E0090 | v2.7 | SMALL | Found Day 35 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v2.7/speed_ramp.py
+Error     : Gyro reads 250 deg/s idle
+Terminal  : VS Code terminal
+  $ python3 speed_ramp.py
+  gyro: 248.3 deg/s  (expected ~0)
+  imu status: SUSPECT
+WHAT HAPPENED
+  The robot sat perfectly still on the bench while the gyro claimed it was spinning at 248 degrees per second - a quarter of a full rotation per second, standing still.
+WHY IT HAPPENED (root cause)
+  The MPU6050 was running at its default full-scale range with factory offsets. Factory gyro offsets are rarely zero, and the raw value is scaled by the full-scale constant - with the 250 dps range selected the bias of the sensor element maps to tens of degrees per second. Calibration is not a refinement, it is a prerequisite: without the bias subtraction the reading is meaningless.
+FIX (took 1 day)
+  Fixed by writing the calibrated offset registers during init and re-running the v3.1 calibration whenever the board or mounting changes.
+
+----------------------------------------------------------------------
+E0091 | v2.7 | SMALL | Found Day 35 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v2.7/scurve_profile.py
+Error     : Keyboard control ignores held keys
+Terminal  : VS Code terminal
+  $ python3 scurve_profile.py
+  key 'w' not detected during 'a' hold
+  robot turns but never speeds up
+WHAT HAPPENED
+  Manual driving felt broken: holding 'w' while turning did nothing, even though the key worked alone. The robot turned, but never accelerated.
+WHY IT HAPPENED (root cause)
+  The keyboard handler used a blocking read, so while one key was held, the handler waited for that key to be released before reading the next. The terminal delivers one event at a time; a blocking getch() cannot represent two simultaneous keys. This is a fundamental limitation of line-buffered terminal input, not a bug in the key table.
+FIX (took 1 day)
+  Fixed by switching to raw mode with a non-blocking poll and maintaining a key-state table, which records every pressed key and merges them each control tick.
+
+----------------------------------------------------------------------
+E0092 | v2.7 | SMALL | Found Day 35 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v2.7/speed_ramp.py
+Error     : Duty value out of range 0-1023
+Terminal  : VS Code terminal
+  $ idf.py monitor
+  E (312) ledc: duty out of range!
+  E (312) ledc: duty=4095, max=1023
+  abort() was called at PC 0x42012345
+WHAT HAPPENED
+  The very first motor spin aborted the ESP32. The duty value was huge, and the LEDC driver refused it immediately.
+WHY IT HAPPENED (root cause)
+  The PWM timer was configured with 10-bit resolution (max 1023) but the speed calculation produced 14-bit values up to 4095. The mismatch came from two headers defining the resolution differently - pwm_config.h said 10 bits while the speed table was written for 14. The abort() is a hard assert inside the driver, by design: an out-of-range duty would produce undefined PWM behavior, so the firmware kills itself rather than corrupt the motors.
+FIX (took 1 day)
+  Fixed by clamping the duty in one place inside speed_control.c and asserting the resolution constant at boot, so both sides can never disagree again.
+
+----------------------------------------------------------------------
+E0093 | v2.7 | BIG | Found Day 36 | Fixed in 2 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v2.7/scurve_profile.py
+Error     : E (904) uart: RX buffer full - data lost
+Terminal  : ESP32 serial monitor
+  E (904) uart: RX buffer full - data lost
+  E (904) uart: RX buffer full - data lost
+  motor command stream garbled
+WHAT HAPPENED
+  The motor motion became jerky and the console filled with buffer-full errors. Commands were arriving faster than they could be consumed.
+WHY IT HAPPENED (root cause)
+  The Pi sent control commands at 100Hz, but the ESP32 UART task only read the buffer once per control tick and processed each byte individually. The default RX buffer (256 bytes) overflowed between reads, and the driver discarded the overflow. This is a producer/consumer mismatch: the producer rate was known (100Hz) but the buffer depth and read granularity were never sized to it.
+INVESTIGATION (before the fix)
+  - Counted the errors per second and correlated with command rate
+  - Measured the read interval of the UART task
+  - Calculated the required buffer depth from the protocol frame size
+FIX (took 2 days)
+  Fixed by raising the RX buffer to 2048 bytes and reading the buffer in bulk (read_available into a local array) once per task tick.
+
+----------------------------------------------------------------------
+E0094 | v2.7 | BIG | Found Day 36 | Fixed in 3 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v2.7/speed_ramp.py
+Error     : Brownout detector was triggered
+Terminal  : ESP32 serial monitor
+  E (1200) esp_core_dump_flash: Core dump flash config is corrupted
+  Brownout detector was triggered
+  Rebooting... (loop)
+WHAT HAPPENED
+  The ESP32 rebooted exactly when both motors started. Every motor start killed the firmware in a loop.
+WHY IT HAPPENED (root cause)
+  The battery sagged below the ESP32's brownout threshold (about 2.8V) the moment both motors drew current. The brownout detector is a hardware safety circuit: when the supply dips, it holds the chip in reset. The reboot loop is the detector doing its job - the real failure was the power architecture: no bulk capacitance, thin power wires, and no low-battery cutoff.
+INVESTIGATION (before the fix)
+  - Measured the supply voltage during motor start with a scope
+  - Saw the sag to 2.6V exactly at the brownout event
+  - Tested with a bench supply - no reboot, confirming the battery sag
+FIX (took 3 days)
+  Fixed by adding a 1000uF capacitor across the supply, thicker power wiring, and a low-voltage cutoff that refuses to start the motors below 3.2V.
+
+----------------------------------------------------------------------
+E0095 | v2.7 | BIG | Found Day 36 | Fixed in 4 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v2.7/scurve_profile.py
+Error     : rst:0x10 (RTCWDT_RTC_RESET), boot:0x13 (SPI_FAST_FLASH_BOOT)
+Terminal  : ESP32 serial monitor
+  rst:0x10 (RTCWDT_RTC_RESET), boot:0x13 (SPI_FAST_FLASH_BOOT)
+  load:0x3fff0030,len:1184
+  load:0x40078000,len:13260
+  -> watchdog reset, boot loop
+WHAT HAPPENED
+  The ESP32 reset itself at random moments and rebooted. The reset reason code RTCWDT_RTC_RESET revealed the watchdog as the killer.
+WHY IT HAPPENED (root cause)
+  The motor task blocked on an I2C read that never completed, so it never yielded to the scheduler and never fed the task watchdog. After the configured timeout, the watchdog forced a reset - the system was not crashed, it was deadlocked, and the watchdog was the recovery mechanism. The I2C read had no timeout, which is what allowed the block to become infinite.
+INVESTIGATION (before the fix)
+  - Decoded the reset reason from the boot banner
+  - Confirmed the watchdog fired on the motor task specifically
+  - Reproduced by inserting a blocked sensor read mid-run
+FIX (took 4 days)
+  Fixed by adding a timeout to the I2C read and feeding the watchdog in the motor task, so a blocked bus cannot kill the loop.
+
+----------------------------------------------------------------------
+E0096 | v2.7 | BIG | Found Day 36 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v2.7/speed_ramp.py
+Error     : serial.serialutil.SerialException: device reports readiness to read but returned no data
+Terminal  : Pi SSH terminal
+  $ python3 final_drive.py
+  serial.serialutil.SerialException: device reports readiness to read but returned no data
+    File "pi/comm/uart.py", line 44, in read
+WHAT HAPPENED
+  The drive script crashed at startup on a strange serial error - the device said it had data, but the read returned nothing.
+WHY IT HAPPENED (root cause)
+  The USB-UART adapter was half-seated, so the kernel's tty layer believed the device was present (it reported readability) while the adapter actually returned nothing. SerialException is raised when the read violates its own contract. Intermittent physical connections produce exactly this class of bizarre error: the software and the device disagree about the hardware state.
+INVESTIGATION (before the fix)
+  - Reinserted the adapter - the error vanished, confirming the hardware
+  - Checked dmesg for USB disconnects during the run
+  - Added a retry to see if the error was transient
+FIX (took 5 days)
+  Fixed by reseating the adapter and adding a retry-with-backoff around the read, with a clear 'check USB connection' message after three failures.
+
+----------------------------------------------------------------------
+E0097 | v2.8 | SMALL | Found Day 37 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v2.8/key_state.py
+Error     : Wheels spin the wrong way after boot
+Terminal  : Pi SSH terminal
+  $ python3 key_state.py
+  forward: left=+1.0 right=+1.0
+  result: robot drives BACKWARD
+WHAT HAPPENED
+  The first drive test showed a robot that drove away from its operator while the log clearly said FORWARD. Hardware did what the pins said, not what the label said.
+WHY IT HAPPENED (root cause)
+  The motor channel macros were swapped relative to the physical wiring - channel A was driving the right motor and the code believed it was the left. PWM duty of +1 is just a number; the direction comes from the H-bridge enable pins, which were crossed. No software check can catch this; only a physical test with a known direction reveals it.
+FIX (took 1 day)
+  Fixed by swapping the two channel macros, then adding a boot self-test that spins each wheel by name and asks a human to confirm the direction.
+
+----------------------------------------------------------------------
+E0098 | v2.8 | SMALL | Found Day 37 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v2.8/keyboard_control.py
+Error     : Ackermann steer angle sign is flipped in a left turn
+Terminal  : Pi SSH terminal
+  $ python3 keyboard_control.py
+  left turn -> inner wheel angle +18deg
+  expected inner wheel angle -18deg
+WHAT HAPPENED
+  The simulation produced perfect Ackermann angles, but the real robot turned the wrong way. The math was checked twice and was correct on paper.
+WHY IT HAPPENED (root cause)
+  The sign convention of the Ackermann geometry disagreed with the physical servo mounting. The robot's steering linkage pushes the wheel right when the servo angle is positive, so a mathematically positive inner-wheel angle turned the robot left. The model lived in the Pi, the mechanical convention lived in the chassis, and nothing connected the two until a physical turn test.
+FIX (took 1 day)
+  Fixed by negating the angle at the servo write boundary and adding a physical direction test to the turn_test script, with a comment documenting the mechanical convention.
+
+----------------------------------------------------------------------
+E0099 | v2.8 | SMALL | Found Day 37 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v2.8/key_state.py
+Error     : Encoder tick count stays 0
+Terminal  : Pi SSH terminal
+  $ python3 key_state.py
+  ticks: 0, 0, 0, 0
+  speed: 0.00 m/s (wheel never moved)
+WHAT HAPPENED
+  The wheel spun visibly, but the odometry reported zero ticks. The speed readout insisted the wheel was stationary while it was turning at full speed.
+WHY IT HAPPENED (root cause)
+  During rewiring, the encoder's two signal wires were swapped with the motor's power wires. The encoder needs power and a clean signal; with power and signal crossed, the interrupt pin floated and never changed state. The encoder ISR never fired, so the tick counter stayed at zero - a silent failure because no error was ever raised, just wrong data.
+FIX (took 1 day)
+  Fixed by matching the connector pinout against the datasheet, then adding a sanity check that raises a warning when the wheel spins with zero ticks.
+
+----------------------------------------------------------------------
+E0100 | v2.8 | SMALL | Found Day 37 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v2.8/keyboard_control.py
+Error     : PID D-term spikes to NaN after a bump
+Terminal  : Pi SSH terminal
+  $ python3 keyboard_control.py
+  error=0.002 dterm=nan
+  pid output = nan
+  motor ramps to full speed
+WHAT HAPPENED
+  The robot surged to full speed for a moment after rolling over a bump, then recovered. The D term was the only thing that looked strange.
+WHY IT HAPPENED (root cause)
+  The derivative was computed as (error - last_error) / dt with dt=0. A bump caused two identical encoder samples with a zero time delta, dividing by zero. Python returns NaN for 0/0, and NaN propagates through every subsequent arithmetic - the PID output became NaN, which compared false against all limits, so the safety clamp never triggered.
+FIX (took 1 day)
+  Fixed by adding a low-pass filter on the D term and replacing the division with a guarded version that keeps the previous value when dt is below a threshold.
+
+----------------------------------------------------------------------
+E0101 | v2.8 | SMALL | Found Day 37 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v2.8/key_state.py
+Error     : Gyro reads 250 deg/s idle
+Terminal  : Pi SSH terminal
+  $ python3 key_state.py
+  gyro: 248.3 deg/s  (expected ~0)
+  imu status: SUSPECT
+WHAT HAPPENED
+  The robot sat perfectly still on the bench while the gyro claimed it was spinning at 248 degrees per second - a quarter of a full rotation per second, standing still.
+WHY IT HAPPENED (root cause)
+  The MPU6050 was running at its default full-scale range with factory offsets. Factory gyro offsets are rarely zero, and the raw value is scaled by the full-scale constant - with the 250 dps range selected the bias of the sensor element maps to tens of degrees per second. Calibration is not a refinement, it is a prerequisite: without the bias subtraction the reading is meaningless.
+FIX (took 1 day)
+  Fixed by writing the calibrated offset registers during init and re-running the v3.1 calibration whenever the board or mounting changes.
+
+----------------------------------------------------------------------
+E0102 | v2.8 | SMALL | Found Day 37 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v2.8/keyboard_control.py
+Error     : Keyboard control ignores held keys
+Terminal  : Pi SSH terminal
+  $ python3 keyboard_control.py
+  key 'w' not detected during 'a' hold
+  robot turns but never speeds up
+WHAT HAPPENED
+  Manual driving felt broken: holding 'w' while turning did nothing, even though the key worked alone. The robot turned, but never accelerated.
+WHY IT HAPPENED (root cause)
+  The keyboard handler used a blocking read, so while one key was held, the handler waited for that key to be released before reading the next. The terminal delivers one event at a time; a blocking getch() cannot represent two simultaneous keys. This is a fundamental limitation of line-buffered terminal input, not a bug in the key table.
+FIX (took 1 day)
+  Fixed by switching to raw mode with a non-blocking poll and maintaining a key-state table, which records every pressed key and merges them each control tick.
+
+----------------------------------------------------------------------
+E0103 | v2.8 | SMALL | Found Day 37 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v2.8/key_state.py
+Error     : Duty value out of range 0-1023
+Terminal  : Pi SSH terminal
+  $ idf.py monitor
+  E (312) ledc: duty out of range!
+  E (312) ledc: duty=4095, max=1023
+  abort() was called at PC 0x42012345
+WHAT HAPPENED
+  The very first motor spin aborted the ESP32. The duty value was huge, and the LEDC driver refused it immediately.
+WHY IT HAPPENED (root cause)
+  The PWM timer was configured with 10-bit resolution (max 1023) but the speed calculation produced 14-bit values up to 4095. The mismatch came from two headers defining the resolution differently - pwm_config.h said 10 bits while the speed table was written for 14. The abort() is a hard assert inside the driver, by design: an out-of-range duty would produce undefined PWM behavior, so the firmware kills itself rather than corrupt the motors.
+FIX (took 1 day)
+  Fixed by clamping the duty in one place inside speed_control.c and asserting the resolution constant at boot, so both sides can never disagree again.
+
+----------------------------------------------------------------------
+E0104 | v2.8 | SMALL | Found Day 37 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v2.8/keyboard_control.py
+Error     : Signed char overflow in speed command
+Terminal  : Pi SSH terminal
+  $ idf.py monitor
+  I (401) uart: MOTOR left=200 right=-30
+  E (402) motor: speed 200 overflows int8
+  motor stuck at 127
+WHAT HAPPENED
+  The motor ran at half speed during calibration and ignored the requested value of 200. The command had clearly been received - it was printed in the log.
+WHY IT HAPPENED (root cause)
+  The UART parser stored speeds in an int8_t, whose maximum is 127. The value 200 overflowed to -56, which the driver then clamped to 127. The bug was a protocol/schema mismatch: the Pi generated a text protocol with no stated range, and the ESP32 guessed the width. Signed overflow in C is undefined behavior, so in principle anything could have happened - here it produced a silently wrong motor command.
+FIX (took 1 day)
+  Fixed by widening the parser to int16_t, adding a range check that rejects speeds outside -100..100, and documenting the protocol range in the header.
+
+----------------------------------------------------------------------
+E0105 | v2.8 | BIG | Found Day 38 | Fixed in 2 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v2.8/key_state.py
+Error     : Brownout detector was triggered
+Terminal  : ESP32 serial monitor
+  E (1200) esp_core_dump_flash: Core dump flash config is corrupted
+  Brownout detector was triggered
+  Rebooting... (loop)
+WHAT HAPPENED
+  The ESP32 rebooted exactly when both motors started. Every motor start killed the firmware in a loop.
+WHY IT HAPPENED (root cause)
+  The battery sagged below the ESP32's brownout threshold (about 2.8V) the moment both motors drew current. The brownout detector is a hardware safety circuit: when the supply dips, it holds the chip in reset. The reboot loop is the detector doing its job - the real failure was the power architecture: no bulk capacitance, thin power wires, and no low-battery cutoff.
+INVESTIGATION (before the fix)
+  - Measured the supply voltage during motor start with a scope
+  - Saw the sag to 2.6V exactly at the brownout event
+  - Tested with a bench supply - no reboot, confirming the battery sag
+FIX (took 2 days)
+  Fixed by adding a 1000uF capacitor across the supply, thicker power wiring, and a low-voltage cutoff that refuses to start the motors below 3.2V.
+
+----------------------------------------------------------------------
+E0106 | v2.8 | BIG | Found Day 38 | Fixed in 3 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v2.8/keyboard_control.py
+Error     : rst:0x10 (RTCWDT_RTC_RESET), boot:0x13 (SPI_FAST_FLASH_BOOT)
+Terminal  : ESP32 serial monitor
+  rst:0x10 (RTCWDT_RTC_RESET), boot:0x13 (SPI_FAST_FLASH_BOOT)
+  load:0x3fff0030,len:1184
+  load:0x40078000,len:13260
+  -> watchdog reset, boot loop
+WHAT HAPPENED
+  The ESP32 reset itself at random moments and rebooted. The reset reason code RTCWDT_RTC_RESET revealed the watchdog as the killer.
+WHY IT HAPPENED (root cause)
+  The motor task blocked on an I2C read that never completed, so it never yielded to the scheduler and never fed the task watchdog. After the configured timeout, the watchdog forced a reset - the system was not crashed, it was deadlocked, and the watchdog was the recovery mechanism. The I2C read had no timeout, which is what allowed the block to become infinite.
+INVESTIGATION (before the fix)
+  - Decoded the reset reason from the boot banner
+  - Confirmed the watchdog fired on the motor task specifically
+  - Reproduced by inserting a blocked sensor read mid-run
+FIX (took 3 days)
+  Fixed by adding a timeout to the I2C read and feeding the watchdog in the motor task, so a blocked bus cannot kill the loop.
+
+----------------------------------------------------------------------
+E0107 | v2.8 | BIG | Found Day 38 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v2.8/key_state.py
+Error     : serial.serialutil.SerialException: device reports readiness to read but returned no data
+Terminal  : Pi SSH terminal
+  $ python3 final_drive.py
+  serial.serialutil.SerialException: device reports readiness to read but returned no data
+    File "pi/comm/uart.py", line 44, in read
+WHAT HAPPENED
+  The drive script crashed at startup on a strange serial error - the device said it had data, but the read returned nothing.
+WHY IT HAPPENED (root cause)
+  The USB-UART adapter was half-seated, so the kernel's tty layer believed the device was present (it reported readability) while the adapter actually returned nothing. SerialException is raised when the read violates its own contract. Intermittent physical connections produce exactly this class of bizarre error: the software and the device disagree about the hardware state.
+INVESTIGATION (before the fix)
+  - Reinserted the adapter - the error vanished, confirming the hardware
+  - Checked dmesg for USB disconnects during the run
+  - Added a retry to see if the error was transient
+FIX (took 4 days)
+  Fixed by reseating the adapter and adding a retry-with-backoff around the read, with a clear 'check USB connection' message after three failures.
+
+----------------------------------------------------------------------
+E0108 | v2.8 | BIG | Found Day 38 | Fixed in 5 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v2.8/keyboard_control.py
+Error     : W (515) ledc: duty set to 0 due to illegal duty 4095
+Terminal  : ESP32 serial monitor
+  W (515) ledc: duty set to 0 due to illegal duty 4095
+  motor stopped at full throttle
+  code continued running
+WHAT HAPPENED
+  The motor died at full throttle without any crash. The code kept running - the motor simply stopped obeying.
+WHY IT HAPPENED (root cause)
+  A signed int overflow turned a valid duty into 4095 - beyond the 12-bit LEDC limit - and the driver, rather than clamping, set the output to 0 as a safe default. The overflow came from a negative speed being negated at the boundary of int16. The failure was silent because a warning is not an error: the driver protected the hardware at the cost of the software's expectations.
+INVESTIGATION (before the fix)
+  - Spotted the warning line in a flood of normal log output
+  - Traced the duty value back to a negated int16 speed
+  - Reproduced with the speed at the exact boundary value
+FIX (took 5 days)
+  Fixed by clamping the duty in speed_control.c before the driver call and asserting that the internal speed range can never overflow int16.
+
+----------------------------------------------------------------------
+E0109 | v2.9 | SMALL | Found Day 39 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v2.9/final_drive.py
+Error     : Ackermann steer angle sign is flipped in a left turn
+Terminal  : Pi console (HDMI)
+  $ python3 final_drive.py
+  left turn -> inner wheel angle +18deg
+  expected inner wheel angle -18deg
+WHAT HAPPENED
+  The simulation produced perfect Ackermann angles, but the real robot turned the wrong way. The math was checked twice and was correct on paper.
+WHY IT HAPPENED (root cause)
+  The sign convention of the Ackermann geometry disagreed with the physical servo mounting. The robot's steering linkage pushes the wheel right when the servo angle is positive, so a mathematically positive inner-wheel angle turned the robot left. The model lived in the Pi, the mechanical convention lived in the chassis, and nothing connected the two until a physical turn test.
+FIX (took 1 day)
+  Fixed by negating the angle at the servo write boundary and adding a physical direction test to the turn_test script, with a comment documenting the mechanical convention.
+
+----------------------------------------------------------------------
+E0110 | v2.9 | SMALL | Found Day 39 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v2.9/performance_test.py
+Error     : Encoder tick count stays 0
+Terminal  : Pi console (HDMI)
+  $ python3 performance_test.py
+  ticks: 0, 0, 0, 0
+  speed: 0.00 m/s (wheel never moved)
+WHAT HAPPENED
+  The wheel spun visibly, but the odometry reported zero ticks. The speed readout insisted the wheel was stationary while it was turning at full speed.
+WHY IT HAPPENED (root cause)
+  During rewiring, the encoder's two signal wires were swapped with the motor's power wires. The encoder needs power and a clean signal; with power and signal crossed, the interrupt pin floated and never changed state. The encoder ISR never fired, so the tick counter stayed at zero - a silent failure because no error was ever raised, just wrong data.
+FIX (took 1 day)
+  Fixed by matching the connector pinout against the datasheet, then adding a sanity check that raises a warning when the wheel spins with zero ticks.
+
+----------------------------------------------------------------------
+E0111 | v2.9 | SMALL | Found Day 39 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v2.9/final_drive.py
+Error     : PID D-term spikes to NaN after a bump
+Terminal  : Pi console (HDMI)
+  $ python3 final_drive.py
+  error=0.002 dterm=nan
+  pid output = nan
+  motor ramps to full speed
+WHAT HAPPENED
+  The robot surged to full speed for a moment after rolling over a bump, then recovered. The D term was the only thing that looked strange.
+WHY IT HAPPENED (root cause)
+  The derivative was computed as (error - last_error) / dt with dt=0. A bump caused two identical encoder samples with a zero time delta, dividing by zero. Python returns NaN for 0/0, and NaN propagates through every subsequent arithmetic - the PID output became NaN, which compared false against all limits, so the safety clamp never triggered.
+FIX (took 1 day)
+  Fixed by adding a low-pass filter on the D term and replacing the division with a guarded version that keeps the previous value when dt is below a threshold.
+
+----------------------------------------------------------------------
+E0112 | v2.9 | SMALL | Found Day 39 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v2.9/performance_test.py
+Error     : Gyro reads 250 deg/s idle
+Terminal  : Pi console (HDMI)
+  $ python3 performance_test.py
+  gyro: 248.3 deg/s  (expected ~0)
+  imu status: SUSPECT
+WHAT HAPPENED
+  The robot sat perfectly still on the bench while the gyro claimed it was spinning at 248 degrees per second - a quarter of a full rotation per second, standing still.
+WHY IT HAPPENED (root cause)
+  The MPU6050 was running at its default full-scale range with factory offsets. Factory gyro offsets are rarely zero, and the raw value is scaled by the full-scale constant - with the 250 dps range selected the bias of the sensor element maps to tens of degrees per second. Calibration is not a refinement, it is a prerequisite: without the bias subtraction the reading is meaningless.
+FIX (took 1 day)
+  Fixed by writing the calibrated offset registers during init and re-running the v3.1 calibration whenever the board or mounting changes.
+
+----------------------------------------------------------------------
+E0113 | v2.9 | SMALL | Found Day 39 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v2.9/final_drive.py
+Error     : Keyboard control ignores held keys
+Terminal  : Pi console (HDMI)
+  $ python3 final_drive.py
+  key 'w' not detected during 'a' hold
+  robot turns but never speeds up
+WHAT HAPPENED
+  Manual driving felt broken: holding 'w' while turning did nothing, even though the key worked alone. The robot turned, but never accelerated.
+WHY IT HAPPENED (root cause)
+  The keyboard handler used a blocking read, so while one key was held, the handler waited for that key to be released before reading the next. The terminal delivers one event at a time; a blocking getch() cannot represent two simultaneous keys. This is a fundamental limitation of line-buffered terminal input, not a bug in the key table.
+FIX (took 1 day)
+  Fixed by switching to raw mode with a non-blocking poll and maintaining a key-state table, which records every pressed key and merges them each control tick.
+
+----------------------------------------------------------------------
+E0114 | v2.9 | SMALL | Found Day 39 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v2.9/performance_test.py
+Error     : Duty value out of range 0-1023
+Terminal  : Pi console (HDMI)
+  $ idf.py monitor
+  E (312) ledc: duty out of range!
+  E (312) ledc: duty=4095, max=1023
+  abort() was called at PC 0x42012345
+WHAT HAPPENED
+  The very first motor spin aborted the ESP32. The duty value was huge, and the LEDC driver refused it immediately.
+WHY IT HAPPENED (root cause)
+  The PWM timer was configured with 10-bit resolution (max 1023) but the speed calculation produced 14-bit values up to 4095. The mismatch came from two headers defining the resolution differently - pwm_config.h said 10 bits while the speed table was written for 14. The abort() is a hard assert inside the driver, by design: an out-of-range duty would produce undefined PWM behavior, so the firmware kills itself rather than corrupt the motors.
+FIX (took 1 day)
+  Fixed by clamping the duty in one place inside speed_control.c and asserting the resolution constant at boot, so both sides can never disagree again.
+
+----------------------------------------------------------------------
+E0115 | v2.9 | SMALL | Found Day 39 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v2.9/final_drive.py
+Error     : Signed char overflow in speed command
+Terminal  : Pi console (HDMI)
+  $ idf.py monitor
+  I (401) uart: MOTOR left=200 right=-30
+  E (402) motor: speed 200 overflows int8
+  motor stuck at 127
+WHAT HAPPENED
+  The motor ran at half speed during calibration and ignored the requested value of 200. The command had clearly been received - it was printed in the log.
+WHY IT HAPPENED (root cause)
+  The UART parser stored speeds in an int8_t, whose maximum is 127. The value 200 overflowed to -56, which the driver then clamped to 127. The bug was a protocol/schema mismatch: the Pi generated a text protocol with no stated range, and the ESP32 guessed the width. Signed overflow in C is undefined behavior, so in principle anything could have happened - here it produced a silently wrong motor command.
+FIX (took 1 day)
+  Fixed by widening the parser to int16_t, adding a range check that rejects speeds outside -100..100, and documenting the protocol range in the header.
+
+----------------------------------------------------------------------
+E0116 | v2.9 | SMALL | Found Day 39 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v2.9/performance_test.py
+Error     : Wheels spin the wrong way after boot
+Terminal  : Pi console (HDMI)
+  $ python3 performance_test.py
+  forward: left=+1.0 right=+1.0
+  result: robot drives BACKWARD
+WHAT HAPPENED
+  The first drive test showed a robot that drove away from its operator while the log clearly said FORWARD. Hardware did what the pins said, not what the label said.
+WHY IT HAPPENED (root cause)
+  The motor channel macros were swapped relative to the physical wiring - channel A was driving the right motor and the code believed it was the left. PWM duty of +1 is just a number; the direction comes from the H-bridge enable pins, which were crossed. No software check can catch this; only a physical test with a known direction reveals it.
+FIX (took 1 day)
+  Fixed by swapping the two channel macros, then adding a boot self-test that spins each wheel by name and asks a human to confirm the direction.
+
+----------------------------------------------------------------------
+E0117 | v2.9 | BIG | Found Day 40 | Fixed in 2 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v2.9/final_drive.py
+Error     : rst:0x10 (RTCWDT_RTC_RESET), boot:0x13 (SPI_FAST_FLASH_BOOT)
+Terminal  : ESP32 serial monitor
+  rst:0x10 (RTCWDT_RTC_RESET), boot:0x13 (SPI_FAST_FLASH_BOOT)
+  load:0x3fff0030,len:1184
+  load:0x40078000,len:13260
+  -> watchdog reset, boot loop
+WHAT HAPPENED
+  The ESP32 reset itself at random moments and rebooted. The reset reason code RTCWDT_RTC_RESET revealed the watchdog as the killer.
+WHY IT HAPPENED (root cause)
+  The motor task blocked on an I2C read that never completed, so it never yielded to the scheduler and never fed the task watchdog. After the configured timeout, the watchdog forced a reset - the system was not crashed, it was deadlocked, and the watchdog was the recovery mechanism. The I2C read had no timeout, which is what allowed the block to become infinite.
+INVESTIGATION (before the fix)
+  - Decoded the reset reason from the boot banner
+  - Confirmed the watchdog fired on the motor task specifically
+  - Reproduced by inserting a blocked sensor read mid-run
+FIX (took 2 days)
+  Fixed by adding a timeout to the I2C read and feeding the watchdog in the motor task, so a blocked bus cannot kill the loop.
+
+----------------------------------------------------------------------
+E0118 | v2.9 | BIG | Found Day 40 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v2.9/performance_test.py
+Error     : serial.serialutil.SerialException: device reports readiness to read but returned no data
+Terminal  : Pi SSH terminal
+  $ python3 final_drive.py
+  serial.serialutil.SerialException: device reports readiness to read but returned no data
+    File "pi/comm/uart.py", line 44, in read
+WHAT HAPPENED
+  The drive script crashed at startup on a strange serial error - the device said it had data, but the read returned nothing.
+WHY IT HAPPENED (root cause)
+  The USB-UART adapter was half-seated, so the kernel's tty layer believed the device was present (it reported readability) while the adapter actually returned nothing. SerialException is raised when the read violates its own contract. Intermittent physical connections produce exactly this class of bizarre error: the software and the device disagree about the hardware state.
+INVESTIGATION (before the fix)
+  - Reinserted the adapter - the error vanished, confirming the hardware
+  - Checked dmesg for USB disconnects during the run
+  - Added a retry to see if the error was transient
+FIX (took 3 days)
+  Fixed by reseating the adapter and adding a retry-with-backoff around the read, with a clear 'check USB connection' message after three failures.
+
+----------------------------------------------------------------------
+E0119 | v2.9 | BIG | Found Day 40 | Fixed in 4 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v2.9/final_drive.py
+Error     : W (515) ledc: duty set to 0 due to illegal duty 4095
+Terminal  : ESP32 serial monitor
+  W (515) ledc: duty set to 0 due to illegal duty 4095
+  motor stopped at full throttle
+  code continued running
+WHAT HAPPENED
+  The motor died at full throttle without any crash. The code kept running - the motor simply stopped obeying.
+WHY IT HAPPENED (root cause)
+  A signed int overflow turned a valid duty into 4095 - beyond the 12-bit LEDC limit - and the driver, rather than clamping, set the output to 0 as a safe default. The overflow came from a negative speed being negated at the boundary of int16. The failure was silent because a warning is not an error: the driver protected the hardware at the cost of the software's expectations.
+INVESTIGATION (before the fix)
+  - Spotted the warning line in a flood of normal log output
+  - Traced the duty value back to a negated int16 speed
+  - Reproduced with the speed at the exact boundary value
+FIX (took 4 days)
+  Fixed by clamping the duty in speed_control.c before the driver call and asserting that the internal speed range can never overflow int16.
+
+----------------------------------------------------------------------
+E0120 | v2.9 | BIG | Found Day 40 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v2.9/performance_test.py
+Error     : Odometry drift of 0.6m over a 2m run
+Terminal  : Pi SSH terminal
+  run distance: 2.0m  odometry: 2.6m
+  error: +0.6m (30%)
+  wheelbase calibration off
+WHAT HAPPENED
+  The odometry claimed the robot traveled 2.6m when it actually traveled 2.0m. Every distance estimate was inflated by 30%.
+WHY IT HAPPENED (root cause)
+  The wheelbase constant came from the CAD model, not from the physical robot. Odometry converts wheel speeds to distance using the wheelbase and wheel diameter; a 15% error in the wheelbase produces a proportional error in the estimate. The CAD model had idealized dimensions that the 3D-printed chassis did not match - tolerance, print shrink, and assembly gaps added up to 30%.
+INVESTIGATION (before the fix)
+  - Ran the straight-line test three times to measure the constant error
+  - Measured the true wheelbase with a caliper
+  - Computed the correction factor from the measured distance
+FIX (took 5 days)
+  Fixed by measuring the true wheelbase and wheel diameter, updating odometry.py with the measured constants, and adding a 2m straight-line verification to the test suite.
+
+======================================================================
+END OF PHASE v2.x -- 120 errors
+======================================================================

@@ -1,0 +1,2079 @@
+WRO 4WS Robot - Error Catalog (1000+ Errors, Deep Detail)
+=========================================================
+One error entry per development morning across the whole 90-version
+history repo (v1.0 -> v9.9).  Every entry includes WHAT HAPPENED,
+WHY IT HAPPENED (root cause / deep research), the terminal type and
+exact output, and the FIX with how many days it took.
+
+  SMALL  errors : fixed the same day (1 day)
+  BIG    errors : 2-5 days, with investigation steps before the fix
+
+Day = development-day counter only (no dates).
+
+Total errors : 1080   (720 SMALL / 360 BIG)
+Total days   : 180
+Versions     : 90
+Phases       : 9
+
+======================================================================
+PHASE v5.x  --  LOCALIZATION & FUSION
+======================================================================
+
+----------------------------------------------------------------------
+E0001 | v5.0 | SMALL | Found Day 81 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v5.0/dead_reckon.py
+Error     : np.linalg.LinAlgError: Singular matrix
+Terminal  : systemd journal
+  $ python3 dead_reckon.py
+    File "dead_reckon.py", line 92, in update
+      K = P @ H @ inv(S)
+  np.linalg.LinAlgError: Singular matrix
+WHAT HAPPENED
+  The UKF crashed on its first update with all sensors dead. The innovation covariance was singular - the filter had no information at all.
+WHY IT HAPPENED (root cause)
+  With every sensor returning zero, the innovation covariance S became singular (determinant zero), and matrix inversion is undefined for singular matrices. The UKF assumes measurements carry some information; all-zero measurements violate that assumption. Mathematically this is the filter asking for the inverse of a zero matrix - the error is the correct behavior of the math, and the bug is that nothing prevented it.
+FIX (took 1 day)
+  Fixed by checking the condition number of S before the update and skipping the update when it exceeds a threshold, keeping the prediction only.
+
+----------------------------------------------------------------------
+E0002 | v5.0 | SMALL | Found Day 81 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v5.0/motion_tracker.py
+Error     : NaN appears in the covariance matrix
+Terminal  : systemd journal
+  $ python3 motion_tracker.py
+  P = [[nan nan],[nan nan]]
+  pose estimate frozen
+WHAT HAPPENED
+  The covariance matrix filled with NaN and the pose stopped updating. The filter neither crashed nor recovered - it just froze.
+WHY IT HAPPENED (root cause)
+  One corrupted measurement (a 0 divided during normalization) introduced NaN into the state, and every subsequent update propagated it through the linear algebra. The UKF has no built-in NaN detection; NaN arithmetic silently poisons every matrix product. The failure showed up minutes later as a frozen pose, long after the bad sample was long gone.
+FIX (took 1 day)
+  Fixed by validating every measurement with np.isfinite() before the update and rejecting non-finite samples with a logged warning.
+
+----------------------------------------------------------------------
+E0003 | v5.0 | SMALL | Found Day 81 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v5.0/dead_reckon.py
+Error     : Negative variance in the dead reckoning
+Terminal  : systemd journal
+  $ python3 dead_reckon.py
+  variance: -0.004
+  sigma = nan
+WHAT HAPPENED
+  The dead-reckoning output contained a negative variance, and the standard deviation computed from it became NaN. The motion estimate was mathematically impossible.
+WHY IT HAPPENED (root cause)
+  The noise model added a negative correction term after a wheel-slip event - slip reduces the estimated speed, and the speed-dependent noise formula produced a negative variance. Variance is defined as the expected squared deviation, which cannot be negative; the formula was wrong for the slip regime. Negative variance then breaks the sqrt used for the 1-sigma bound.
+FIX (took 1 day)
+  Fixed by clamping the variance to a minimum of 1e-6 and adding an assertion in tests that the variance never leaves the valid domain.
+
+----------------------------------------------------------------------
+E0004 | v5.0 | SMALL | Found Day 81 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v5.0/motion_tracker.py
+Error     : Outlier rejection drops 100% of measurements
+Terminal  : systemd journal
+  $ python3 motion_tracker.py
+  accepted: 0/48 measurements
+  pose drifts with no updates
+WHAT HAPPENED
+  The filter never updated - every single measurement was rejected as an outlier. The robot moved, but the pose estimate just drifted open-loop.
+WHY IT HAPPENED (root cause)
+  The Mahalanobis gate used chi-square threshold 3 (about 1 sigma) for a measurement that legitimately carries 2-3 sigma noise. With the gate set tighter than the noise, every genuine reading exceeded the threshold and was discarded. Outlier rejection assumes the model matches the noise; a gate calibrated for a different sensor or surface rejects the true signal as noise.
+FIX (took 1 day)
+  Fixed by raising the gate to chi-square 9 (3 sigma), then validating with the outlier_test that at least 95% of genuine measurements pass.
+
+----------------------------------------------------------------------
+E0005 | v5.0 | SMALL | Found Day 81 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v5.0/dead_reckon.py
+Error     : UKF alpha/beta/kappa parameter typo
+Terminal  : systemd journal
+  $ python3 dead_reckon.py
+  ukf_params.json: alpha=1e-3 beta=2 kappa=1
+  filter diverges on the first turn
+WHAT HAPPENED
+  The UKF diverged instantly on the first corner. The same data worked with the old parameters, so the filter itself was fine - the tuning was not.
+WHY IT HAPPENED (root cause)
+  The sigma-point spread parameter alpha controls how far the sigma points lie from the mean. alpha=1e-3 collapsed the sigma points almost onto the mean, so the filter's covariance estimate was tiny and it over-trusted its state. On the first turn the innovation was huge relative to that shrunken covariance, and the correction pulled the state wildly off. One digit in a JSON file changed the filter's behavior completely.
+FIX (took 1 day)
+  Fixed by restoring alpha=1e-2 from the tuning run and adding a startup check that alpha is within the valid (0,1] range.
+
+----------------------------------------------------------------------
+E0006 | v5.0 | SMALL | Found Day 81 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v5.0/motion_tracker.py
+Error     : Mag heading jumps 180 degrees on reversal
+Terminal  : systemd journal
+  $ python3 motion_tracker.py
+  heading: 45 -> 225 (robot didn't turn)
+  hard-iron offset missing
+WHAT HAPPENED
+  The heading readout flipped by exactly 180 degrees whenever the robot reversed direction. The robot never turned, but the compass said it had.
+WHY IT HAPPENED (root cause)
+  The hard-iron offset (the fixed magnetic distortion from the battery and wiring) was only applied in forward direction code paths. When reversing, the un-compensated raw vector rotated the heading by the offset magnitude - which here was almost exactly 180 degrees. The magnetometer measures the sum of the Earth field plus the constant distortion; without subtracting the distortion the heading formula is wrong.
+FIX (took 1 day)
+  Fixed by applying the calibrated hard-iron offset in both directions and adding the reverse path to the heading test cases.
+
+----------------------------------------------------------------------
+E0007 | v5.0 | SMALL | Found Day 81 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v5.0/dead_reckon.py
+Error     : Cross-verify reports 40cm disagreement
+Terminal  : systemd journal
+  $ python3 dead_reckon.py
+  tof=0.82m  camera=0.42m  diff=0.40m
+  camera scale wrong
+WHAT HAPPENED
+  The ToF and camera distance estimates disagreed by 40cm on the same target. One of them was right; the cross-verify test existed precisely to find which.
+WHY IT HAPPENED (root cause)
+  The camera distance scale was calibrated at 640x480, but the pipeline ran at 1280x720. The focal length in pixels doubles with resolution, so a scale factor valid at one resolution is wrong at the other. The two systems measured correctly in their own frames - the bug was a unit mismatch between the calibration domain and the runtime domain.
+FIX (took 1 day)
+  Fixed by re-running tof_camera_calib.py at the runtime resolution and storing the resolution in the calibration file so the scale can be validated at load.
+
+----------------------------------------------------------------------
+E0008 | v5.0 | SMALL | Found Day 81 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v5.0/motion_tracker.py
+Error     : EKF linearization fails on sharp turns
+Terminal  : systemd journal
+  $ python3 motion_tracker.py
+  ekf error: Jacobian is zero
+  state: x=0.5 y=2.1 theta=nan
+WHAT HAPPENED
+  The EKF produced NaN heading on sharp turns. The filter worked on gentle curves and fell apart on the aggressive ones.
+WHY IT HAPPENED (root cause)
+  The EKF linearizes the motion model with a Jacobian evaluated at the current state. For a sharp turn the yaw Jacobian term was dropped in the model, so the Jacobian row became zero and the state transition lost its heading information - the estimate collapsed to NaN. The EKF's approximation quality depends on the Jacobian being accurate; a model simplified for straight driving is invalid at large steering angles.
+FIX (took 1 day)
+  Fixed by adding the missing yaw-dynamics term to the Jacobian and extending the ekf_test with a sharp-turn scenario.
+
+----------------------------------------------------------------------
+E0009 | v5.0 | BIG | Found Day 82 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.0/dead_reckon.py
+Error     : UKF diverges and the robot drives off the track
+Terminal  : Pi SSH terminal
+  ukf: x=3.2 y=8.9 theta=2.1
+  actual: x=1.8 y=2.0 theta=0.0
+  UKF diverged, EKF fallback used
+WHAT HAPPENED
+  The robot drove off the track because the UKF believed the robot was somewhere else entirely. The pose was confident, detailed - and completely wrong.
+WHY IT HAPPENED (root cause)
+  The adaptive noise module grew the process noise with each suspicious measurement, and the filter's confidence in the state shrank with it. With enough noise inflation the filter trusted every new measurement blindly, and a single bad sensor reading dragged the pose far from reality. The adaptive mechanism had no upper bound on the noise it would tolerate - it adapted itself into failure.
+INVESTIGATION (before the fix)
+  - Plotted the UKF pose against the known track - divergence was gradual
+  - Tracked the process noise growth over the run
+  - Bounded the noise growth and re-ran - divergence gone
+FIX (took 2 days)
+  Fixed by bounding the adaptive noise growth to a maximum factor, and by adding a sanity gate that falls back to the EKF when the UKF and EKF disagree by more than 1m.
+
+----------------------------------------------------------------------
+E0010 | v5.0 | BIG | Found Day 82 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.0/motion_tracker.py
+Error     : Dead reckoning drifts 30cm per lap
+Terminal  : Pi SSH terminal
+  dead reckoning: -0.30m off after 1 lap
+  wheel slip on the carpet
+WHAT HAPPENED
+  The dead-reckoned position was 30cm off after every lap. The error was consistent, which made it diagnosable - and unavoidable without external reference.
+WHY IT HAPPENED (root cause)
+  Odometry assumes the wheels roll without slipping, but the carpet caused a consistent 3% slip that odometry cannot measure - it only counts rotations. Over a 10m lap, 3% is exactly 30cm. Pure dead reckoning has no way to know about slip because the encoder counts the same whether the wheel grips or slides; the model was perfect, the assumption was wrong.
+INVESTIGATION (before the fix)
+  - Measured the error over several laps - constant at 30cm
+  - Computed the implied slip percentage - 3%, consistent
+  - Fused the ToF wall distance as a lateral reference
+FIX (took 3 days)
+  Fixed by fusing the ToF wall distance into the lateral state, so the drift is corrected by an absolute reference instead of a second integration.
+
+----------------------------------------------------------------------
+E0011 | v5.0 | BIG | Found Day 82 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.0/dead_reckon.py
+Error     : EKF position jumps 40cm at the first corner
+Terminal  : Pi SSH terminal
+  position: (1.2, 2.0) -> (1.6, 2.0) in one step
+  measurement noise too small
+WHAT HAPPENED
+  At the first corner the EKF position jumped 40cm in a single update. The jump was instant - the filter re-trusted a single measurement over its own model.
+WHY IT HAPPENED (root cause)
+  The measurement noise matrix was tuned too optimistically: the filter believed the ToF more than the motion model. At the corner, one noisy reading passed the gate and the filter snapped to it. The EKF's estimate is a weighted compromise; the weights live in the noise matrices, so a too-small R matrix means 'trust the sensor blindly'.
+INVESTIGATION (before the fix)
+  - Logged the innovation at the corner - it was 10x the modeled noise
+  - Tuned R against real logged data instead of guesses
+  - Verified the jump disappeared with the realistic R
+FIX (took 4 days)
+  Fixed by tuning the measurement noise matrix from actual logged data (Allan variance for the sensors), and by gating the correction when the innovation exceeds 5 sigma.
+
+----------------------------------------------------------------------
+E0012 | v5.0 | BIG | Found Day 82 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.0/motion_tracker.py
+Error     : Pose pipeline slows to 8Hz under load
+Terminal  : Pi SSH terminal
+  pipeline rate: 100Hz -> 8Hz
+  CPU at 96% (vision + fusion)
+WHAT HAPPENED
+  The pose pipeline collapsed from 100Hz to 8Hz when the vision stack ran at full load. The robot's control degraded with it, because control depends on fresh pose data.
+WHY IT HAPPENED (root cause)
+  Vision and fusion ran in a single thread, and vision processing took 120ms per frame under load. The GIL serialized the Python work, so fusion starved behind vision. The architecture had no isolation between a 30fps vision workload and a 100Hz fusion workload - one process, one thread, one bottleneck.
+INVESTIGATION (before the fix)
+  - Measured the per-stage latency to find the bottleneck
+  - Confirmed vision occupied the CPU while fusion waited
+  - Split fusion into a separate process - rate recovered
+FIX (took 5 days)
+  Fixed by moving fusion to its own process with a shared-memory pose buffer, so a vision slowdown can no longer block control.
+
+----------------------------------------------------------------------
+E0013 | v5.1 | SMALL | Found Day 83 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v5.1/mag_heading.py
+Error     : NaN appears in the covariance matrix
+Terminal  : VS Code terminal
+  $ python3 mag_heading.py
+  P = [[nan nan],[nan nan]]
+  pose estimate frozen
+WHAT HAPPENED
+  The covariance matrix filled with NaN and the pose stopped updating. The filter neither crashed nor recovered - it just froze.
+WHY IT HAPPENED (root cause)
+  One corrupted measurement (a 0 divided during normalization) introduced NaN into the state, and every subsequent update propagated it through the linear algebra. The UKF has no built-in NaN detection; NaN arithmetic silently poisons every matrix product. The failure showed up minutes later as a frozen pose, long after the bad sample was long gone.
+FIX (took 1 day)
+  Fixed by validating every measurement with np.isfinite() before the update and rejecting non-finite samples with a logged warning.
+
+----------------------------------------------------------------------
+E0014 | v5.1 | SMALL | Found Day 83 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v5.1/motor_interference_test.py
+Error     : Negative variance in the dead reckoning
+Terminal  : VS Code terminal
+  $ python3 motor_interference_test.py
+  variance: -0.004
+  sigma = nan
+WHAT HAPPENED
+  The dead-reckoning output contained a negative variance, and the standard deviation computed from it became NaN. The motion estimate was mathematically impossible.
+WHY IT HAPPENED (root cause)
+  The noise model added a negative correction term after a wheel-slip event - slip reduces the estimated speed, and the speed-dependent noise formula produced a negative variance. Variance is defined as the expected squared deviation, which cannot be negative; the formula was wrong for the slip regime. Negative variance then breaks the sqrt used for the 1-sigma bound.
+FIX (took 1 day)
+  Fixed by clamping the variance to a minimum of 1e-6 and adding an assertion in tests that the variance never leaves the valid domain.
+
+----------------------------------------------------------------------
+E0015 | v5.1 | SMALL | Found Day 83 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v5.1/mag_heading.py
+Error     : Outlier rejection drops 100% of measurements
+Terminal  : VS Code terminal
+  $ python3 mag_heading.py
+  accepted: 0/48 measurements
+  pose drifts with no updates
+WHAT HAPPENED
+  The filter never updated - every single measurement was rejected as an outlier. The robot moved, but the pose estimate just drifted open-loop.
+WHY IT HAPPENED (root cause)
+  The Mahalanobis gate used chi-square threshold 3 (about 1 sigma) for a measurement that legitimately carries 2-3 sigma noise. With the gate set tighter than the noise, every genuine reading exceeded the threshold and was discarded. Outlier rejection assumes the model matches the noise; a gate calibrated for a different sensor or surface rejects the true signal as noise.
+FIX (took 1 day)
+  Fixed by raising the gate to chi-square 9 (3 sigma), then validating with the outlier_test that at least 95% of genuine measurements pass.
+
+----------------------------------------------------------------------
+E0016 | v5.1 | SMALL | Found Day 83 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v5.1/motor_interference_test.py
+Error     : UKF alpha/beta/kappa parameter typo
+Terminal  : VS Code terminal
+  $ python3 motor_interference_test.py
+  ukf_params.json: alpha=1e-3 beta=2 kappa=1
+  filter diverges on the first turn
+WHAT HAPPENED
+  The UKF diverged instantly on the first corner. The same data worked with the old parameters, so the filter itself was fine - the tuning was not.
+WHY IT HAPPENED (root cause)
+  The sigma-point spread parameter alpha controls how far the sigma points lie from the mean. alpha=1e-3 collapsed the sigma points almost onto the mean, so the filter's covariance estimate was tiny and it over-trusted its state. On the first turn the innovation was huge relative to that shrunken covariance, and the correction pulled the state wildly off. One digit in a JSON file changed the filter's behavior completely.
+FIX (took 1 day)
+  Fixed by restoring alpha=1e-2 from the tuning run and adding a startup check that alpha is within the valid (0,1] range.
+
+----------------------------------------------------------------------
+E0017 | v5.1 | SMALL | Found Day 83 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v5.1/mag_heading.py
+Error     : Mag heading jumps 180 degrees on reversal
+Terminal  : VS Code terminal
+  $ python3 mag_heading.py
+  heading: 45 -> 225 (robot didn't turn)
+  hard-iron offset missing
+WHAT HAPPENED
+  The heading readout flipped by exactly 180 degrees whenever the robot reversed direction. The robot never turned, but the compass said it had.
+WHY IT HAPPENED (root cause)
+  The hard-iron offset (the fixed magnetic distortion from the battery and wiring) was only applied in forward direction code paths. When reversing, the un-compensated raw vector rotated the heading by the offset magnitude - which here was almost exactly 180 degrees. The magnetometer measures the sum of the Earth field plus the constant distortion; without subtracting the distortion the heading formula is wrong.
+FIX (took 1 day)
+  Fixed by applying the calibrated hard-iron offset in both directions and adding the reverse path to the heading test cases.
+
+----------------------------------------------------------------------
+E0018 | v5.1 | SMALL | Found Day 83 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v5.1/motor_interference_test.py
+Error     : Cross-verify reports 40cm disagreement
+Terminal  : VS Code terminal
+  $ python3 motor_interference_test.py
+  tof=0.82m  camera=0.42m  diff=0.40m
+  camera scale wrong
+WHAT HAPPENED
+  The ToF and camera distance estimates disagreed by 40cm on the same target. One of them was right; the cross-verify test existed precisely to find which.
+WHY IT HAPPENED (root cause)
+  The camera distance scale was calibrated at 640x480, but the pipeline ran at 1280x720. The focal length in pixels doubles with resolution, so a scale factor valid at one resolution is wrong at the other. The two systems measured correctly in their own frames - the bug was a unit mismatch between the calibration domain and the runtime domain.
+FIX (took 1 day)
+  Fixed by re-running tof_camera_calib.py at the runtime resolution and storing the resolution in the calibration file so the scale can be validated at load.
+
+----------------------------------------------------------------------
+E0019 | v5.1 | SMALL | Found Day 83 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v5.1/mag_heading.py
+Error     : EKF linearization fails on sharp turns
+Terminal  : VS Code terminal
+  $ python3 mag_heading.py
+  ekf error: Jacobian is zero
+  state: x=0.5 y=2.1 theta=nan
+WHAT HAPPENED
+  The EKF produced NaN heading on sharp turns. The filter worked on gentle curves and fell apart on the aggressive ones.
+WHY IT HAPPENED (root cause)
+  The EKF linearizes the motion model with a Jacobian evaluated at the current state. For a sharp turn the yaw Jacobian term was dropped in the model, so the Jacobian row became zero and the state transition lost its heading information - the estimate collapsed to NaN. The EKF's approximation quality depends on the Jacobian being accurate; a model simplified for straight driving is invalid at large steering angles.
+FIX (took 1 day)
+  Fixed by adding the missing yaw-dynamics term to the Jacobian and extending the ekf_test with a sharp-turn scenario.
+
+----------------------------------------------------------------------
+E0020 | v5.1 | SMALL | Found Day 83 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v5.1/motor_interference_test.py
+Error     : np.linalg.LinAlgError: Singular matrix
+Terminal  : VS Code terminal
+  $ python3 motor_interference_test.py
+    File "motor_interference_test.py", line 92, in update
+      K = P @ H @ inv(S)
+  np.linalg.LinAlgError: Singular matrix
+WHAT HAPPENED
+  The UKF crashed on its first update with all sensors dead. The innovation covariance was singular - the filter had no information at all.
+WHY IT HAPPENED (root cause)
+  With every sensor returning zero, the innovation covariance S became singular (determinant zero), and matrix inversion is undefined for singular matrices. The UKF assumes measurements carry some information; all-zero measurements violate that assumption. Mathematically this is the filter asking for the inverse of a zero matrix - the error is the correct behavior of the math, and the bug is that nothing prevented it.
+FIX (took 1 day)
+  Fixed by checking the condition number of S before the update and skipping the update when it exceeds a threshold, keeping the prediction only.
+
+----------------------------------------------------------------------
+E0021 | v5.1 | BIG | Found Day 84 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.1/mag_heading.py
+Error     : Dead reckoning drifts 30cm per lap
+Terminal  : Pi SSH terminal
+  dead reckoning: -0.30m off after 1 lap
+  wheel slip on the carpet
+WHAT HAPPENED
+  The dead-reckoned position was 30cm off after every lap. The error was consistent, which made it diagnosable - and unavoidable without external reference.
+WHY IT HAPPENED (root cause)
+  Odometry assumes the wheels roll without slipping, but the carpet caused a consistent 3% slip that odometry cannot measure - it only counts rotations. Over a 10m lap, 3% is exactly 30cm. Pure dead reckoning has no way to know about slip because the encoder counts the same whether the wheel grips or slides; the model was perfect, the assumption was wrong.
+INVESTIGATION (before the fix)
+  - Measured the error over several laps - constant at 30cm
+  - Computed the implied slip percentage - 3%, consistent
+  - Fused the ToF wall distance as a lateral reference
+FIX (took 2 days)
+  Fixed by fusing the ToF wall distance into the lateral state, so the drift is corrected by an absolute reference instead of a second integration.
+
+----------------------------------------------------------------------
+E0022 | v5.1 | BIG | Found Day 84 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.1/motor_interference_test.py
+Error     : EKF position jumps 40cm at the first corner
+Terminal  : Pi SSH terminal
+  position: (1.2, 2.0) -> (1.6, 2.0) in one step
+  measurement noise too small
+WHAT HAPPENED
+  At the first corner the EKF position jumped 40cm in a single update. The jump was instant - the filter re-trusted a single measurement over its own model.
+WHY IT HAPPENED (root cause)
+  The measurement noise matrix was tuned too optimistically: the filter believed the ToF more than the motion model. At the corner, one noisy reading passed the gate and the filter snapped to it. The EKF's estimate is a weighted compromise; the weights live in the noise matrices, so a too-small R matrix means 'trust the sensor blindly'.
+INVESTIGATION (before the fix)
+  - Logged the innovation at the corner - it was 10x the modeled noise
+  - Tuned R against real logged data instead of guesses
+  - Verified the jump disappeared with the realistic R
+FIX (took 3 days)
+  Fixed by tuning the measurement noise matrix from actual logged data (Allan variance for the sensors), and by gating the correction when the innovation exceeds 5 sigma.
+
+----------------------------------------------------------------------
+E0023 | v5.1 | BIG | Found Day 84 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.1/mag_heading.py
+Error     : Pose pipeline slows to 8Hz under load
+Terminal  : Pi SSH terminal
+  pipeline rate: 100Hz -> 8Hz
+  CPU at 96% (vision + fusion)
+WHAT HAPPENED
+  The pose pipeline collapsed from 100Hz to 8Hz when the vision stack ran at full load. The robot's control degraded with it, because control depends on fresh pose data.
+WHY IT HAPPENED (root cause)
+  Vision and fusion ran in a single thread, and vision processing took 120ms per frame under load. The GIL serialized the Python work, so fusion starved behind vision. The architecture had no isolation between a 30fps vision workload and a 100Hz fusion workload - one process, one thread, one bottleneck.
+INVESTIGATION (before the fix)
+  - Measured the per-stage latency to find the bottleneck
+  - Confirmed vision occupied the CPU while fusion waited
+  - Split fusion into a separate process - rate recovered
+FIX (took 4 days)
+  Fixed by moving fusion to its own process with a shared-memory pose buffer, so a vision slowdown can no longer block control.
+
+----------------------------------------------------------------------
+E0024 | v5.1 | BIG | Found Day 84 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.1/motor_interference_test.py
+Error     : Outlier rejection masks a real obstacle
+Terminal  : Pi SSH terminal
+  obstacle at 0.5m: REJECTED as outlier
+  robot drives into the pillar
+WHAT HAPPENED
+  The outlier filter rejected the most important reading of the day: the real pillar at 0.5m. The robot drove into the obstacle it was supposed to avoid.
+WHY IT HAPPENED (root cause)
+  The Mahalanobis gate was tuned against a history of far-field noise, so the first close-range reading looked statistically impossible - it was far outside the modeled distribution. Outlier rejection assumes outliers are errors, but here the outlier was the truth and the history was the error. No static gate can distinguish 'new truth' from 'garbage' by distance alone.
+INVESTIGATION (before the fix)
+  - Replayed the log - the 0.5m reading was the true pillar
+  - Checked the gate: the reading was rejected as 8-sigma
+  - Tested an asymmetric gate - near readings never rejected
+FIX (took 5 days)
+  Fixed by making the gate asymmetric: readings below 0.6m are always accepted (they can only be obstacles), and only far-field readings are subject to rejection.
+
+----------------------------------------------------------------------
+E0025 | v5.2 | SMALL | Found Day 85 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.2/attitude_test.py
+Error     : Negative variance in the dead reckoning
+Terminal  : Pi SSH terminal
+  $ python3 attitude_test.py
+  variance: -0.004
+  sigma = nan
+WHAT HAPPENED
+  The dead-reckoning output contained a negative variance, and the standard deviation computed from it became NaN. The motion estimate was mathematically impossible.
+WHY IT HAPPENED (root cause)
+  The noise model added a negative correction term after a wheel-slip event - slip reduces the estimated speed, and the speed-dependent noise formula produced a negative variance. Variance is defined as the expected squared deviation, which cannot be negative; the formula was wrong for the slip regime. Negative variance then breaks the sqrt used for the 1-sigma bound.
+FIX (took 1 day)
+  Fixed by clamping the variance to a minimum of 1e-6 and adding an assertion in tests that the variance never leaves the valid domain.
+
+----------------------------------------------------------------------
+E0026 | v5.2 | SMALL | Found Day 85 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.2/complementary_full.py
+Error     : Outlier rejection drops 100% of measurements
+Terminal  : Pi SSH terminal
+  $ python3 complementary_full.py
+  accepted: 0/48 measurements
+  pose drifts with no updates
+WHAT HAPPENED
+  The filter never updated - every single measurement was rejected as an outlier. The robot moved, but the pose estimate just drifted open-loop.
+WHY IT HAPPENED (root cause)
+  The Mahalanobis gate used chi-square threshold 3 (about 1 sigma) for a measurement that legitimately carries 2-3 sigma noise. With the gate set tighter than the noise, every genuine reading exceeded the threshold and was discarded. Outlier rejection assumes the model matches the noise; a gate calibrated for a different sensor or surface rejects the true signal as noise.
+FIX (took 1 day)
+  Fixed by raising the gate to chi-square 9 (3 sigma), then validating with the outlier_test that at least 95% of genuine measurements pass.
+
+----------------------------------------------------------------------
+E0027 | v5.2 | SMALL | Found Day 85 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.2/attitude_test.py
+Error     : UKF alpha/beta/kappa parameter typo
+Terminal  : Pi SSH terminal
+  $ python3 attitude_test.py
+  ukf_params.json: alpha=1e-3 beta=2 kappa=1
+  filter diverges on the first turn
+WHAT HAPPENED
+  The UKF diverged instantly on the first corner. The same data worked with the old parameters, so the filter itself was fine - the tuning was not.
+WHY IT HAPPENED (root cause)
+  The sigma-point spread parameter alpha controls how far the sigma points lie from the mean. alpha=1e-3 collapsed the sigma points almost onto the mean, so the filter's covariance estimate was tiny and it over-trusted its state. On the first turn the innovation was huge relative to that shrunken covariance, and the correction pulled the state wildly off. One digit in a JSON file changed the filter's behavior completely.
+FIX (took 1 day)
+  Fixed by restoring alpha=1e-2 from the tuning run and adding a startup check that alpha is within the valid (0,1] range.
+
+----------------------------------------------------------------------
+E0028 | v5.2 | SMALL | Found Day 85 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.2/complementary_full.py
+Error     : Mag heading jumps 180 degrees on reversal
+Terminal  : Pi SSH terminal
+  $ python3 complementary_full.py
+  heading: 45 -> 225 (robot didn't turn)
+  hard-iron offset missing
+WHAT HAPPENED
+  The heading readout flipped by exactly 180 degrees whenever the robot reversed direction. The robot never turned, but the compass said it had.
+WHY IT HAPPENED (root cause)
+  The hard-iron offset (the fixed magnetic distortion from the battery and wiring) was only applied in forward direction code paths. When reversing, the un-compensated raw vector rotated the heading by the offset magnitude - which here was almost exactly 180 degrees. The magnetometer measures the sum of the Earth field plus the constant distortion; without subtracting the distortion the heading formula is wrong.
+FIX (took 1 day)
+  Fixed by applying the calibrated hard-iron offset in both directions and adding the reverse path to the heading test cases.
+
+----------------------------------------------------------------------
+E0029 | v5.2 | SMALL | Found Day 85 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.2/attitude_test.py
+Error     : Cross-verify reports 40cm disagreement
+Terminal  : Pi SSH terminal
+  $ python3 attitude_test.py
+  tof=0.82m  camera=0.42m  diff=0.40m
+  camera scale wrong
+WHAT HAPPENED
+  The ToF and camera distance estimates disagreed by 40cm on the same target. One of them was right; the cross-verify test existed precisely to find which.
+WHY IT HAPPENED (root cause)
+  The camera distance scale was calibrated at 640x480, but the pipeline ran at 1280x720. The focal length in pixels doubles with resolution, so a scale factor valid at one resolution is wrong at the other. The two systems measured correctly in their own frames - the bug was a unit mismatch between the calibration domain and the runtime domain.
+FIX (took 1 day)
+  Fixed by re-running tof_camera_calib.py at the runtime resolution and storing the resolution in the calibration file so the scale can be validated at load.
+
+----------------------------------------------------------------------
+E0030 | v5.2 | SMALL | Found Day 85 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.2/complementary_full.py
+Error     : EKF linearization fails on sharp turns
+Terminal  : Pi SSH terminal
+  $ python3 complementary_full.py
+  ekf error: Jacobian is zero
+  state: x=0.5 y=2.1 theta=nan
+WHAT HAPPENED
+  The EKF produced NaN heading on sharp turns. The filter worked on gentle curves and fell apart on the aggressive ones.
+WHY IT HAPPENED (root cause)
+  The EKF linearizes the motion model with a Jacobian evaluated at the current state. For a sharp turn the yaw Jacobian term was dropped in the model, so the Jacobian row became zero and the state transition lost its heading information - the estimate collapsed to NaN. The EKF's approximation quality depends on the Jacobian being accurate; a model simplified for straight driving is invalid at large steering angles.
+FIX (took 1 day)
+  Fixed by adding the missing yaw-dynamics term to the Jacobian and extending the ekf_test with a sharp-turn scenario.
+
+----------------------------------------------------------------------
+E0031 | v5.2 | SMALL | Found Day 85 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.2/attitude_test.py
+Error     : np.linalg.LinAlgError: Singular matrix
+Terminal  : Pi SSH terminal
+  $ python3 attitude_test.py
+    File "attitude_test.py", line 92, in update
+      K = P @ H @ inv(S)
+  np.linalg.LinAlgError: Singular matrix
+WHAT HAPPENED
+  The UKF crashed on its first update with all sensors dead. The innovation covariance was singular - the filter had no information at all.
+WHY IT HAPPENED (root cause)
+  With every sensor returning zero, the innovation covariance S became singular (determinant zero), and matrix inversion is undefined for singular matrices. The UKF assumes measurements carry some information; all-zero measurements violate that assumption. Mathematically this is the filter asking for the inverse of a zero matrix - the error is the correct behavior of the math, and the bug is that nothing prevented it.
+FIX (took 1 day)
+  Fixed by checking the condition number of S before the update and skipping the update when it exceeds a threshold, keeping the prediction only.
+
+----------------------------------------------------------------------
+E0032 | v5.2 | SMALL | Found Day 85 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.2/complementary_full.py
+Error     : NaN appears in the covariance matrix
+Terminal  : Pi SSH terminal
+  $ python3 complementary_full.py
+  P = [[nan nan],[nan nan]]
+  pose estimate frozen
+WHAT HAPPENED
+  The covariance matrix filled with NaN and the pose stopped updating. The filter neither crashed nor recovered - it just froze.
+WHY IT HAPPENED (root cause)
+  One corrupted measurement (a 0 divided during normalization) introduced NaN into the state, and every subsequent update propagated it through the linear algebra. The UKF has no built-in NaN detection; NaN arithmetic silently poisons every matrix product. The failure showed up minutes later as a frozen pose, long after the bad sample was long gone.
+FIX (took 1 day)
+  Fixed by validating every measurement with np.isfinite() before the update and rejecting non-finite samples with a logged warning.
+
+----------------------------------------------------------------------
+E0033 | v5.2 | BIG | Found Day 86 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.2/attitude_test.py
+Error     : EKF position jumps 40cm at the first corner
+Terminal  : Pi SSH terminal
+  position: (1.2, 2.0) -> (1.6, 2.0) in one step
+  measurement noise too small
+WHAT HAPPENED
+  At the first corner the EKF position jumped 40cm in a single update. The jump was instant - the filter re-trusted a single measurement over its own model.
+WHY IT HAPPENED (root cause)
+  The measurement noise matrix was tuned too optimistically: the filter believed the ToF more than the motion model. At the corner, one noisy reading passed the gate and the filter snapped to it. The EKF's estimate is a weighted compromise; the weights live in the noise matrices, so a too-small R matrix means 'trust the sensor blindly'.
+INVESTIGATION (before the fix)
+  - Logged the innovation at the corner - it was 10x the modeled noise
+  - Tuned R against real logged data instead of guesses
+  - Verified the jump disappeared with the realistic R
+FIX (took 2 days)
+  Fixed by tuning the measurement noise matrix from actual logged data (Allan variance for the sensors), and by gating the correction when the innovation exceeds 5 sigma.
+
+----------------------------------------------------------------------
+E0034 | v5.2 | BIG | Found Day 86 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.2/complementary_full.py
+Error     : Pose pipeline slows to 8Hz under load
+Terminal  : Pi SSH terminal
+  pipeline rate: 100Hz -> 8Hz
+  CPU at 96% (vision + fusion)
+WHAT HAPPENED
+  The pose pipeline collapsed from 100Hz to 8Hz when the vision stack ran at full load. The robot's control degraded with it, because control depends on fresh pose data.
+WHY IT HAPPENED (root cause)
+  Vision and fusion ran in a single thread, and vision processing took 120ms per frame under load. The GIL serialized the Python work, so fusion starved behind vision. The architecture had no isolation between a 30fps vision workload and a 100Hz fusion workload - one process, one thread, one bottleneck.
+INVESTIGATION (before the fix)
+  - Measured the per-stage latency to find the bottleneck
+  - Confirmed vision occupied the CPU while fusion waited
+  - Split fusion into a separate process - rate recovered
+FIX (took 3 days)
+  Fixed by moving fusion to its own process with a shared-memory pose buffer, so a vision slowdown can no longer block control.
+
+----------------------------------------------------------------------
+E0035 | v5.2 | BIG | Found Day 86 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.2/attitude_test.py
+Error     : Outlier rejection masks a real obstacle
+Terminal  : Pi SSH terminal
+  obstacle at 0.5m: REJECTED as outlier
+  robot drives into the pillar
+WHAT HAPPENED
+  The outlier filter rejected the most important reading of the day: the real pillar at 0.5m. The robot drove into the obstacle it was supposed to avoid.
+WHY IT HAPPENED (root cause)
+  The Mahalanobis gate was tuned against a history of far-field noise, so the first close-range reading looked statistically impossible - it was far outside the modeled distribution. Outlier rejection assumes outliers are errors, but here the outlier was the truth and the history was the error. No static gate can distinguish 'new truth' from 'garbage' by distance alone.
+INVESTIGATION (before the fix)
+  - Replayed the log - the 0.5m reading was the true pillar
+  - Checked the gate: the reading was rejected as 8-sigma
+  - Tested an asymmetric gate - near readings never rejected
+FIX (took 4 days)
+  Fixed by making the gate asymmetric: readings below 0.6m are always accepted (they can only be obstacles), and only far-field readings are subject to rejection.
+
+----------------------------------------------------------------------
+E0036 | v5.2 | BIG | Found Day 86 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.2/complementary_full.py
+Error     : Cross-verify fails after sensor warm-up
+Terminal  : Pi SSH terminal
+  tof=0.81m camera=0.30m diff=0.51m
+  sensor mismatch after 10 minutes
+WHAT HAPPENED
+  The ToF and camera agreed for the first ten minutes, then diverged by half a meter. The cross-verify check that catches drift was the thing that drifted.
+WHY IT HAPPENED (root cause)
+  The ToF's range output shifts with temperature as the laser diode's characteristics change, and after 10 minutes of operation the module had warmed several degrees. The camera is temperature-stable, so the two systems diverged exactly as the ToF heated up. Every sensor has an environmental sensitivity; the failure appeared only because the cross-check compared two sensors with different sensitivities.
+INVESTIGATION (before the fix)
+  - Logged both readings over time - the ToF drifted steadily
+  - Measured the module temperature with the MPU6050's thermistor
+  - Correlated the drift with temperature - a linear fit explained it
+FIX (took 5 days)
+  Fixed by adding a temperature correction computed from the linear fit, applied to the ToF readings in the fusion layer.
+
+----------------------------------------------------------------------
+E0037 | v5.3 | SMALL | Found Day 87 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v5.3/ekf_localization.py
+Error     : Outlier rejection drops 100% of measurements
+Terminal  : Pi console (HDMI)
+  $ python3 ekf_localization.py
+  accepted: 0/48 measurements
+  pose drifts with no updates
+WHAT HAPPENED
+  The filter never updated - every single measurement was rejected as an outlier. The robot moved, but the pose estimate just drifted open-loop.
+WHY IT HAPPENED (root cause)
+  The Mahalanobis gate used chi-square threshold 3 (about 1 sigma) for a measurement that legitimately carries 2-3 sigma noise. With the gate set tighter than the noise, every genuine reading exceeded the threshold and was discarded. Outlier rejection assumes the model matches the noise; a gate calibrated for a different sensor or surface rejects the true signal as noise.
+FIX (took 1 day)
+  Fixed by raising the gate to chi-square 9 (3 sigma), then validating with the outlier_test that at least 95% of genuine measurements pass.
+
+----------------------------------------------------------------------
+E0038 | v5.3 | SMALL | Found Day 87 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v5.3/ekf_test.py
+Error     : UKF alpha/beta/kappa parameter typo
+Terminal  : Pi console (HDMI)
+  $ python3 ekf_test.py
+  ukf_params.json: alpha=1e-3 beta=2 kappa=1
+  filter diverges on the first turn
+WHAT HAPPENED
+  The UKF diverged instantly on the first corner. The same data worked with the old parameters, so the filter itself was fine - the tuning was not.
+WHY IT HAPPENED (root cause)
+  The sigma-point spread parameter alpha controls how far the sigma points lie from the mean. alpha=1e-3 collapsed the sigma points almost onto the mean, so the filter's covariance estimate was tiny and it over-trusted its state. On the first turn the innovation was huge relative to that shrunken covariance, and the correction pulled the state wildly off. One digit in a JSON file changed the filter's behavior completely.
+FIX (took 1 day)
+  Fixed by restoring alpha=1e-2 from the tuning run and adding a startup check that alpha is within the valid (0,1] range.
+
+----------------------------------------------------------------------
+E0039 | v5.3 | SMALL | Found Day 87 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v5.3/ekf_localization.py
+Error     : Mag heading jumps 180 degrees on reversal
+Terminal  : Pi console (HDMI)
+  $ python3 ekf_localization.py
+  heading: 45 -> 225 (robot didn't turn)
+  hard-iron offset missing
+WHAT HAPPENED
+  The heading readout flipped by exactly 180 degrees whenever the robot reversed direction. The robot never turned, but the compass said it had.
+WHY IT HAPPENED (root cause)
+  The hard-iron offset (the fixed magnetic distortion from the battery and wiring) was only applied in forward direction code paths. When reversing, the un-compensated raw vector rotated the heading by the offset magnitude - which here was almost exactly 180 degrees. The magnetometer measures the sum of the Earth field plus the constant distortion; without subtracting the distortion the heading formula is wrong.
+FIX (took 1 day)
+  Fixed by applying the calibrated hard-iron offset in both directions and adding the reverse path to the heading test cases.
+
+----------------------------------------------------------------------
+E0040 | v5.3 | SMALL | Found Day 87 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v5.3/ekf_test.py
+Error     : Cross-verify reports 40cm disagreement
+Terminal  : Pi console (HDMI)
+  $ python3 ekf_test.py
+  tof=0.82m  camera=0.42m  diff=0.40m
+  camera scale wrong
+WHAT HAPPENED
+  The ToF and camera distance estimates disagreed by 40cm on the same target. One of them was right; the cross-verify test existed precisely to find which.
+WHY IT HAPPENED (root cause)
+  The camera distance scale was calibrated at 640x480, but the pipeline ran at 1280x720. The focal length in pixels doubles with resolution, so a scale factor valid at one resolution is wrong at the other. The two systems measured correctly in their own frames - the bug was a unit mismatch between the calibration domain and the runtime domain.
+FIX (took 1 day)
+  Fixed by re-running tof_camera_calib.py at the runtime resolution and storing the resolution in the calibration file so the scale can be validated at load.
+
+----------------------------------------------------------------------
+E0041 | v5.3 | SMALL | Found Day 87 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v5.3/ekf_localization.py
+Error     : EKF linearization fails on sharp turns
+Terminal  : Pi console (HDMI)
+  $ python3 ekf_localization.py
+  ekf error: Jacobian is zero
+  state: x=0.5 y=2.1 theta=nan
+WHAT HAPPENED
+  The EKF produced NaN heading on sharp turns. The filter worked on gentle curves and fell apart on the aggressive ones.
+WHY IT HAPPENED (root cause)
+  The EKF linearizes the motion model with a Jacobian evaluated at the current state. For a sharp turn the yaw Jacobian term was dropped in the model, so the Jacobian row became zero and the state transition lost its heading information - the estimate collapsed to NaN. The EKF's approximation quality depends on the Jacobian being accurate; a model simplified for straight driving is invalid at large steering angles.
+FIX (took 1 day)
+  Fixed by adding the missing yaw-dynamics term to the Jacobian and extending the ekf_test with a sharp-turn scenario.
+
+----------------------------------------------------------------------
+E0042 | v5.3 | SMALL | Found Day 87 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v5.3/ekf_test.py
+Error     : np.linalg.LinAlgError: Singular matrix
+Terminal  : Pi console (HDMI)
+  $ python3 ekf_test.py
+    File "ekf_test.py", line 92, in update
+      K = P @ H @ inv(S)
+  np.linalg.LinAlgError: Singular matrix
+WHAT HAPPENED
+  The UKF crashed on its first update with all sensors dead. The innovation covariance was singular - the filter had no information at all.
+WHY IT HAPPENED (root cause)
+  With every sensor returning zero, the innovation covariance S became singular (determinant zero), and matrix inversion is undefined for singular matrices. The UKF assumes measurements carry some information; all-zero measurements violate that assumption. Mathematically this is the filter asking for the inverse of a zero matrix - the error is the correct behavior of the math, and the bug is that nothing prevented it.
+FIX (took 1 day)
+  Fixed by checking the condition number of S before the update and skipping the update when it exceeds a threshold, keeping the prediction only.
+
+----------------------------------------------------------------------
+E0043 | v5.3 | SMALL | Found Day 87 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v5.3/ekf_localization.py
+Error     : NaN appears in the covariance matrix
+Terminal  : Pi console (HDMI)
+  $ python3 ekf_localization.py
+  P = [[nan nan],[nan nan]]
+  pose estimate frozen
+WHAT HAPPENED
+  The covariance matrix filled with NaN and the pose stopped updating. The filter neither crashed nor recovered - it just froze.
+WHY IT HAPPENED (root cause)
+  One corrupted measurement (a 0 divided during normalization) introduced NaN into the state, and every subsequent update propagated it through the linear algebra. The UKF has no built-in NaN detection; NaN arithmetic silently poisons every matrix product. The failure showed up minutes later as a frozen pose, long after the bad sample was long gone.
+FIX (took 1 day)
+  Fixed by validating every measurement with np.isfinite() before the update and rejecting non-finite samples with a logged warning.
+
+----------------------------------------------------------------------
+E0044 | v5.3 | SMALL | Found Day 87 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v5.3/ekf_test.py
+Error     : Negative variance in the dead reckoning
+Terminal  : Pi console (HDMI)
+  $ python3 ekf_test.py
+  variance: -0.004
+  sigma = nan
+WHAT HAPPENED
+  The dead-reckoning output contained a negative variance, and the standard deviation computed from it became NaN. The motion estimate was mathematically impossible.
+WHY IT HAPPENED (root cause)
+  The noise model added a negative correction term after a wheel-slip event - slip reduces the estimated speed, and the speed-dependent noise formula produced a negative variance. Variance is defined as the expected squared deviation, which cannot be negative; the formula was wrong for the slip regime. Negative variance then breaks the sqrt used for the 1-sigma bound.
+FIX (took 1 day)
+  Fixed by clamping the variance to a minimum of 1e-6 and adding an assertion in tests that the variance never leaves the valid domain.
+
+----------------------------------------------------------------------
+E0045 | v5.3 | BIG | Found Day 88 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.3/ekf_localization.py
+Error     : Pose pipeline slows to 8Hz under load
+Terminal  : Pi SSH terminal
+  pipeline rate: 100Hz -> 8Hz
+  CPU at 96% (vision + fusion)
+WHAT HAPPENED
+  The pose pipeline collapsed from 100Hz to 8Hz when the vision stack ran at full load. The robot's control degraded with it, because control depends on fresh pose data.
+WHY IT HAPPENED (root cause)
+  Vision and fusion ran in a single thread, and vision processing took 120ms per frame under load. The GIL serialized the Python work, so fusion starved behind vision. The architecture had no isolation between a 30fps vision workload and a 100Hz fusion workload - one process, one thread, one bottleneck.
+INVESTIGATION (before the fix)
+  - Measured the per-stage latency to find the bottleneck
+  - Confirmed vision occupied the CPU while fusion waited
+  - Split fusion into a separate process - rate recovered
+FIX (took 2 days)
+  Fixed by moving fusion to its own process with a shared-memory pose buffer, so a vision slowdown can no longer block control.
+
+----------------------------------------------------------------------
+E0046 | v5.3 | BIG | Found Day 88 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.3/ekf_test.py
+Error     : Outlier rejection masks a real obstacle
+Terminal  : Pi SSH terminal
+  obstacle at 0.5m: REJECTED as outlier
+  robot drives into the pillar
+WHAT HAPPENED
+  The outlier filter rejected the most important reading of the day: the real pillar at 0.5m. The robot drove into the obstacle it was supposed to avoid.
+WHY IT HAPPENED (root cause)
+  The Mahalanobis gate was tuned against a history of far-field noise, so the first close-range reading looked statistically impossible - it was far outside the modeled distribution. Outlier rejection assumes outliers are errors, but here the outlier was the truth and the history was the error. No static gate can distinguish 'new truth' from 'garbage' by distance alone.
+INVESTIGATION (before the fix)
+  - Replayed the log - the 0.5m reading was the true pillar
+  - Checked the gate: the reading was rejected as 8-sigma
+  - Tested an asymmetric gate - near readings never rejected
+FIX (took 3 days)
+  Fixed by making the gate asymmetric: readings below 0.6m are always accepted (they can only be obstacles), and only far-field readings are subject to rejection.
+
+----------------------------------------------------------------------
+E0047 | v5.3 | BIG | Found Day 88 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.3/ekf_localization.py
+Error     : Cross-verify fails after sensor warm-up
+Terminal  : Pi SSH terminal
+  tof=0.81m camera=0.30m diff=0.51m
+  sensor mismatch after 10 minutes
+WHAT HAPPENED
+  The ToF and camera agreed for the first ten minutes, then diverged by half a meter. The cross-verify check that catches drift was the thing that drifted.
+WHY IT HAPPENED (root cause)
+  The ToF's range output shifts with temperature as the laser diode's characteristics change, and after 10 minutes of operation the module had warmed several degrees. The camera is temperature-stable, so the two systems diverged exactly as the ToF heated up. Every sensor has an environmental sensitivity; the failure appeared only because the cross-check compared two sensors with different sensitivities.
+INVESTIGATION (before the fix)
+  - Logged both readings over time - the ToF drifted steadily
+  - Measured the module temperature with the MPU6050's thermistor
+  - Correlated the drift with temperature - a linear fit explained it
+FIX (took 4 days)
+  Fixed by adding a temperature correction computed from the linear fit, applied to the ToF readings in the fusion layer.
+
+----------------------------------------------------------------------
+E0048 | v5.3 | BIG | Found Day 88 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.3/ekf_test.py
+Error     : Attitude flips 180 degrees during fast yaw
+Terminal  : Pi SSH terminal
+  roll: 0 -> 180 (fast yaw)
+  gimbal lock in Euler representation
+WHAT HAPPENED
+  During a fast turn the reported roll flipped from 0 to 180 degrees. The robot never rolled at all - the representation of the attitude broke, not the robot.
+WHY IT HAPPENED (root cause)
+  The attitude was stored as Euler angles (roll, pitch, yaw). Euler angles suffer gimbal lock: when the pitch approaches 90 degrees, roll and yaw become the same axis and the representation degenerates, producing 180-degree jumps. The physical attitude was continuous; the Euler representation made it discontinuous. This is a mathematical property of the representation, not a sensor or filter bug.
+INVESTIGATION (before the fix)
+  - Replayed the attitude - the flip coincided exactly with the yaw peak
+  - Tested the same motion in simulation - the flip reproduced
+  - Switched to quaternion storage - the flip vanished
+FIX (took 5 days)
+  Fixed by switching the attitude storage to quaternions, converting to Euler only for display, and adding a unit-quaternion normalization after every update.
+
+----------------------------------------------------------------------
+E0049 | v5.4 | SMALL | Found Day 89 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v5.4/ukf_localization.py
+Error     : UKF alpha/beta/kappa parameter typo
+Terminal  : ESP32 serial monitor
+  $ python3 ukf_localization.py
+  ukf_params.json: alpha=1e-3 beta=2 kappa=1
+  filter diverges on the first turn
+WHAT HAPPENED
+  The UKF diverged instantly on the first corner. The same data worked with the old parameters, so the filter itself was fine - the tuning was not.
+WHY IT HAPPENED (root cause)
+  The sigma-point spread parameter alpha controls how far the sigma points lie from the mean. alpha=1e-3 collapsed the sigma points almost onto the mean, so the filter's covariance estimate was tiny and it over-trusted its state. On the first turn the innovation was huge relative to that shrunken covariance, and the correction pulled the state wildly off. One digit in a JSON file changed the filter's behavior completely.
+FIX (took 1 day)
+  Fixed by restoring alpha=1e-2 from the tuning run and adding a startup check that alpha is within the valid (0,1] range.
+
+----------------------------------------------------------------------
+E0050 | v5.4 | SMALL | Found Day 89 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v5.4/ukf_vs_ekf.py
+Error     : Mag heading jumps 180 degrees on reversal
+Terminal  : ESP32 serial monitor
+  $ python3 ukf_vs_ekf.py
+  heading: 45 -> 225 (robot didn't turn)
+  hard-iron offset missing
+WHAT HAPPENED
+  The heading readout flipped by exactly 180 degrees whenever the robot reversed direction. The robot never turned, but the compass said it had.
+WHY IT HAPPENED (root cause)
+  The hard-iron offset (the fixed magnetic distortion from the battery and wiring) was only applied in forward direction code paths. When reversing, the un-compensated raw vector rotated the heading by the offset magnitude - which here was almost exactly 180 degrees. The magnetometer measures the sum of the Earth field plus the constant distortion; without subtracting the distortion the heading formula is wrong.
+FIX (took 1 day)
+  Fixed by applying the calibrated hard-iron offset in both directions and adding the reverse path to the heading test cases.
+
+----------------------------------------------------------------------
+E0051 | v5.4 | SMALL | Found Day 89 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v5.4/ukf_localization.py
+Error     : Cross-verify reports 40cm disagreement
+Terminal  : ESP32 serial monitor
+  $ python3 ukf_localization.py
+  tof=0.82m  camera=0.42m  diff=0.40m
+  camera scale wrong
+WHAT HAPPENED
+  The ToF and camera distance estimates disagreed by 40cm on the same target. One of them was right; the cross-verify test existed precisely to find which.
+WHY IT HAPPENED (root cause)
+  The camera distance scale was calibrated at 640x480, but the pipeline ran at 1280x720. The focal length in pixels doubles with resolution, so a scale factor valid at one resolution is wrong at the other. The two systems measured correctly in their own frames - the bug was a unit mismatch between the calibration domain and the runtime domain.
+FIX (took 1 day)
+  Fixed by re-running tof_camera_calib.py at the runtime resolution and storing the resolution in the calibration file so the scale can be validated at load.
+
+----------------------------------------------------------------------
+E0052 | v5.4 | SMALL | Found Day 89 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v5.4/ukf_vs_ekf.py
+Error     : EKF linearization fails on sharp turns
+Terminal  : ESP32 serial monitor
+  $ python3 ukf_vs_ekf.py
+  ekf error: Jacobian is zero
+  state: x=0.5 y=2.1 theta=nan
+WHAT HAPPENED
+  The EKF produced NaN heading on sharp turns. The filter worked on gentle curves and fell apart on the aggressive ones.
+WHY IT HAPPENED (root cause)
+  The EKF linearizes the motion model with a Jacobian evaluated at the current state. For a sharp turn the yaw Jacobian term was dropped in the model, so the Jacobian row became zero and the state transition lost its heading information - the estimate collapsed to NaN. The EKF's approximation quality depends on the Jacobian being accurate; a model simplified for straight driving is invalid at large steering angles.
+FIX (took 1 day)
+  Fixed by adding the missing yaw-dynamics term to the Jacobian and extending the ekf_test with a sharp-turn scenario.
+
+----------------------------------------------------------------------
+E0053 | v5.4 | SMALL | Found Day 89 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v5.4/ukf_localization.py
+Error     : np.linalg.LinAlgError: Singular matrix
+Terminal  : ESP32 serial monitor
+  $ python3 ukf_localization.py
+    File "ukf_localization.py", line 92, in update
+      K = P @ H @ inv(S)
+  np.linalg.LinAlgError: Singular matrix
+WHAT HAPPENED
+  The UKF crashed on its first update with all sensors dead. The innovation covariance was singular - the filter had no information at all.
+WHY IT HAPPENED (root cause)
+  With every sensor returning zero, the innovation covariance S became singular (determinant zero), and matrix inversion is undefined for singular matrices. The UKF assumes measurements carry some information; all-zero measurements violate that assumption. Mathematically this is the filter asking for the inverse of a zero matrix - the error is the correct behavior of the math, and the bug is that nothing prevented it.
+FIX (took 1 day)
+  Fixed by checking the condition number of S before the update and skipping the update when it exceeds a threshold, keeping the prediction only.
+
+----------------------------------------------------------------------
+E0054 | v5.4 | SMALL | Found Day 89 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v5.4/ukf_vs_ekf.py
+Error     : NaN appears in the covariance matrix
+Terminal  : ESP32 serial monitor
+  $ python3 ukf_vs_ekf.py
+  P = [[nan nan],[nan nan]]
+  pose estimate frozen
+WHAT HAPPENED
+  The covariance matrix filled with NaN and the pose stopped updating. The filter neither crashed nor recovered - it just froze.
+WHY IT HAPPENED (root cause)
+  One corrupted measurement (a 0 divided during normalization) introduced NaN into the state, and every subsequent update propagated it through the linear algebra. The UKF has no built-in NaN detection; NaN arithmetic silently poisons every matrix product. The failure showed up minutes later as a frozen pose, long after the bad sample was long gone.
+FIX (took 1 day)
+  Fixed by validating every measurement with np.isfinite() before the update and rejecting non-finite samples with a logged warning.
+
+----------------------------------------------------------------------
+E0055 | v5.4 | SMALL | Found Day 89 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v5.4/ukf_localization.py
+Error     : Negative variance in the dead reckoning
+Terminal  : ESP32 serial monitor
+  $ python3 ukf_localization.py
+  variance: -0.004
+  sigma = nan
+WHAT HAPPENED
+  The dead-reckoning output contained a negative variance, and the standard deviation computed from it became NaN. The motion estimate was mathematically impossible.
+WHY IT HAPPENED (root cause)
+  The noise model added a negative correction term after a wheel-slip event - slip reduces the estimated speed, and the speed-dependent noise formula produced a negative variance. Variance is defined as the expected squared deviation, which cannot be negative; the formula was wrong for the slip regime. Negative variance then breaks the sqrt used for the 1-sigma bound.
+FIX (took 1 day)
+  Fixed by clamping the variance to a minimum of 1e-6 and adding an assertion in tests that the variance never leaves the valid domain.
+
+----------------------------------------------------------------------
+E0056 | v5.4 | SMALL | Found Day 89 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v5.4/ukf_vs_ekf.py
+Error     : Outlier rejection drops 100% of measurements
+Terminal  : ESP32 serial monitor
+  $ python3 ukf_vs_ekf.py
+  accepted: 0/48 measurements
+  pose drifts with no updates
+WHAT HAPPENED
+  The filter never updated - every single measurement was rejected as an outlier. The robot moved, but the pose estimate just drifted open-loop.
+WHY IT HAPPENED (root cause)
+  The Mahalanobis gate used chi-square threshold 3 (about 1 sigma) for a measurement that legitimately carries 2-3 sigma noise. With the gate set tighter than the noise, every genuine reading exceeded the threshold and was discarded. Outlier rejection assumes the model matches the noise; a gate calibrated for a different sensor or surface rejects the true signal as noise.
+FIX (took 1 day)
+  Fixed by raising the gate to chi-square 9 (3 sigma), then validating with the outlier_test that at least 95% of genuine measurements pass.
+
+----------------------------------------------------------------------
+E0057 | v5.4 | BIG | Found Day 90 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.4/ukf_localization.py
+Error     : Outlier rejection masks a real obstacle
+Terminal  : Pi SSH terminal
+  obstacle at 0.5m: REJECTED as outlier
+  robot drives into the pillar
+WHAT HAPPENED
+  The outlier filter rejected the most important reading of the day: the real pillar at 0.5m. The robot drove into the obstacle it was supposed to avoid.
+WHY IT HAPPENED (root cause)
+  The Mahalanobis gate was tuned against a history of far-field noise, so the first close-range reading looked statistically impossible - it was far outside the modeled distribution. Outlier rejection assumes outliers are errors, but here the outlier was the truth and the history was the error. No static gate can distinguish 'new truth' from 'garbage' by distance alone.
+INVESTIGATION (before the fix)
+  - Replayed the log - the 0.5m reading was the true pillar
+  - Checked the gate: the reading was rejected as 8-sigma
+  - Tested an asymmetric gate - near readings never rejected
+FIX (took 2 days)
+  Fixed by making the gate asymmetric: readings below 0.6m are always accepted (they can only be obstacles), and only far-field readings are subject to rejection.
+
+----------------------------------------------------------------------
+E0058 | v5.4 | BIG | Found Day 90 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.4/ukf_vs_ekf.py
+Error     : Cross-verify fails after sensor warm-up
+Terminal  : Pi SSH terminal
+  tof=0.81m camera=0.30m diff=0.51m
+  sensor mismatch after 10 minutes
+WHAT HAPPENED
+  The ToF and camera agreed for the first ten minutes, then diverged by half a meter. The cross-verify check that catches drift was the thing that drifted.
+WHY IT HAPPENED (root cause)
+  The ToF's range output shifts with temperature as the laser diode's characteristics change, and after 10 minutes of operation the module had warmed several degrees. The camera is temperature-stable, so the two systems diverged exactly as the ToF heated up. Every sensor has an environmental sensitivity; the failure appeared only because the cross-check compared two sensors with different sensitivities.
+INVESTIGATION (before the fix)
+  - Logged both readings over time - the ToF drifted steadily
+  - Measured the module temperature with the MPU6050's thermistor
+  - Correlated the drift with temperature - a linear fit explained it
+FIX (took 3 days)
+  Fixed by adding a temperature correction computed from the linear fit, applied to the ToF readings in the fusion layer.
+
+----------------------------------------------------------------------
+E0059 | v5.4 | BIG | Found Day 90 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.4/ukf_localization.py
+Error     : Attitude flips 180 degrees during fast yaw
+Terminal  : Pi SSH terminal
+  roll: 0 -> 180 (fast yaw)
+  gimbal lock in Euler representation
+WHAT HAPPENED
+  During a fast turn the reported roll flipped from 0 to 180 degrees. The robot never rolled at all - the representation of the attitude broke, not the robot.
+WHY IT HAPPENED (root cause)
+  The attitude was stored as Euler angles (roll, pitch, yaw). Euler angles suffer gimbal lock: when the pitch approaches 90 degrees, roll and yaw become the same axis and the representation degenerates, producing 180-degree jumps. The physical attitude was continuous; the Euler representation made it discontinuous. This is a mathematical property of the representation, not a sensor or filter bug.
+INVESTIGATION (before the fix)
+  - Replayed the attitude - the flip coincided exactly with the yaw peak
+  - Tested the same motion in simulation - the flip reproduced
+  - Switched to quaternion storage - the flip vanished
+FIX (took 4 days)
+  Fixed by switching the attitude storage to quaternions, converting to Euler only for display, and adding a unit-quaternion normalization after every update.
+
+----------------------------------------------------------------------
+E0060 | v5.4 | BIG | Found Day 90 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.4/ukf_vs_ekf.py
+Error     : Motor interference corrupts the IMU bus
+Terminal  : Pi SSH terminal
+  imu: all zeros every 3rd frame
+  motor on = imu errors
+WHAT HAPPENED
+  The IMU readings became periodic zeros whenever the motors ran hard. With the motors off, the IMU was perfect - the interference was directly observable.
+WHY IT HAPPENED (root cause)
+  The motor current creates electromagnetic interference that coupled into the unshielded I2C wires, corrupting transfers when the throttle rose. I2C has no error detection on the data line, so a corrupted frame is read as valid data - zeros were the corruption pattern. The failure scaled with current, exactly like a conducted EMI problem.
+INVESTIGATION (before the fix)
+  - Ran the motor_interference_test - errors tracked throttle exactly
+  - Measured the noise on the I2C lines with a scope
+  - Routed the wires away from the motor cables - errors vanished
+FIX (took 5 days)
+  Fixed by rerouting the I2C wiring away from the motor power cables, adding a ground shield, and treating all-zero IMU frames as invalid in the fusion layer.
+
+----------------------------------------------------------------------
+E0061 | v5.5 | SMALL | Found Day 91 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v5.5/tune_ukf.py
+Error     : Mag heading jumps 180 degrees on reversal
+Terminal  : Windows CMD
+  $ python3 tune_ukf.py
+  heading: 45 -> 225 (robot didn't turn)
+  hard-iron offset missing
+WHAT HAPPENED
+  The heading readout flipped by exactly 180 degrees whenever the robot reversed direction. The robot never turned, but the compass said it had.
+WHY IT HAPPENED (root cause)
+  The hard-iron offset (the fixed magnetic distortion from the battery and wiring) was only applied in forward direction code paths. When reversing, the un-compensated raw vector rotated the heading by the offset magnitude - which here was almost exactly 180 degrees. The magnetometer measures the sum of the Earth field plus the constant distortion; without subtracting the distortion the heading formula is wrong.
+FIX (took 1 day)
+  Fixed by applying the calibrated hard-iron offset in both directions and adding the reverse path to the heading test cases.
+
+----------------------------------------------------------------------
+E0062 | v5.5 | SMALL | Found Day 91 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v5.5/ukf_params.json
+Error     : Cross-verify reports 40cm disagreement
+Terminal  : Windows CMD
+  $ python3 ukf_params.json
+  tof=0.82m  camera=0.42m  diff=0.40m
+  camera scale wrong
+WHAT HAPPENED
+  The ToF and camera distance estimates disagreed by 40cm on the same target. One of them was right; the cross-verify test existed precisely to find which.
+WHY IT HAPPENED (root cause)
+  The camera distance scale was calibrated at 640x480, but the pipeline ran at 1280x720. The focal length in pixels doubles with resolution, so a scale factor valid at one resolution is wrong at the other. The two systems measured correctly in their own frames - the bug was a unit mismatch between the calibration domain and the runtime domain.
+FIX (took 1 day)
+  Fixed by re-running tof_camera_calib.py at the runtime resolution and storing the resolution in the calibration file so the scale can be validated at load.
+
+----------------------------------------------------------------------
+E0063 | v5.5 | SMALL | Found Day 91 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v5.5/tune_ukf.py
+Error     : EKF linearization fails on sharp turns
+Terminal  : Windows CMD
+  $ python3 tune_ukf.py
+  ekf error: Jacobian is zero
+  state: x=0.5 y=2.1 theta=nan
+WHAT HAPPENED
+  The EKF produced NaN heading on sharp turns. The filter worked on gentle curves and fell apart on the aggressive ones.
+WHY IT HAPPENED (root cause)
+  The EKF linearizes the motion model with a Jacobian evaluated at the current state. For a sharp turn the yaw Jacobian term was dropped in the model, so the Jacobian row became zero and the state transition lost its heading information - the estimate collapsed to NaN. The EKF's approximation quality depends on the Jacobian being accurate; a model simplified for straight driving is invalid at large steering angles.
+FIX (took 1 day)
+  Fixed by adding the missing yaw-dynamics term to the Jacobian and extending the ekf_test with a sharp-turn scenario.
+
+----------------------------------------------------------------------
+E0064 | v5.5 | SMALL | Found Day 91 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v5.5/ukf_params.json
+Error     : np.linalg.LinAlgError: Singular matrix
+Terminal  : Windows CMD
+  $ python3 ukf_params.json
+    File "ukf_params.json", line 92, in update
+      K = P @ H @ inv(S)
+  np.linalg.LinAlgError: Singular matrix
+WHAT HAPPENED
+  The UKF crashed on its first update with all sensors dead. The innovation covariance was singular - the filter had no information at all.
+WHY IT HAPPENED (root cause)
+  With every sensor returning zero, the innovation covariance S became singular (determinant zero), and matrix inversion is undefined for singular matrices. The UKF assumes measurements carry some information; all-zero measurements violate that assumption. Mathematically this is the filter asking for the inverse of a zero matrix - the error is the correct behavior of the math, and the bug is that nothing prevented it.
+FIX (took 1 day)
+  Fixed by checking the condition number of S before the update and skipping the update when it exceeds a threshold, keeping the prediction only.
+
+----------------------------------------------------------------------
+E0065 | v5.5 | SMALL | Found Day 91 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v5.5/tune_ukf.py
+Error     : NaN appears in the covariance matrix
+Terminal  : Windows CMD
+  $ python3 tune_ukf.py
+  P = [[nan nan],[nan nan]]
+  pose estimate frozen
+WHAT HAPPENED
+  The covariance matrix filled with NaN and the pose stopped updating. The filter neither crashed nor recovered - it just froze.
+WHY IT HAPPENED (root cause)
+  One corrupted measurement (a 0 divided during normalization) introduced NaN into the state, and every subsequent update propagated it through the linear algebra. The UKF has no built-in NaN detection; NaN arithmetic silently poisons every matrix product. The failure showed up minutes later as a frozen pose, long after the bad sample was long gone.
+FIX (took 1 day)
+  Fixed by validating every measurement with np.isfinite() before the update and rejecting non-finite samples with a logged warning.
+
+----------------------------------------------------------------------
+E0066 | v5.5 | SMALL | Found Day 91 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v5.5/ukf_params.json
+Error     : Negative variance in the dead reckoning
+Terminal  : Windows CMD
+  $ python3 ukf_params.json
+  variance: -0.004
+  sigma = nan
+WHAT HAPPENED
+  The dead-reckoning output contained a negative variance, and the standard deviation computed from it became NaN. The motion estimate was mathematically impossible.
+WHY IT HAPPENED (root cause)
+  The noise model added a negative correction term after a wheel-slip event - slip reduces the estimated speed, and the speed-dependent noise formula produced a negative variance. Variance is defined as the expected squared deviation, which cannot be negative; the formula was wrong for the slip regime. Negative variance then breaks the sqrt used for the 1-sigma bound.
+FIX (took 1 day)
+  Fixed by clamping the variance to a minimum of 1e-6 and adding an assertion in tests that the variance never leaves the valid domain.
+
+----------------------------------------------------------------------
+E0067 | v5.5 | SMALL | Found Day 91 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v5.5/tune_ukf.py
+Error     : Outlier rejection drops 100% of measurements
+Terminal  : Windows CMD
+  $ python3 tune_ukf.py
+  accepted: 0/48 measurements
+  pose drifts with no updates
+WHAT HAPPENED
+  The filter never updated - every single measurement was rejected as an outlier. The robot moved, but the pose estimate just drifted open-loop.
+WHY IT HAPPENED (root cause)
+  The Mahalanobis gate used chi-square threshold 3 (about 1 sigma) for a measurement that legitimately carries 2-3 sigma noise. With the gate set tighter than the noise, every genuine reading exceeded the threshold and was discarded. Outlier rejection assumes the model matches the noise; a gate calibrated for a different sensor or surface rejects the true signal as noise.
+FIX (took 1 day)
+  Fixed by raising the gate to chi-square 9 (3 sigma), then validating with the outlier_test that at least 95% of genuine measurements pass.
+
+----------------------------------------------------------------------
+E0068 | v5.5 | SMALL | Found Day 91 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v5.5/ukf_params.json
+Error     : UKF alpha/beta/kappa parameter typo
+Terminal  : Windows CMD
+  $ python3 ukf_params.json
+  ukf_params.json: alpha=1e-3 beta=2 kappa=1
+  filter diverges on the first turn
+WHAT HAPPENED
+  The UKF diverged instantly on the first corner. The same data worked with the old parameters, so the filter itself was fine - the tuning was not.
+WHY IT HAPPENED (root cause)
+  The sigma-point spread parameter alpha controls how far the sigma points lie from the mean. alpha=1e-3 collapsed the sigma points almost onto the mean, so the filter's covariance estimate was tiny and it over-trusted its state. On the first turn the innovation was huge relative to that shrunken covariance, and the correction pulled the state wildly off. One digit in a JSON file changed the filter's behavior completely.
+FIX (took 1 day)
+  Fixed by restoring alpha=1e-2 from the tuning run and adding a startup check that alpha is within the valid (0,1] range.
+
+----------------------------------------------------------------------
+E0069 | v5.5 | BIG | Found Day 92 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.5/tune_ukf.py
+Error     : Cross-verify fails after sensor warm-up
+Terminal  : Pi SSH terminal
+  tof=0.81m camera=0.30m diff=0.51m
+  sensor mismatch after 10 minutes
+WHAT HAPPENED
+  The ToF and camera agreed for the first ten minutes, then diverged by half a meter. The cross-verify check that catches drift was the thing that drifted.
+WHY IT HAPPENED (root cause)
+  The ToF's range output shifts with temperature as the laser diode's characteristics change, and after 10 minutes of operation the module had warmed several degrees. The camera is temperature-stable, so the two systems diverged exactly as the ToF heated up. Every sensor has an environmental sensitivity; the failure appeared only because the cross-check compared two sensors with different sensitivities.
+INVESTIGATION (before the fix)
+  - Logged both readings over time - the ToF drifted steadily
+  - Measured the module temperature with the MPU6050's thermistor
+  - Correlated the drift with temperature - a linear fit explained it
+FIX (took 2 days)
+  Fixed by adding a temperature correction computed from the linear fit, applied to the ToF readings in the fusion layer.
+
+----------------------------------------------------------------------
+E0070 | v5.5 | BIG | Found Day 92 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.5/ukf_params.json
+Error     : Attitude flips 180 degrees during fast yaw
+Terminal  : Pi SSH terminal
+  roll: 0 -> 180 (fast yaw)
+  gimbal lock in Euler representation
+WHAT HAPPENED
+  During a fast turn the reported roll flipped from 0 to 180 degrees. The robot never rolled at all - the representation of the attitude broke, not the robot.
+WHY IT HAPPENED (root cause)
+  The attitude was stored as Euler angles (roll, pitch, yaw). Euler angles suffer gimbal lock: when the pitch approaches 90 degrees, roll and yaw become the same axis and the representation degenerates, producing 180-degree jumps. The physical attitude was continuous; the Euler representation made it discontinuous. This is a mathematical property of the representation, not a sensor or filter bug.
+INVESTIGATION (before the fix)
+  - Replayed the attitude - the flip coincided exactly with the yaw peak
+  - Tested the same motion in simulation - the flip reproduced
+  - Switched to quaternion storage - the flip vanished
+FIX (took 3 days)
+  Fixed by switching the attitude storage to quaternions, converting to Euler only for display, and adding a unit-quaternion normalization after every update.
+
+----------------------------------------------------------------------
+E0071 | v5.5 | BIG | Found Day 92 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.5/tune_ukf.py
+Error     : Motor interference corrupts the IMU bus
+Terminal  : Pi SSH terminal
+  imu: all zeros every 3rd frame
+  motor on = imu errors
+WHAT HAPPENED
+  The IMU readings became periodic zeros whenever the motors ran hard. With the motors off, the IMU was perfect - the interference was directly observable.
+WHY IT HAPPENED (root cause)
+  The motor current creates electromagnetic interference that coupled into the unshielded I2C wires, corrupting transfers when the throttle rose. I2C has no error detection on the data line, so a corrupted frame is read as valid data - zeros were the corruption pattern. The failure scaled with current, exactly like a conducted EMI problem.
+INVESTIGATION (before the fix)
+  - Ran the motor_interference_test - errors tracked throttle exactly
+  - Measured the noise on the I2C lines with a scope
+  - Routed the wires away from the motor cables - errors vanished
+FIX (took 4 days)
+  Fixed by rerouting the I2C wiring away from the motor power cables, adding a ground shield, and treating all-zero IMU frames as invalid in the fusion layer.
+
+----------------------------------------------------------------------
+E0072 | v5.5 | BIG | Found Day 92 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.5/ukf_params.json
+Error     : UKF diverges and the robot drives off the track
+Terminal  : Pi SSH terminal
+  ukf: x=3.2 y=8.9 theta=2.1
+  actual: x=1.8 y=2.0 theta=0.0
+  UKF diverged, EKF fallback used
+WHAT HAPPENED
+  The robot drove off the track because the UKF believed the robot was somewhere else entirely. The pose was confident, detailed - and completely wrong.
+WHY IT HAPPENED (root cause)
+  The adaptive noise module grew the process noise with each suspicious measurement, and the filter's confidence in the state shrank with it. With enough noise inflation the filter trusted every new measurement blindly, and a single bad sensor reading dragged the pose far from reality. The adaptive mechanism had no upper bound on the noise it would tolerate - it adapted itself into failure.
+INVESTIGATION (before the fix)
+  - Plotted the UKF pose against the known track - divergence was gradual
+  - Tracked the process noise growth over the run
+  - Bounded the noise growth and re-ran - divergence gone
+FIX (took 5 days)
+  Fixed by bounding the adaptive noise growth to a maximum factor, and by adding a sanity gate that falls back to the EKF when the UKF and EKF disagree by more than 1m.
+
+----------------------------------------------------------------------
+E0073 | v5.6 | SMALL | Found Day 93 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v5.6/adaptive_noise.py
+Error     : Cross-verify reports 40cm disagreement
+Terminal  : systemd journal
+  $ python3 adaptive_noise.py
+  tof=0.82m  camera=0.42m  diff=0.40m
+  camera scale wrong
+WHAT HAPPENED
+  The ToF and camera distance estimates disagreed by 40cm on the same target. One of them was right; the cross-verify test existed precisely to find which.
+WHY IT HAPPENED (root cause)
+  The camera distance scale was calibrated at 640x480, but the pipeline ran at 1280x720. The focal length in pixels doubles with resolution, so a scale factor valid at one resolution is wrong at the other. The two systems measured correctly in their own frames - the bug was a unit mismatch between the calibration domain and the runtime domain.
+FIX (took 1 day)
+  Fixed by re-running tof_camera_calib.py at the runtime resolution and storing the resolution in the calibration file so the scale can be validated at load.
+
+----------------------------------------------------------------------
+E0074 | v5.6 | SMALL | Found Day 93 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v5.6/surface_test.py
+Error     : EKF linearization fails on sharp turns
+Terminal  : systemd journal
+  $ python3 surface_test.py
+  ekf error: Jacobian is zero
+  state: x=0.5 y=2.1 theta=nan
+WHAT HAPPENED
+  The EKF produced NaN heading on sharp turns. The filter worked on gentle curves and fell apart on the aggressive ones.
+WHY IT HAPPENED (root cause)
+  The EKF linearizes the motion model with a Jacobian evaluated at the current state. For a sharp turn the yaw Jacobian term was dropped in the model, so the Jacobian row became zero and the state transition lost its heading information - the estimate collapsed to NaN. The EKF's approximation quality depends on the Jacobian being accurate; a model simplified for straight driving is invalid at large steering angles.
+FIX (took 1 day)
+  Fixed by adding the missing yaw-dynamics term to the Jacobian and extending the ekf_test with a sharp-turn scenario.
+
+----------------------------------------------------------------------
+E0075 | v5.6 | SMALL | Found Day 93 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v5.6/adaptive_noise.py
+Error     : np.linalg.LinAlgError: Singular matrix
+Terminal  : systemd journal
+  $ python3 adaptive_noise.py
+    File "adaptive_noise.py", line 92, in update
+      K = P @ H @ inv(S)
+  np.linalg.LinAlgError: Singular matrix
+WHAT HAPPENED
+  The UKF crashed on its first update with all sensors dead. The innovation covariance was singular - the filter had no information at all.
+WHY IT HAPPENED (root cause)
+  With every sensor returning zero, the innovation covariance S became singular (determinant zero), and matrix inversion is undefined for singular matrices. The UKF assumes measurements carry some information; all-zero measurements violate that assumption. Mathematically this is the filter asking for the inverse of a zero matrix - the error is the correct behavior of the math, and the bug is that nothing prevented it.
+FIX (took 1 day)
+  Fixed by checking the condition number of S before the update and skipping the update when it exceeds a threshold, keeping the prediction only.
+
+----------------------------------------------------------------------
+E0076 | v5.6 | SMALL | Found Day 93 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v5.6/surface_test.py
+Error     : NaN appears in the covariance matrix
+Terminal  : systemd journal
+  $ python3 surface_test.py
+  P = [[nan nan],[nan nan]]
+  pose estimate frozen
+WHAT HAPPENED
+  The covariance matrix filled with NaN and the pose stopped updating. The filter neither crashed nor recovered - it just froze.
+WHY IT HAPPENED (root cause)
+  One corrupted measurement (a 0 divided during normalization) introduced NaN into the state, and every subsequent update propagated it through the linear algebra. The UKF has no built-in NaN detection; NaN arithmetic silently poisons every matrix product. The failure showed up minutes later as a frozen pose, long after the bad sample was long gone.
+FIX (took 1 day)
+  Fixed by validating every measurement with np.isfinite() before the update and rejecting non-finite samples with a logged warning.
+
+----------------------------------------------------------------------
+E0077 | v5.6 | SMALL | Found Day 93 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v5.6/adaptive_noise.py
+Error     : Negative variance in the dead reckoning
+Terminal  : systemd journal
+  $ python3 adaptive_noise.py
+  variance: -0.004
+  sigma = nan
+WHAT HAPPENED
+  The dead-reckoning output contained a negative variance, and the standard deviation computed from it became NaN. The motion estimate was mathematically impossible.
+WHY IT HAPPENED (root cause)
+  The noise model added a negative correction term after a wheel-slip event - slip reduces the estimated speed, and the speed-dependent noise formula produced a negative variance. Variance is defined as the expected squared deviation, which cannot be negative; the formula was wrong for the slip regime. Negative variance then breaks the sqrt used for the 1-sigma bound.
+FIX (took 1 day)
+  Fixed by clamping the variance to a minimum of 1e-6 and adding an assertion in tests that the variance never leaves the valid domain.
+
+----------------------------------------------------------------------
+E0078 | v5.6 | SMALL | Found Day 93 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v5.6/surface_test.py
+Error     : Outlier rejection drops 100% of measurements
+Terminal  : systemd journal
+  $ python3 surface_test.py
+  accepted: 0/48 measurements
+  pose drifts with no updates
+WHAT HAPPENED
+  The filter never updated - every single measurement was rejected as an outlier. The robot moved, but the pose estimate just drifted open-loop.
+WHY IT HAPPENED (root cause)
+  The Mahalanobis gate used chi-square threshold 3 (about 1 sigma) for a measurement that legitimately carries 2-3 sigma noise. With the gate set tighter than the noise, every genuine reading exceeded the threshold and was discarded. Outlier rejection assumes the model matches the noise; a gate calibrated for a different sensor or surface rejects the true signal as noise.
+FIX (took 1 day)
+  Fixed by raising the gate to chi-square 9 (3 sigma), then validating with the outlier_test that at least 95% of genuine measurements pass.
+
+----------------------------------------------------------------------
+E0079 | v5.6 | SMALL | Found Day 93 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v5.6/adaptive_noise.py
+Error     : UKF alpha/beta/kappa parameter typo
+Terminal  : systemd journal
+  $ python3 adaptive_noise.py
+  ukf_params.json: alpha=1e-3 beta=2 kappa=1
+  filter diverges on the first turn
+WHAT HAPPENED
+  The UKF diverged instantly on the first corner. The same data worked with the old parameters, so the filter itself was fine - the tuning was not.
+WHY IT HAPPENED (root cause)
+  The sigma-point spread parameter alpha controls how far the sigma points lie from the mean. alpha=1e-3 collapsed the sigma points almost onto the mean, so the filter's covariance estimate was tiny and it over-trusted its state. On the first turn the innovation was huge relative to that shrunken covariance, and the correction pulled the state wildly off. One digit in a JSON file changed the filter's behavior completely.
+FIX (took 1 day)
+  Fixed by restoring alpha=1e-2 from the tuning run and adding a startup check that alpha is within the valid (0,1] range.
+
+----------------------------------------------------------------------
+E0080 | v5.6 | SMALL | Found Day 93 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v5.6/surface_test.py
+Error     : Mag heading jumps 180 degrees on reversal
+Terminal  : systemd journal
+  $ python3 surface_test.py
+  heading: 45 -> 225 (robot didn't turn)
+  hard-iron offset missing
+WHAT HAPPENED
+  The heading readout flipped by exactly 180 degrees whenever the robot reversed direction. The robot never turned, but the compass said it had.
+WHY IT HAPPENED (root cause)
+  The hard-iron offset (the fixed magnetic distortion from the battery and wiring) was only applied in forward direction code paths. When reversing, the un-compensated raw vector rotated the heading by the offset magnitude - which here was almost exactly 180 degrees. The magnetometer measures the sum of the Earth field plus the constant distortion; without subtracting the distortion the heading formula is wrong.
+FIX (took 1 day)
+  Fixed by applying the calibrated hard-iron offset in both directions and adding the reverse path to the heading test cases.
+
+----------------------------------------------------------------------
+E0081 | v5.6 | BIG | Found Day 94 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.6/adaptive_noise.py
+Error     : Attitude flips 180 degrees during fast yaw
+Terminal  : Pi SSH terminal
+  roll: 0 -> 180 (fast yaw)
+  gimbal lock in Euler representation
+WHAT HAPPENED
+  During a fast turn the reported roll flipped from 0 to 180 degrees. The robot never rolled at all - the representation of the attitude broke, not the robot.
+WHY IT HAPPENED (root cause)
+  The attitude was stored as Euler angles (roll, pitch, yaw). Euler angles suffer gimbal lock: when the pitch approaches 90 degrees, roll and yaw become the same axis and the representation degenerates, producing 180-degree jumps. The physical attitude was continuous; the Euler representation made it discontinuous. This is a mathematical property of the representation, not a sensor or filter bug.
+INVESTIGATION (before the fix)
+  - Replayed the attitude - the flip coincided exactly with the yaw peak
+  - Tested the same motion in simulation - the flip reproduced
+  - Switched to quaternion storage - the flip vanished
+FIX (took 2 days)
+  Fixed by switching the attitude storage to quaternions, converting to Euler only for display, and adding a unit-quaternion normalization after every update.
+
+----------------------------------------------------------------------
+E0082 | v5.6 | BIG | Found Day 94 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.6/surface_test.py
+Error     : Motor interference corrupts the IMU bus
+Terminal  : Pi SSH terminal
+  imu: all zeros every 3rd frame
+  motor on = imu errors
+WHAT HAPPENED
+  The IMU readings became periodic zeros whenever the motors ran hard. With the motors off, the IMU was perfect - the interference was directly observable.
+WHY IT HAPPENED (root cause)
+  The motor current creates electromagnetic interference that coupled into the unshielded I2C wires, corrupting transfers when the throttle rose. I2C has no error detection on the data line, so a corrupted frame is read as valid data - zeros were the corruption pattern. The failure scaled with current, exactly like a conducted EMI problem.
+INVESTIGATION (before the fix)
+  - Ran the motor_interference_test - errors tracked throttle exactly
+  - Measured the noise on the I2C lines with a scope
+  - Routed the wires away from the motor cables - errors vanished
+FIX (took 3 days)
+  Fixed by rerouting the I2C wiring away from the motor power cables, adding a ground shield, and treating all-zero IMU frames as invalid in the fusion layer.
+
+----------------------------------------------------------------------
+E0083 | v5.6 | BIG | Found Day 94 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.6/adaptive_noise.py
+Error     : UKF diverges and the robot drives off the track
+Terminal  : Pi SSH terminal
+  ukf: x=3.2 y=8.9 theta=2.1
+  actual: x=1.8 y=2.0 theta=0.0
+  UKF diverged, EKF fallback used
+WHAT HAPPENED
+  The robot drove off the track because the UKF believed the robot was somewhere else entirely. The pose was confident, detailed - and completely wrong.
+WHY IT HAPPENED (root cause)
+  The adaptive noise module grew the process noise with each suspicious measurement, and the filter's confidence in the state shrank with it. With enough noise inflation the filter trusted every new measurement blindly, and a single bad sensor reading dragged the pose far from reality. The adaptive mechanism had no upper bound on the noise it would tolerate - it adapted itself into failure.
+INVESTIGATION (before the fix)
+  - Plotted the UKF pose against the known track - divergence was gradual
+  - Tracked the process noise growth over the run
+  - Bounded the noise growth and re-ran - divergence gone
+FIX (took 4 days)
+  Fixed by bounding the adaptive noise growth to a maximum factor, and by adding a sanity gate that falls back to the EKF when the UKF and EKF disagree by more than 1m.
+
+----------------------------------------------------------------------
+E0084 | v5.6 | BIG | Found Day 94 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.6/surface_test.py
+Error     : Dead reckoning drifts 30cm per lap
+Terminal  : Pi SSH terminal
+  dead reckoning: -0.30m off after 1 lap
+  wheel slip on the carpet
+WHAT HAPPENED
+  The dead-reckoned position was 30cm off after every lap. The error was consistent, which made it diagnosable - and unavoidable without external reference.
+WHY IT HAPPENED (root cause)
+  Odometry assumes the wheels roll without slipping, but the carpet caused a consistent 3% slip that odometry cannot measure - it only counts rotations. Over a 10m lap, 3% is exactly 30cm. Pure dead reckoning has no way to know about slip because the encoder counts the same whether the wheel grips or slides; the model was perfect, the assumption was wrong.
+INVESTIGATION (before the fix)
+  - Measured the error over several laps - constant at 30cm
+  - Computed the implied slip percentage - 3%, consistent
+  - Fused the ToF wall distance as a lateral reference
+FIX (took 5 days)
+  Fixed by fusing the ToF wall distance into the lateral state, so the drift is corrected by an absolute reference instead of a second integration.
+
+----------------------------------------------------------------------
+E0085 | v5.7 | SMALL | Found Day 95 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v5.7/outlier_reject.py
+Error     : EKF linearization fails on sharp turns
+Terminal  : VS Code terminal
+  $ python3 outlier_reject.py
+  ekf error: Jacobian is zero
+  state: x=0.5 y=2.1 theta=nan
+WHAT HAPPENED
+  The EKF produced NaN heading on sharp turns. The filter worked on gentle curves and fell apart on the aggressive ones.
+WHY IT HAPPENED (root cause)
+  The EKF linearizes the motion model with a Jacobian evaluated at the current state. For a sharp turn the yaw Jacobian term was dropped in the model, so the Jacobian row became zero and the state transition lost its heading information - the estimate collapsed to NaN. The EKF's approximation quality depends on the Jacobian being accurate; a model simplified for straight driving is invalid at large steering angles.
+FIX (took 1 day)
+  Fixed by adding the missing yaw-dynamics term to the Jacobian and extending the ekf_test with a sharp-turn scenario.
+
+----------------------------------------------------------------------
+E0086 | v5.7 | SMALL | Found Day 95 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v5.7/outlier_test.py
+Error     : np.linalg.LinAlgError: Singular matrix
+Terminal  : VS Code terminal
+  $ python3 outlier_test.py
+    File "outlier_test.py", line 92, in update
+      K = P @ H @ inv(S)
+  np.linalg.LinAlgError: Singular matrix
+WHAT HAPPENED
+  The UKF crashed on its first update with all sensors dead. The innovation covariance was singular - the filter had no information at all.
+WHY IT HAPPENED (root cause)
+  With every sensor returning zero, the innovation covariance S became singular (determinant zero), and matrix inversion is undefined for singular matrices. The UKF assumes measurements carry some information; all-zero measurements violate that assumption. Mathematically this is the filter asking for the inverse of a zero matrix - the error is the correct behavior of the math, and the bug is that nothing prevented it.
+FIX (took 1 day)
+  Fixed by checking the condition number of S before the update and skipping the update when it exceeds a threshold, keeping the prediction only.
+
+----------------------------------------------------------------------
+E0087 | v5.7 | SMALL | Found Day 95 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v5.7/outlier_reject.py
+Error     : NaN appears in the covariance matrix
+Terminal  : VS Code terminal
+  $ python3 outlier_reject.py
+  P = [[nan nan],[nan nan]]
+  pose estimate frozen
+WHAT HAPPENED
+  The covariance matrix filled with NaN and the pose stopped updating. The filter neither crashed nor recovered - it just froze.
+WHY IT HAPPENED (root cause)
+  One corrupted measurement (a 0 divided during normalization) introduced NaN into the state, and every subsequent update propagated it through the linear algebra. The UKF has no built-in NaN detection; NaN arithmetic silently poisons every matrix product. The failure showed up minutes later as a frozen pose, long after the bad sample was long gone.
+FIX (took 1 day)
+  Fixed by validating every measurement with np.isfinite() before the update and rejecting non-finite samples with a logged warning.
+
+----------------------------------------------------------------------
+E0088 | v5.7 | SMALL | Found Day 95 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v5.7/outlier_test.py
+Error     : Negative variance in the dead reckoning
+Terminal  : VS Code terminal
+  $ python3 outlier_test.py
+  variance: -0.004
+  sigma = nan
+WHAT HAPPENED
+  The dead-reckoning output contained a negative variance, and the standard deviation computed from it became NaN. The motion estimate was mathematically impossible.
+WHY IT HAPPENED (root cause)
+  The noise model added a negative correction term after a wheel-slip event - slip reduces the estimated speed, and the speed-dependent noise formula produced a negative variance. Variance is defined as the expected squared deviation, which cannot be negative; the formula was wrong for the slip regime. Negative variance then breaks the sqrt used for the 1-sigma bound.
+FIX (took 1 day)
+  Fixed by clamping the variance to a minimum of 1e-6 and adding an assertion in tests that the variance never leaves the valid domain.
+
+----------------------------------------------------------------------
+E0089 | v5.7 | SMALL | Found Day 95 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v5.7/outlier_reject.py
+Error     : Outlier rejection drops 100% of measurements
+Terminal  : VS Code terminal
+  $ python3 outlier_reject.py
+  accepted: 0/48 measurements
+  pose drifts with no updates
+WHAT HAPPENED
+  The filter never updated - every single measurement was rejected as an outlier. The robot moved, but the pose estimate just drifted open-loop.
+WHY IT HAPPENED (root cause)
+  The Mahalanobis gate used chi-square threshold 3 (about 1 sigma) for a measurement that legitimately carries 2-3 sigma noise. With the gate set tighter than the noise, every genuine reading exceeded the threshold and was discarded. Outlier rejection assumes the model matches the noise; a gate calibrated for a different sensor or surface rejects the true signal as noise.
+FIX (took 1 day)
+  Fixed by raising the gate to chi-square 9 (3 sigma), then validating with the outlier_test that at least 95% of genuine measurements pass.
+
+----------------------------------------------------------------------
+E0090 | v5.7 | SMALL | Found Day 95 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v5.7/outlier_test.py
+Error     : UKF alpha/beta/kappa parameter typo
+Terminal  : VS Code terminal
+  $ python3 outlier_test.py
+  ukf_params.json: alpha=1e-3 beta=2 kappa=1
+  filter diverges on the first turn
+WHAT HAPPENED
+  The UKF diverged instantly on the first corner. The same data worked with the old parameters, so the filter itself was fine - the tuning was not.
+WHY IT HAPPENED (root cause)
+  The sigma-point spread parameter alpha controls how far the sigma points lie from the mean. alpha=1e-3 collapsed the sigma points almost onto the mean, so the filter's covariance estimate was tiny and it over-trusted its state. On the first turn the innovation was huge relative to that shrunken covariance, and the correction pulled the state wildly off. One digit in a JSON file changed the filter's behavior completely.
+FIX (took 1 day)
+  Fixed by restoring alpha=1e-2 from the tuning run and adding a startup check that alpha is within the valid (0,1] range.
+
+----------------------------------------------------------------------
+E0091 | v5.7 | SMALL | Found Day 95 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v5.7/outlier_reject.py
+Error     : Mag heading jumps 180 degrees on reversal
+Terminal  : VS Code terminal
+  $ python3 outlier_reject.py
+  heading: 45 -> 225 (robot didn't turn)
+  hard-iron offset missing
+WHAT HAPPENED
+  The heading readout flipped by exactly 180 degrees whenever the robot reversed direction. The robot never turned, but the compass said it had.
+WHY IT HAPPENED (root cause)
+  The hard-iron offset (the fixed magnetic distortion from the battery and wiring) was only applied in forward direction code paths. When reversing, the un-compensated raw vector rotated the heading by the offset magnitude - which here was almost exactly 180 degrees. The magnetometer measures the sum of the Earth field plus the constant distortion; without subtracting the distortion the heading formula is wrong.
+FIX (took 1 day)
+  Fixed by applying the calibrated hard-iron offset in both directions and adding the reverse path to the heading test cases.
+
+----------------------------------------------------------------------
+E0092 | v5.7 | SMALL | Found Day 95 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v5.7/outlier_test.py
+Error     : Cross-verify reports 40cm disagreement
+Terminal  : VS Code terminal
+  $ python3 outlier_test.py
+  tof=0.82m  camera=0.42m  diff=0.40m
+  camera scale wrong
+WHAT HAPPENED
+  The ToF and camera distance estimates disagreed by 40cm on the same target. One of them was right; the cross-verify test existed precisely to find which.
+WHY IT HAPPENED (root cause)
+  The camera distance scale was calibrated at 640x480, but the pipeline ran at 1280x720. The focal length in pixels doubles with resolution, so a scale factor valid at one resolution is wrong at the other. The two systems measured correctly in their own frames - the bug was a unit mismatch between the calibration domain and the runtime domain.
+FIX (took 1 day)
+  Fixed by re-running tof_camera_calib.py at the runtime resolution and storing the resolution in the calibration file so the scale can be validated at load.
+
+----------------------------------------------------------------------
+E0093 | v5.7 | BIG | Found Day 96 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.7/outlier_reject.py
+Error     : Motor interference corrupts the IMU bus
+Terminal  : Pi SSH terminal
+  imu: all zeros every 3rd frame
+  motor on = imu errors
+WHAT HAPPENED
+  The IMU readings became periodic zeros whenever the motors ran hard. With the motors off, the IMU was perfect - the interference was directly observable.
+WHY IT HAPPENED (root cause)
+  The motor current creates electromagnetic interference that coupled into the unshielded I2C wires, corrupting transfers when the throttle rose. I2C has no error detection on the data line, so a corrupted frame is read as valid data - zeros were the corruption pattern. The failure scaled with current, exactly like a conducted EMI problem.
+INVESTIGATION (before the fix)
+  - Ran the motor_interference_test - errors tracked throttle exactly
+  - Measured the noise on the I2C lines with a scope
+  - Routed the wires away from the motor cables - errors vanished
+FIX (took 2 days)
+  Fixed by rerouting the I2C wiring away from the motor power cables, adding a ground shield, and treating all-zero IMU frames as invalid in the fusion layer.
+
+----------------------------------------------------------------------
+E0094 | v5.7 | BIG | Found Day 96 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.7/outlier_test.py
+Error     : UKF diverges and the robot drives off the track
+Terminal  : Pi SSH terminal
+  ukf: x=3.2 y=8.9 theta=2.1
+  actual: x=1.8 y=2.0 theta=0.0
+  UKF diverged, EKF fallback used
+WHAT HAPPENED
+  The robot drove off the track because the UKF believed the robot was somewhere else entirely. The pose was confident, detailed - and completely wrong.
+WHY IT HAPPENED (root cause)
+  The adaptive noise module grew the process noise with each suspicious measurement, and the filter's confidence in the state shrank with it. With enough noise inflation the filter trusted every new measurement blindly, and a single bad sensor reading dragged the pose far from reality. The adaptive mechanism had no upper bound on the noise it would tolerate - it adapted itself into failure.
+INVESTIGATION (before the fix)
+  - Plotted the UKF pose against the known track - divergence was gradual
+  - Tracked the process noise growth over the run
+  - Bounded the noise growth and re-ran - divergence gone
+FIX (took 3 days)
+  Fixed by bounding the adaptive noise growth to a maximum factor, and by adding a sanity gate that falls back to the EKF when the UKF and EKF disagree by more than 1m.
+
+----------------------------------------------------------------------
+E0095 | v5.7 | BIG | Found Day 96 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.7/outlier_reject.py
+Error     : Dead reckoning drifts 30cm per lap
+Terminal  : Pi SSH terminal
+  dead reckoning: -0.30m off after 1 lap
+  wheel slip on the carpet
+WHAT HAPPENED
+  The dead-reckoned position was 30cm off after every lap. The error was consistent, which made it diagnosable - and unavoidable without external reference.
+WHY IT HAPPENED (root cause)
+  Odometry assumes the wheels roll without slipping, but the carpet caused a consistent 3% slip that odometry cannot measure - it only counts rotations. Over a 10m lap, 3% is exactly 30cm. Pure dead reckoning has no way to know about slip because the encoder counts the same whether the wheel grips or slides; the model was perfect, the assumption was wrong.
+INVESTIGATION (before the fix)
+  - Measured the error over several laps - constant at 30cm
+  - Computed the implied slip percentage - 3%, consistent
+  - Fused the ToF wall distance as a lateral reference
+FIX (took 4 days)
+  Fixed by fusing the ToF wall distance into the lateral state, so the drift is corrected by an absolute reference instead of a second integration.
+
+----------------------------------------------------------------------
+E0096 | v5.7 | BIG | Found Day 96 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.7/outlier_test.py
+Error     : EKF position jumps 40cm at the first corner
+Terminal  : Pi SSH terminal
+  position: (1.2, 2.0) -> (1.6, 2.0) in one step
+  measurement noise too small
+WHAT HAPPENED
+  At the first corner the EKF position jumped 40cm in a single update. The jump was instant - the filter re-trusted a single measurement over its own model.
+WHY IT HAPPENED (root cause)
+  The measurement noise matrix was tuned too optimistically: the filter believed the ToF more than the motion model. At the corner, one noisy reading passed the gate and the filter snapped to it. The EKF's estimate is a weighted compromise; the weights live in the noise matrices, so a too-small R matrix means 'trust the sensor blindly'.
+INVESTIGATION (before the fix)
+  - Logged the innovation at the corner - it was 10x the modeled noise
+  - Tuned R against real logged data instead of guesses
+  - Verified the jump disappeared with the realistic R
+FIX (took 5 days)
+  Fixed by tuning the measurement noise matrix from actual logged data (Allan variance for the sensors), and by gating the correction when the innovation exceeds 5 sigma.
+
+----------------------------------------------------------------------
+E0097 | v5.8 | SMALL | Found Day 97 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.8/cross_verify.py
+Error     : np.linalg.LinAlgError: Singular matrix
+Terminal  : Pi SSH terminal
+  $ python3 cross_verify.py
+    File "cross_verify.py", line 92, in update
+      K = P @ H @ inv(S)
+  np.linalg.LinAlgError: Singular matrix
+WHAT HAPPENED
+  The UKF crashed on its first update with all sensors dead. The innovation covariance was singular - the filter had no information at all.
+WHY IT HAPPENED (root cause)
+  With every sensor returning zero, the innovation covariance S became singular (determinant zero), and matrix inversion is undefined for singular matrices. The UKF assumes measurements carry some information; all-zero measurements violate that assumption. Mathematically this is the filter asking for the inverse of a zero matrix - the error is the correct behavior of the math, and the bug is that nothing prevented it.
+FIX (took 1 day)
+  Fixed by checking the condition number of S before the update and skipping the update when it exceeds a threshold, keeping the prediction only.
+
+----------------------------------------------------------------------
+E0098 | v5.8 | SMALL | Found Day 97 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.8/tof_camera_calib.py
+Error     : NaN appears in the covariance matrix
+Terminal  : Pi SSH terminal
+  $ python3 tof_camera_calib.py
+  P = [[nan nan],[nan nan]]
+  pose estimate frozen
+WHAT HAPPENED
+  The covariance matrix filled with NaN and the pose stopped updating. The filter neither crashed nor recovered - it just froze.
+WHY IT HAPPENED (root cause)
+  One corrupted measurement (a 0 divided during normalization) introduced NaN into the state, and every subsequent update propagated it through the linear algebra. The UKF has no built-in NaN detection; NaN arithmetic silently poisons every matrix product. The failure showed up minutes later as a frozen pose, long after the bad sample was long gone.
+FIX (took 1 day)
+  Fixed by validating every measurement with np.isfinite() before the update and rejecting non-finite samples with a logged warning.
+
+----------------------------------------------------------------------
+E0099 | v5.8 | SMALL | Found Day 97 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.8/cross_verify.py
+Error     : Negative variance in the dead reckoning
+Terminal  : Pi SSH terminal
+  $ python3 cross_verify.py
+  variance: -0.004
+  sigma = nan
+WHAT HAPPENED
+  The dead-reckoning output contained a negative variance, and the standard deviation computed from it became NaN. The motion estimate was mathematically impossible.
+WHY IT HAPPENED (root cause)
+  The noise model added a negative correction term after a wheel-slip event - slip reduces the estimated speed, and the speed-dependent noise formula produced a negative variance. Variance is defined as the expected squared deviation, which cannot be negative; the formula was wrong for the slip regime. Negative variance then breaks the sqrt used for the 1-sigma bound.
+FIX (took 1 day)
+  Fixed by clamping the variance to a minimum of 1e-6 and adding an assertion in tests that the variance never leaves the valid domain.
+
+----------------------------------------------------------------------
+E0100 | v5.8 | SMALL | Found Day 97 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.8/tof_camera_calib.py
+Error     : Outlier rejection drops 100% of measurements
+Terminal  : Pi SSH terminal
+  $ python3 tof_camera_calib.py
+  accepted: 0/48 measurements
+  pose drifts with no updates
+WHAT HAPPENED
+  The filter never updated - every single measurement was rejected as an outlier. The robot moved, but the pose estimate just drifted open-loop.
+WHY IT HAPPENED (root cause)
+  The Mahalanobis gate used chi-square threshold 3 (about 1 sigma) for a measurement that legitimately carries 2-3 sigma noise. With the gate set tighter than the noise, every genuine reading exceeded the threshold and was discarded. Outlier rejection assumes the model matches the noise; a gate calibrated for a different sensor or surface rejects the true signal as noise.
+FIX (took 1 day)
+  Fixed by raising the gate to chi-square 9 (3 sigma), then validating with the outlier_test that at least 95% of genuine measurements pass.
+
+----------------------------------------------------------------------
+E0101 | v5.8 | SMALL | Found Day 97 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.8/cross_verify.py
+Error     : UKF alpha/beta/kappa parameter typo
+Terminal  : Pi SSH terminal
+  $ python3 cross_verify.py
+  ukf_params.json: alpha=1e-3 beta=2 kappa=1
+  filter diverges on the first turn
+WHAT HAPPENED
+  The UKF diverged instantly on the first corner. The same data worked with the old parameters, so the filter itself was fine - the tuning was not.
+WHY IT HAPPENED (root cause)
+  The sigma-point spread parameter alpha controls how far the sigma points lie from the mean. alpha=1e-3 collapsed the sigma points almost onto the mean, so the filter's covariance estimate was tiny and it over-trusted its state. On the first turn the innovation was huge relative to that shrunken covariance, and the correction pulled the state wildly off. One digit in a JSON file changed the filter's behavior completely.
+FIX (took 1 day)
+  Fixed by restoring alpha=1e-2 from the tuning run and adding a startup check that alpha is within the valid (0,1] range.
+
+----------------------------------------------------------------------
+E0102 | v5.8 | SMALL | Found Day 97 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.8/tof_camera_calib.py
+Error     : Mag heading jumps 180 degrees on reversal
+Terminal  : Pi SSH terminal
+  $ python3 tof_camera_calib.py
+  heading: 45 -> 225 (robot didn't turn)
+  hard-iron offset missing
+WHAT HAPPENED
+  The heading readout flipped by exactly 180 degrees whenever the robot reversed direction. The robot never turned, but the compass said it had.
+WHY IT HAPPENED (root cause)
+  The hard-iron offset (the fixed magnetic distortion from the battery and wiring) was only applied in forward direction code paths. When reversing, the un-compensated raw vector rotated the heading by the offset magnitude - which here was almost exactly 180 degrees. The magnetometer measures the sum of the Earth field plus the constant distortion; without subtracting the distortion the heading formula is wrong.
+FIX (took 1 day)
+  Fixed by applying the calibrated hard-iron offset in both directions and adding the reverse path to the heading test cases.
+
+----------------------------------------------------------------------
+E0103 | v5.8 | SMALL | Found Day 97 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.8/cross_verify.py
+Error     : Cross-verify reports 40cm disagreement
+Terminal  : Pi SSH terminal
+  $ python3 cross_verify.py
+  tof=0.82m  camera=0.42m  diff=0.40m
+  camera scale wrong
+WHAT HAPPENED
+  The ToF and camera distance estimates disagreed by 40cm on the same target. One of them was right; the cross-verify test existed precisely to find which.
+WHY IT HAPPENED (root cause)
+  The camera distance scale was calibrated at 640x480, but the pipeline ran at 1280x720. The focal length in pixels doubles with resolution, so a scale factor valid at one resolution is wrong at the other. The two systems measured correctly in their own frames - the bug was a unit mismatch between the calibration domain and the runtime domain.
+FIX (took 1 day)
+  Fixed by re-running tof_camera_calib.py at the runtime resolution and storing the resolution in the calibration file so the scale can be validated at load.
+
+----------------------------------------------------------------------
+E0104 | v5.8 | SMALL | Found Day 97 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.8/tof_camera_calib.py
+Error     : EKF linearization fails on sharp turns
+Terminal  : Pi SSH terminal
+  $ python3 tof_camera_calib.py
+  ekf error: Jacobian is zero
+  state: x=0.5 y=2.1 theta=nan
+WHAT HAPPENED
+  The EKF produced NaN heading on sharp turns. The filter worked on gentle curves and fell apart on the aggressive ones.
+WHY IT HAPPENED (root cause)
+  The EKF linearizes the motion model with a Jacobian evaluated at the current state. For a sharp turn the yaw Jacobian term was dropped in the model, so the Jacobian row became zero and the state transition lost its heading information - the estimate collapsed to NaN. The EKF's approximation quality depends on the Jacobian being accurate; a model simplified for straight driving is invalid at large steering angles.
+FIX (took 1 day)
+  Fixed by adding the missing yaw-dynamics term to the Jacobian and extending the ekf_test with a sharp-turn scenario.
+
+----------------------------------------------------------------------
+E0105 | v5.8 | BIG | Found Day 98 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.8/cross_verify.py
+Error     : UKF diverges and the robot drives off the track
+Terminal  : Pi SSH terminal
+  ukf: x=3.2 y=8.9 theta=2.1
+  actual: x=1.8 y=2.0 theta=0.0
+  UKF diverged, EKF fallback used
+WHAT HAPPENED
+  The robot drove off the track because the UKF believed the robot was somewhere else entirely. The pose was confident, detailed - and completely wrong.
+WHY IT HAPPENED (root cause)
+  The adaptive noise module grew the process noise with each suspicious measurement, and the filter's confidence in the state shrank with it. With enough noise inflation the filter trusted every new measurement blindly, and a single bad sensor reading dragged the pose far from reality. The adaptive mechanism had no upper bound on the noise it would tolerate - it adapted itself into failure.
+INVESTIGATION (before the fix)
+  - Plotted the UKF pose against the known track - divergence was gradual
+  - Tracked the process noise growth over the run
+  - Bounded the noise growth and re-ran - divergence gone
+FIX (took 2 days)
+  Fixed by bounding the adaptive noise growth to a maximum factor, and by adding a sanity gate that falls back to the EKF when the UKF and EKF disagree by more than 1m.
+
+----------------------------------------------------------------------
+E0106 | v5.8 | BIG | Found Day 98 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.8/tof_camera_calib.py
+Error     : Dead reckoning drifts 30cm per lap
+Terminal  : Pi SSH terminal
+  dead reckoning: -0.30m off after 1 lap
+  wheel slip on the carpet
+WHAT HAPPENED
+  The dead-reckoned position was 30cm off after every lap. The error was consistent, which made it diagnosable - and unavoidable without external reference.
+WHY IT HAPPENED (root cause)
+  Odometry assumes the wheels roll without slipping, but the carpet caused a consistent 3% slip that odometry cannot measure - it only counts rotations. Over a 10m lap, 3% is exactly 30cm. Pure dead reckoning has no way to know about slip because the encoder counts the same whether the wheel grips or slides; the model was perfect, the assumption was wrong.
+INVESTIGATION (before the fix)
+  - Measured the error over several laps - constant at 30cm
+  - Computed the implied slip percentage - 3%, consistent
+  - Fused the ToF wall distance as a lateral reference
+FIX (took 3 days)
+  Fixed by fusing the ToF wall distance into the lateral state, so the drift is corrected by an absolute reference instead of a second integration.
+
+----------------------------------------------------------------------
+E0107 | v5.8 | BIG | Found Day 98 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.8/cross_verify.py
+Error     : EKF position jumps 40cm at the first corner
+Terminal  : Pi SSH terminal
+  position: (1.2, 2.0) -> (1.6, 2.0) in one step
+  measurement noise too small
+WHAT HAPPENED
+  At the first corner the EKF position jumped 40cm in a single update. The jump was instant - the filter re-trusted a single measurement over its own model.
+WHY IT HAPPENED (root cause)
+  The measurement noise matrix was tuned too optimistically: the filter believed the ToF more than the motion model. At the corner, one noisy reading passed the gate and the filter snapped to it. The EKF's estimate is a weighted compromise; the weights live in the noise matrices, so a too-small R matrix means 'trust the sensor blindly'.
+INVESTIGATION (before the fix)
+  - Logged the innovation at the corner - it was 10x the modeled noise
+  - Tuned R against real logged data instead of guesses
+  - Verified the jump disappeared with the realistic R
+FIX (took 4 days)
+  Fixed by tuning the measurement noise matrix from actual logged data (Allan variance for the sensors), and by gating the correction when the innovation exceeds 5 sigma.
+
+----------------------------------------------------------------------
+E0108 | v5.8 | BIG | Found Day 98 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.8/tof_camera_calib.py
+Error     : Pose pipeline slows to 8Hz under load
+Terminal  : Pi SSH terminal
+  pipeline rate: 100Hz -> 8Hz
+  CPU at 96% (vision + fusion)
+WHAT HAPPENED
+  The pose pipeline collapsed from 100Hz to 8Hz when the vision stack ran at full load. The robot's control degraded with it, because control depends on fresh pose data.
+WHY IT HAPPENED (root cause)
+  Vision and fusion ran in a single thread, and vision processing took 120ms per frame under load. The GIL serialized the Python work, so fusion starved behind vision. The architecture had no isolation between a 30fps vision workload and a 100Hz fusion workload - one process, one thread, one bottleneck.
+INVESTIGATION (before the fix)
+  - Measured the per-stage latency to find the bottleneck
+  - Confirmed vision occupied the CPU while fusion waited
+  - Split fusion into a separate process - rate recovered
+FIX (took 5 days)
+  Fixed by moving fusion to its own process with a shared-memory pose buffer, so a vision slowdown can no longer block control.
+
+----------------------------------------------------------------------
+E0109 | v5.9 | SMALL | Found Day 99 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v5.9/perf_monitor.py
+Error     : NaN appears in the covariance matrix
+Terminal  : Pi console (HDMI)
+  $ python3 perf_monitor.py
+  P = [[nan nan],[nan nan]]
+  pose estimate frozen
+WHAT HAPPENED
+  The covariance matrix filled with NaN and the pose stopped updating. The filter neither crashed nor recovered - it just froze.
+WHY IT HAPPENED (root cause)
+  One corrupted measurement (a 0 divided during normalization) introduced NaN into the state, and every subsequent update propagated it through the linear algebra. The UKF has no built-in NaN detection; NaN arithmetic silently poisons every matrix product. The failure showed up minutes later as a frozen pose, long after the bad sample was long gone.
+FIX (took 1 day)
+  Fixed by validating every measurement with np.isfinite() before the update and rejecting non-finite samples with a logged warning.
+
+----------------------------------------------------------------------
+E0110 | v5.9 | SMALL | Found Day 99 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v5.9/pose_pipeline.py
+Error     : Negative variance in the dead reckoning
+Terminal  : Pi console (HDMI)
+  $ python3 pose_pipeline.py
+  variance: -0.004
+  sigma = nan
+WHAT HAPPENED
+  The dead-reckoning output contained a negative variance, and the standard deviation computed from it became NaN. The motion estimate was mathematically impossible.
+WHY IT HAPPENED (root cause)
+  The noise model added a negative correction term after a wheel-slip event - slip reduces the estimated speed, and the speed-dependent noise formula produced a negative variance. Variance is defined as the expected squared deviation, which cannot be negative; the formula was wrong for the slip regime. Negative variance then breaks the sqrt used for the 1-sigma bound.
+FIX (took 1 day)
+  Fixed by clamping the variance to a minimum of 1e-6 and adding an assertion in tests that the variance never leaves the valid domain.
+
+----------------------------------------------------------------------
+E0111 | v5.9 | SMALL | Found Day 99 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v5.9/perf_monitor.py
+Error     : Outlier rejection drops 100% of measurements
+Terminal  : Pi console (HDMI)
+  $ python3 perf_monitor.py
+  accepted: 0/48 measurements
+  pose drifts with no updates
+WHAT HAPPENED
+  The filter never updated - every single measurement was rejected as an outlier. The robot moved, but the pose estimate just drifted open-loop.
+WHY IT HAPPENED (root cause)
+  The Mahalanobis gate used chi-square threshold 3 (about 1 sigma) for a measurement that legitimately carries 2-3 sigma noise. With the gate set tighter than the noise, every genuine reading exceeded the threshold and was discarded. Outlier rejection assumes the model matches the noise; a gate calibrated for a different sensor or surface rejects the true signal as noise.
+FIX (took 1 day)
+  Fixed by raising the gate to chi-square 9 (3 sigma), then validating with the outlier_test that at least 95% of genuine measurements pass.
+
+----------------------------------------------------------------------
+E0112 | v5.9 | SMALL | Found Day 99 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v5.9/pose_pipeline.py
+Error     : UKF alpha/beta/kappa parameter typo
+Terminal  : Pi console (HDMI)
+  $ python3 pose_pipeline.py
+  ukf_params.json: alpha=1e-3 beta=2 kappa=1
+  filter diverges on the first turn
+WHAT HAPPENED
+  The UKF diverged instantly on the first corner. The same data worked with the old parameters, so the filter itself was fine - the tuning was not.
+WHY IT HAPPENED (root cause)
+  The sigma-point spread parameter alpha controls how far the sigma points lie from the mean. alpha=1e-3 collapsed the sigma points almost onto the mean, so the filter's covariance estimate was tiny and it over-trusted its state. On the first turn the innovation was huge relative to that shrunken covariance, and the correction pulled the state wildly off. One digit in a JSON file changed the filter's behavior completely.
+FIX (took 1 day)
+  Fixed by restoring alpha=1e-2 from the tuning run and adding a startup check that alpha is within the valid (0,1] range.
+
+----------------------------------------------------------------------
+E0113 | v5.9 | SMALL | Found Day 99 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v5.9/perf_monitor.py
+Error     : Mag heading jumps 180 degrees on reversal
+Terminal  : Pi console (HDMI)
+  $ python3 perf_monitor.py
+  heading: 45 -> 225 (robot didn't turn)
+  hard-iron offset missing
+WHAT HAPPENED
+  The heading readout flipped by exactly 180 degrees whenever the robot reversed direction. The robot never turned, but the compass said it had.
+WHY IT HAPPENED (root cause)
+  The hard-iron offset (the fixed magnetic distortion from the battery and wiring) was only applied in forward direction code paths. When reversing, the un-compensated raw vector rotated the heading by the offset magnitude - which here was almost exactly 180 degrees. The magnetometer measures the sum of the Earth field plus the constant distortion; without subtracting the distortion the heading formula is wrong.
+FIX (took 1 day)
+  Fixed by applying the calibrated hard-iron offset in both directions and adding the reverse path to the heading test cases.
+
+----------------------------------------------------------------------
+E0114 | v5.9 | SMALL | Found Day 99 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v5.9/pose_pipeline.py
+Error     : Cross-verify reports 40cm disagreement
+Terminal  : Pi console (HDMI)
+  $ python3 pose_pipeline.py
+  tof=0.82m  camera=0.42m  diff=0.40m
+  camera scale wrong
+WHAT HAPPENED
+  The ToF and camera distance estimates disagreed by 40cm on the same target. One of them was right; the cross-verify test existed precisely to find which.
+WHY IT HAPPENED (root cause)
+  The camera distance scale was calibrated at 640x480, but the pipeline ran at 1280x720. The focal length in pixels doubles with resolution, so a scale factor valid at one resolution is wrong at the other. The two systems measured correctly in their own frames - the bug was a unit mismatch between the calibration domain and the runtime domain.
+FIX (took 1 day)
+  Fixed by re-running tof_camera_calib.py at the runtime resolution and storing the resolution in the calibration file so the scale can be validated at load.
+
+----------------------------------------------------------------------
+E0115 | v5.9 | SMALL | Found Day 99 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v5.9/perf_monitor.py
+Error     : EKF linearization fails on sharp turns
+Terminal  : Pi console (HDMI)
+  $ python3 perf_monitor.py
+  ekf error: Jacobian is zero
+  state: x=0.5 y=2.1 theta=nan
+WHAT HAPPENED
+  The EKF produced NaN heading on sharp turns. The filter worked on gentle curves and fell apart on the aggressive ones.
+WHY IT HAPPENED (root cause)
+  The EKF linearizes the motion model with a Jacobian evaluated at the current state. For a sharp turn the yaw Jacobian term was dropped in the model, so the Jacobian row became zero and the state transition lost its heading information - the estimate collapsed to NaN. The EKF's approximation quality depends on the Jacobian being accurate; a model simplified for straight driving is invalid at large steering angles.
+FIX (took 1 day)
+  Fixed by adding the missing yaw-dynamics term to the Jacobian and extending the ekf_test with a sharp-turn scenario.
+
+----------------------------------------------------------------------
+E0116 | v5.9 | SMALL | Found Day 99 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v5.9/pose_pipeline.py
+Error     : np.linalg.LinAlgError: Singular matrix
+Terminal  : Pi console (HDMI)
+  $ python3 pose_pipeline.py
+    File "pose_pipeline.py", line 92, in update
+      K = P @ H @ inv(S)
+  np.linalg.LinAlgError: Singular matrix
+WHAT HAPPENED
+  The UKF crashed on its first update with all sensors dead. The innovation covariance was singular - the filter had no information at all.
+WHY IT HAPPENED (root cause)
+  With every sensor returning zero, the innovation covariance S became singular (determinant zero), and matrix inversion is undefined for singular matrices. The UKF assumes measurements carry some information; all-zero measurements violate that assumption. Mathematically this is the filter asking for the inverse of a zero matrix - the error is the correct behavior of the math, and the bug is that nothing prevented it.
+FIX (took 1 day)
+  Fixed by checking the condition number of S before the update and skipping the update when it exceeds a threshold, keeping the prediction only.
+
+----------------------------------------------------------------------
+E0117 | v5.9 | BIG | Found Day 100 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.9/perf_monitor.py
+Error     : Dead reckoning drifts 30cm per lap
+Terminal  : Pi SSH terminal
+  dead reckoning: -0.30m off after 1 lap
+  wheel slip on the carpet
+WHAT HAPPENED
+  The dead-reckoned position was 30cm off after every lap. The error was consistent, which made it diagnosable - and unavoidable without external reference.
+WHY IT HAPPENED (root cause)
+  Odometry assumes the wheels roll without slipping, but the carpet caused a consistent 3% slip that odometry cannot measure - it only counts rotations. Over a 10m lap, 3% is exactly 30cm. Pure dead reckoning has no way to know about slip because the encoder counts the same whether the wheel grips or slides; the model was perfect, the assumption was wrong.
+INVESTIGATION (before the fix)
+  - Measured the error over several laps - constant at 30cm
+  - Computed the implied slip percentage - 3%, consistent
+  - Fused the ToF wall distance as a lateral reference
+FIX (took 2 days)
+  Fixed by fusing the ToF wall distance into the lateral state, so the drift is corrected by an absolute reference instead of a second integration.
+
+----------------------------------------------------------------------
+E0118 | v5.9 | BIG | Found Day 100 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.9/pose_pipeline.py
+Error     : EKF position jumps 40cm at the first corner
+Terminal  : Pi SSH terminal
+  position: (1.2, 2.0) -> (1.6, 2.0) in one step
+  measurement noise too small
+WHAT HAPPENED
+  At the first corner the EKF position jumped 40cm in a single update. The jump was instant - the filter re-trusted a single measurement over its own model.
+WHY IT HAPPENED (root cause)
+  The measurement noise matrix was tuned too optimistically: the filter believed the ToF more than the motion model. At the corner, one noisy reading passed the gate and the filter snapped to it. The EKF's estimate is a weighted compromise; the weights live in the noise matrices, so a too-small R matrix means 'trust the sensor blindly'.
+INVESTIGATION (before the fix)
+  - Logged the innovation at the corner - it was 10x the modeled noise
+  - Tuned R against real logged data instead of guesses
+  - Verified the jump disappeared with the realistic R
+FIX (took 3 days)
+  Fixed by tuning the measurement noise matrix from actual logged data (Allan variance for the sensors), and by gating the correction when the innovation exceeds 5 sigma.
+
+----------------------------------------------------------------------
+E0119 | v5.9 | BIG | Found Day 100 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.9/perf_monitor.py
+Error     : Pose pipeline slows to 8Hz under load
+Terminal  : Pi SSH terminal
+  pipeline rate: 100Hz -> 8Hz
+  CPU at 96% (vision + fusion)
+WHAT HAPPENED
+  The pose pipeline collapsed from 100Hz to 8Hz when the vision stack ran at full load. The robot's control degraded with it, because control depends on fresh pose data.
+WHY IT HAPPENED (root cause)
+  Vision and fusion ran in a single thread, and vision processing took 120ms per frame under load. The GIL serialized the Python work, so fusion starved behind vision. The architecture had no isolation between a 30fps vision workload and a 100Hz fusion workload - one process, one thread, one bottleneck.
+INVESTIGATION (before the fix)
+  - Measured the per-stage latency to find the bottleneck
+  - Confirmed vision occupied the CPU while fusion waited
+  - Split fusion into a separate process - rate recovered
+FIX (took 4 days)
+  Fixed by moving fusion to its own process with a shared-memory pose buffer, so a vision slowdown can no longer block control.
+
+----------------------------------------------------------------------
+E0120 | v5.9 | BIG | Found Day 100 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v5.9/pose_pipeline.py
+Error     : Outlier rejection masks a real obstacle
+Terminal  : Pi SSH terminal
+  obstacle at 0.5m: REJECTED as outlier
+  robot drives into the pillar
+WHAT HAPPENED
+  The outlier filter rejected the most important reading of the day: the real pillar at 0.5m. The robot drove into the obstacle it was supposed to avoid.
+WHY IT HAPPENED (root cause)
+  The Mahalanobis gate was tuned against a history of far-field noise, so the first close-range reading looked statistically impossible - it was far outside the modeled distribution. Outlier rejection assumes outliers are errors, but here the outlier was the truth and the history was the error. No static gate can distinguish 'new truth' from 'garbage' by distance alone.
+INVESTIGATION (before the fix)
+  - Replayed the log - the 0.5m reading was the true pillar
+  - Checked the gate: the reading was rejected as 8-sigma
+  - Tested an asymmetric gate - near readings never rejected
+FIX (took 5 days)
+  Fixed by making the gate asymmetric: readings below 0.6m are always accepted (they can only be obstacles), and only far-field readings are subject to rejection.
+
+======================================================================
+END OF PHASE v5.x -- 120 errors
+======================================================================

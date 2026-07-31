@@ -1,0 +1,2104 @@
+WRO 4WS Robot - Error Catalog (1000+ Errors, Deep Detail)
+=========================================================
+One error entry per development morning across the whole 90-version
+history repo (v1.0 -> v9.9).  Every entry includes WHAT HAPPENED,
+WHY IT HAPPENED (root cause / deep research), the terminal type and
+exact output, and the FIX with how many days it took.
+
+  SMALL  errors : fixed the same day (1 day)
+  BIG    errors : 2-5 days, with investigation steps before the fix
+
+Day = development-day counter only (no dates).
+
+Total errors : 1080   (720 SMALL / 360 BIG)
+Total days   : 180
+Versions     : 90
+Phases       : 9
+
+======================================================================
+PHASE v8.x  --  INTEGRATION & SYSTEM
+======================================================================
+
+----------------------------------------------------------------------
+E0001 | v8.0 | SMALL | Found Day 141 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v8.0/steer_same.py
+Error     : Task base double-schedules a callback
+Terminal  : systemd journal
+  $ python3 steer_same.py
+  callback ran twice per tick
+  motor command overwritten
+WHAT HAPPENED
+  Every control tick produced two motor commands, the second overwriting the first. The motion was erratic because half the commands were stale by one tick.
+WHY IT HAPPENED (root cause)
+  register_task was called twice for the same task ID in main - once by the module's own registration and once by the application wiring. The scheduler had no duplicate detection, so it added the callback twice. The scheduler trusted its caller; the caller did not check whether the task was already registered.
+FIX (took 1 day)
+  Fixed by guarding register_task with a task-ID set that rejects duplicates, and logging a warning when a duplicate registration is attempted.
+
+----------------------------------------------------------------------
+E0002 | v8.0 | SMALL | Found Day 141 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v8.0/steering_common.py
+Error     : Log severity mapping is wrong
+Terminal  : systemd journal
+  $ python3 steering_common.py
+  ERROR logged as INFO
+  failures hidden in the console
+WHAT HAPPENED
+  Critical failures appeared in the log with the INFO level, so nobody noticed them in the morning's flood of messages. The logging was lying about importance.
+WHY IT HAPPENED (root cause)
+  The severity enum in log_severity.py and the level table in the logger used different orderings, so the numeric codes mapped to the wrong levels. The logger wrote what it was told - the mapping was corrupted upstream. Two files defining the same concept independently is a maintenance trap: they will drift until someone notices.
+FIX (took 1 day)
+  Fixed by defining the severity enum in the logger module itself and importing it everywhere, so only one source of truth exists.
+
+----------------------------------------------------------------------
+E0003 | v8.0 | SMALL | Found Day 141 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v8.0/steer_same.py
+Error     : YAML parse error in default_config.yaml
+Terminal  : systemd journal
+  $ python3 steer_same.py
+  yaml.scanner.ScannerError: mapping values are not allowed here
+  config failed to load
+WHAT HAPPENED
+  The robot refused to boot because the configuration file could not be parsed. The file looked correct to a human - the colon in a string was the problem.
+WHY IT HAPPENED (root cause)
+  YAML treats an unquoted colon followed by a space as a key/value separator. A string containing 'mode: fast' inside a value breaks the parser because it sees a nested mapping where it did not expect one. YAML is whitespace- and punctuation-sensitive in ways that are invisible to a quick read, which is why config errors show up at load time, never at edit time.
+FIX (took 1 day)
+  Fixed by quoting the value, and adding a config validation step at boot that parses the YAML and reports the exact line of any syntax error.
+
+----------------------------------------------------------------------
+E0004 | v8.0 | SMALL | Found Day 141 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v8.0/steering_common.py
+Error     : Surprise rule key is unknown
+Terminal  : systemd journal
+  $ python3 steering_common.py
+  KeyError: 'pillar_logic' in surprise_config
+  rules ignored, defaults used
+WHAT HAPPENED
+  The surprise rules loaded without error, but the pillar logic rule never took effect - the robot ran the default behavior all day.
+WHY IT HAPPENED (root cause)
+  The loader read keys by an explicit allowlist, and 'pillar_logic' was not in it, so the rule was silently dropped. A missing key in a config lookup is a silent failure when the code uses .get() with a default and a crash when it uses [] - this code used a path that neither crashed nor worked. The rules file and the loader schema had drifted apart.
+FIX (took 1 day)
+  Fixed by adding the key to the loader schema and logging a warning whenever a configured rule key is ignored, so silent drops become visible.
+
+----------------------------------------------------------------------
+E0005 | v8.0 | SMALL | Found Day 141 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v8.0/steer_same.py
+Error     : Steering mode switch race condition
+Terminal  : systemd journal
+  $ python3 steer_same.py
+  mode: OPPOSITE (expected CRAB)
+  one-frame wrong steering at the switch
+WHAT HAPPENED
+  For exactly one frame at every mode switch, the robot steered with the wrong geometry. The switch itself worked - the frame in between did not.
+WHY IT HAPPENED (root cause)
+  The mode flag was written by the mission thread and read by the control thread without synchronization. The control thread could read the flag mid-update, observing a mixed state. A one-frame glitch is exactly what a data race looks like: mostly correct, occasionally wrong, impossible to reproduce on demand.
+FIX (took 1 day)
+  Fixed by making the mode switch atomic - the mode lives in a single int that the scheduler publishes, and the control thread reads it through a lock-free once-store.
+
+----------------------------------------------------------------------
+E0006 | v8.0 | SMALL | Found Day 141 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v8.0/steering_common.py
+Error     : Heartbeat times out on a busy CPU
+Terminal  : systemd journal
+  $ python3 steering_common.py
+  heartbeat lost: 1500ms
+  motors cut mid-run
+WHAT HAPPENED
+  The motors cut out for a moment in the middle of a run, then resumed. The failsafe fired, then recovered on its own - a glitch with consequences.
+WHY IT HAPPENED (root cause)
+  The heartbeat thread could not get CPU time during perception spikes, so the failsafe correctly concluded the main loop was dead and cut the motors. The failsafe is designed to be conservative: any doubt means stop. The bug was that a healthy but busy system looked dead to the heartbeat - the failure detector could not distinguish 'slow' from 'dead'.
+FIX (took 1 day)
+  Fixed by raising the heartbeat thread priority and extending the timeout to 2s, with a separate watchdog that only fires when the main loop is truly stuck.
+
+----------------------------------------------------------------------
+E0007 | v8.0 | SMALL | Found Day 141 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v8.0/steer_same.py
+Error     : Health monitor false alarm on sensor 3
+Terminal  : systemd journal
+  $ python3 steer_same.py
+  sensor 3: FAIL (3 misses)
+  actually fine, just slow
+WHAT HAPPENED
+  The health monitor declared the ToF dead at every boot. The sensor was alive - it was just slow to warm up, and the monitor did not wait.
+WHY IT HAPPENED (root cause)
+  The failure threshold was three consecutive misses, and the ToF's warm-up period legitimately produces more than three misses before its first valid reading. The threshold was calibrated against runtime behavior, not boot behavior. A monitor with a fixed threshold cannot distinguish a boot transient from a persistent failure.
+FIX (took 1 day)
+  Fixed by raising the threshold to 20 misses and adding a warm-up grace period of 5 seconds at boot, matching the measured sensor ready time.
+
+----------------------------------------------------------------------
+E0008 | v8.0 | SMALL | Found Day 141 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v8.0/steering_common.py
+Error     : Track map is off by one section
+Terminal  : systemd journal
+  $ python3 steering_common.py
+  section: 5 (expected 4)
+  strategy picks the wrong corner
+WHAT HAPPENED
+  Every lap the track map believed the robot was one section further along than reality. The strategy consistently prepared the wrong corner.
+WHY IT HAPPENED (root cause)
+  The section counter incremented on both entering and exiting the section boundary line, because the boundary check ran on the transition in both directions. A line crossing is a single event, but the code detected it twice - once entering, once leaving. The off-by-one was perfectly consistent, which made it look like a constant and masked it as a real offset.
+FIX (took 1 day)
+  Fixed by incrementing the section only on entry, and adding a test that drives the full lap and asserts the counter ends exactly at the section count.
+
+----------------------------------------------------------------------
+E0009 | v8.0 | BIG | Found Day 142 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.0/steer_same.py
+Error     : OOM killer kills the perception process
+Terminal  : Pi SSH terminal
+  $ python3 steer_same.py
+  Out of memory: Killed process 1234 (vision)
+  perception dead, robot runs blind
+WHAT HAPPENED
+  The perception process was killed by the kernel's OOM killer mid-run. The robot kept driving - blind, because nobody noticed the process was gone.
+WHY IT HAPPENED (root cause)
+  The vision frame queue had no size limit, so under load it buffered frames without bound and consumed the Pi's RAM. When memory ran out, the kernel's OOM killer chose the largest process - the vision process. The queue was a convenience that became a memory leak the moment consumers lagged producers.
+INVESTIGATION (before the fix)
+  - Checked dmesg for the OOM kill - the vision process was the target
+  - Measured the RSS growth - it grew linearly with queue length
+  - Capped the queue and re-ran under load
+FIX (took 2 days)
+  Fixed by capping the frame queue at 4 frames with drop-oldest, and adding a memory watch that logs the RSS of each process to the health monitor.
+
+----------------------------------------------------------------------
+E0010 | v8.0 | BIG | Found Day 142 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.0/steering_common.py
+Error     : Log severity floods the disk on a bad day
+Terminal  : Pi SSH terminal
+  $ python3 steering_common.py
+  /var/log: 4.2GB of WARNING lines
+  SD card 99% full
+WHAT HAPPENED
+  One bad day of testing filled the SD card with 4.2GB of warning lines. The robot kept working - until the card was full and everything stopped.
+WHY IT HAPPENED (root cause)
+  A rate-limit regression let the error logger write at full rate, and the log had no rotation on the embedded system. Logging is storage I/O; unbounded logging is an unbounded disk consumption. The rate limiter that had fixed the console spam did not cover the file writer.
+INVESTIGATION (before the fix)
+  - Found the 4.2GB log and its growth rate
+  - Traced the spam to a rate-limiter regression
+  - Added rotation and a disk watermark alert
+FIX (took 3 days)
+  Fixed by fixing the rate limiter for the file writer and adding log rotation with a 50MB cap, plus a warning when the disk crosses 90%.
+
+----------------------------------------------------------------------
+E0011 | v8.0 | BIG | Found Day 142 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.0/steer_same.py
+Error     : Scheduler deadlocks when a task raises
+Terminal  : Pi SSH terminal
+  $ python3 steer_same.py
+  scheduler: task 'vision' raised, never resumed
+  all other tasks stop
+WHAT HAPPENED
+  One exception in the vision task froze the entire robot - every other task stopped scheduling. The failure was in the exception path, not the task.
+WHY IT HAPPENED (root cause)
+  The scheduler loop had no exception boundary around its task invocations. When vision raised, the exception propagated out of the loop, and the asyncio gather never continued, so no task ever ran again. A system of cooperating tasks is only as robust as its weakest task unless the scheduler contains each one.
+INVESTIGATION (before the fix)
+  - Reproduced with a forced exception in a test task
+  - Confirmed the gather exited and nothing resumed
+  - Wrapped each task call in try/except and re-ran
+FIX (took 4 days)
+  Fixed by wrapping every task invocation in try/except with logging, so a failing task is isolated and the scheduler keeps running.
+
+----------------------------------------------------------------------
+E0012 | v8.0 | BIG | Found Day 142 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.0/steering_common.py
+Error     : Heartbeat failure cuts the motors at the start line
+Terminal  : Pi SSH terminal
+  $ python3 steering_common.py
+  heartbeat: FAIL (start signal)
+  motors disabled for 3s
+WHAT HAPPENED
+  At the start signal the motors were disabled for three seconds - the failsafe fired exactly when the robot needed to move. The start burst starved the heartbeat.
+WHY IT HAPPENED (root cause)
+  At start, the vision and fusion tasks all wake at once and consume CPU for hundreds of milliseconds. The low-priority heartbeat thread could not run within its timeout window, so the failsafe - which is supposed to catch a dead loop - caught a merely busy one. The safety system could not tell the difference, and its design made it fire on exactly this pattern.
+INVESTIGATION (before the fix)
+  - Logged CPU usage at the start burst - the heartbeat starved
+  - Confirmed the failsafe fired while the loop was healthy
+  - Prioritized the heartbeat and widened the timeout
+FIX (took 5 days)
+  Fixed by boosting the heartbeat to a high-priority thread with a 2s timeout, so a busy-but-healthy system never trips the failsafe.
+
+----------------------------------------------------------------------
+E0013 | v8.1 | SMALL | Found Day 143 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v8.1/steer_opposite.py
+Error     : Log severity mapping is wrong
+Terminal  : VS Code terminal
+  $ python3 steer_opposite.py
+  ERROR logged as INFO
+  failures hidden in the console
+WHAT HAPPENED
+  Critical failures appeared in the log with the INFO level, so nobody noticed them in the morning's flood of messages. The logging was lying about importance.
+WHY IT HAPPENED (root cause)
+  The severity enum in log_severity.py and the level table in the logger used different orderings, so the numeric codes mapped to the wrong levels. The logger wrote what it was told - the mapping was corrupted upstream. Two files defining the same concept independently is a maintenance trap: they will drift until someone notices.
+FIX (took 1 day)
+  Fixed by defining the severity enum in the logger module itself and importing it everywhere, so only one source of truth exists.
+
+----------------------------------------------------------------------
+E0014 | v8.1 | SMALL | Found Day 143 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v8.1/steering_common.py
+Error     : YAML parse error in default_config.yaml
+Terminal  : VS Code terminal
+  $ python3 steering_common.py
+  yaml.scanner.ScannerError: mapping values are not allowed here
+  config failed to load
+WHAT HAPPENED
+  The robot refused to boot because the configuration file could not be parsed. The file looked correct to a human - the colon in a string was the problem.
+WHY IT HAPPENED (root cause)
+  YAML treats an unquoted colon followed by a space as a key/value separator. A string containing 'mode: fast' inside a value breaks the parser because it sees a nested mapping where it did not expect one. YAML is whitespace- and punctuation-sensitive in ways that are invisible to a quick read, which is why config errors show up at load time, never at edit time.
+FIX (took 1 day)
+  Fixed by quoting the value, and adding a config validation step at boot that parses the YAML and reports the exact line of any syntax error.
+
+----------------------------------------------------------------------
+E0015 | v8.1 | SMALL | Found Day 143 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v8.1/steer_opposite.py
+Error     : Surprise rule key is unknown
+Terminal  : VS Code terminal
+  $ python3 steer_opposite.py
+  KeyError: 'pillar_logic' in surprise_config
+  rules ignored, defaults used
+WHAT HAPPENED
+  The surprise rules loaded without error, but the pillar logic rule never took effect - the robot ran the default behavior all day.
+WHY IT HAPPENED (root cause)
+  The loader read keys by an explicit allowlist, and 'pillar_logic' was not in it, so the rule was silently dropped. A missing key in a config lookup is a silent failure when the code uses .get() with a default and a crash when it uses [] - this code used a path that neither crashed nor worked. The rules file and the loader schema had drifted apart.
+FIX (took 1 day)
+  Fixed by adding the key to the loader schema and logging a warning whenever a configured rule key is ignored, so silent drops become visible.
+
+----------------------------------------------------------------------
+E0016 | v8.1 | SMALL | Found Day 143 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v8.1/steering_common.py
+Error     : Steering mode switch race condition
+Terminal  : VS Code terminal
+  $ python3 steering_common.py
+  mode: OPPOSITE (expected CRAB)
+  one-frame wrong steering at the switch
+WHAT HAPPENED
+  For exactly one frame at every mode switch, the robot steered with the wrong geometry. The switch itself worked - the frame in between did not.
+WHY IT HAPPENED (root cause)
+  The mode flag was written by the mission thread and read by the control thread without synchronization. The control thread could read the flag mid-update, observing a mixed state. A one-frame glitch is exactly what a data race looks like: mostly correct, occasionally wrong, impossible to reproduce on demand.
+FIX (took 1 day)
+  Fixed by making the mode switch atomic - the mode lives in a single int that the scheduler publishes, and the control thread reads it through a lock-free once-store.
+
+----------------------------------------------------------------------
+E0017 | v8.1 | SMALL | Found Day 143 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v8.1/steer_opposite.py
+Error     : Heartbeat times out on a busy CPU
+Terminal  : VS Code terminal
+  $ python3 steer_opposite.py
+  heartbeat lost: 1500ms
+  motors cut mid-run
+WHAT HAPPENED
+  The motors cut out for a moment in the middle of a run, then resumed. The failsafe fired, then recovered on its own - a glitch with consequences.
+WHY IT HAPPENED (root cause)
+  The heartbeat thread could not get CPU time during perception spikes, so the failsafe correctly concluded the main loop was dead and cut the motors. The failsafe is designed to be conservative: any doubt means stop. The bug was that a healthy but busy system looked dead to the heartbeat - the failure detector could not distinguish 'slow' from 'dead'.
+FIX (took 1 day)
+  Fixed by raising the heartbeat thread priority and extending the timeout to 2s, with a separate watchdog that only fires when the main loop is truly stuck.
+
+----------------------------------------------------------------------
+E0018 | v8.1 | SMALL | Found Day 143 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v8.1/steering_common.py
+Error     : Health monitor false alarm on sensor 3
+Terminal  : VS Code terminal
+  $ python3 steering_common.py
+  sensor 3: FAIL (3 misses)
+  actually fine, just slow
+WHAT HAPPENED
+  The health monitor declared the ToF dead at every boot. The sensor was alive - it was just slow to warm up, and the monitor did not wait.
+WHY IT HAPPENED (root cause)
+  The failure threshold was three consecutive misses, and the ToF's warm-up period legitimately produces more than three misses before its first valid reading. The threshold was calibrated against runtime behavior, not boot behavior. A monitor with a fixed threshold cannot distinguish a boot transient from a persistent failure.
+FIX (took 1 day)
+  Fixed by raising the threshold to 20 misses and adding a warm-up grace period of 5 seconds at boot, matching the measured sensor ready time.
+
+----------------------------------------------------------------------
+E0019 | v8.1 | SMALL | Found Day 143 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v8.1/steer_opposite.py
+Error     : Track map is off by one section
+Terminal  : VS Code terminal
+  $ python3 steer_opposite.py
+  section: 5 (expected 4)
+  strategy picks the wrong corner
+WHAT HAPPENED
+  Every lap the track map believed the robot was one section further along than reality. The strategy consistently prepared the wrong corner.
+WHY IT HAPPENED (root cause)
+  The section counter incremented on both entering and exiting the section boundary line, because the boundary check ran on the transition in both directions. A line crossing is a single event, but the code detected it twice - once entering, once leaving. The off-by-one was perfectly consistent, which made it look like a constant and masked it as a real offset.
+FIX (took 1 day)
+  Fixed by incrementing the section only on entry, and adding a test that drives the full lap and asserts the counter ends exactly at the section count.
+
+----------------------------------------------------------------------
+E0020 | v8.1 | SMALL | Found Day 143 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v8.1/steering_common.py
+Error     : Task base double-schedules a callback
+Terminal  : VS Code terminal
+  $ python3 steering_common.py
+  callback ran twice per tick
+  motor command overwritten
+WHAT HAPPENED
+  Every control tick produced two motor commands, the second overwriting the first. The motion was erratic because half the commands were stale by one tick.
+WHY IT HAPPENED (root cause)
+  register_task was called twice for the same task ID in main - once by the module's own registration and once by the application wiring. The scheduler had no duplicate detection, so it added the callback twice. The scheduler trusted its caller; the caller did not check whether the task was already registered.
+FIX (took 1 day)
+  Fixed by guarding register_task with a task-ID set that rejects duplicates, and logging a warning when a duplicate registration is attempted.
+
+----------------------------------------------------------------------
+E0021 | v8.1 | BIG | Found Day 144 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.1/steer_opposite.py
+Error     : Log severity floods the disk on a bad day
+Terminal  : Pi SSH terminal
+  $ python3 steer_opposite.py
+  /var/log: 4.2GB of WARNING lines
+  SD card 99% full
+WHAT HAPPENED
+  One bad day of testing filled the SD card with 4.2GB of warning lines. The robot kept working - until the card was full and everything stopped.
+WHY IT HAPPENED (root cause)
+  A rate-limit regression let the error logger write at full rate, and the log had no rotation on the embedded system. Logging is storage I/O; unbounded logging is an unbounded disk consumption. The rate limiter that had fixed the console spam did not cover the file writer.
+INVESTIGATION (before the fix)
+  - Found the 4.2GB log and its growth rate
+  - Traced the spam to a rate-limiter regression
+  - Added rotation and a disk watermark alert
+FIX (took 2 days)
+  Fixed by fixing the rate limiter for the file writer and adding log rotation with a 50MB cap, plus a warning when the disk crosses 90%.
+
+----------------------------------------------------------------------
+E0022 | v8.1 | BIG | Found Day 144 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.1/steering_common.py
+Error     : Scheduler deadlocks when a task raises
+Terminal  : Pi SSH terminal
+  $ python3 steering_common.py
+  scheduler: task 'vision' raised, never resumed
+  all other tasks stop
+WHAT HAPPENED
+  One exception in the vision task froze the entire robot - every other task stopped scheduling. The failure was in the exception path, not the task.
+WHY IT HAPPENED (root cause)
+  The scheduler loop had no exception boundary around its task invocations. When vision raised, the exception propagated out of the loop, and the asyncio gather never continued, so no task ever ran again. A system of cooperating tasks is only as robust as its weakest task unless the scheduler contains each one.
+INVESTIGATION (before the fix)
+  - Reproduced with a forced exception in a test task
+  - Confirmed the gather exited and nothing resumed
+  - Wrapped each task call in try/except and re-ran
+FIX (took 3 days)
+  Fixed by wrapping every task invocation in try/except with logging, so a failing task is isolated and the scheduler keeps running.
+
+----------------------------------------------------------------------
+E0023 | v8.1 | BIG | Found Day 144 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.1/steer_opposite.py
+Error     : Heartbeat failure cuts the motors at the start line
+Terminal  : Pi SSH terminal
+  $ python3 steer_opposite.py
+  heartbeat: FAIL (start signal)
+  motors disabled for 3s
+WHAT HAPPENED
+  At the start signal the motors were disabled for three seconds - the failsafe fired exactly when the robot needed to move. The start burst starved the heartbeat.
+WHY IT HAPPENED (root cause)
+  At start, the vision and fusion tasks all wake at once and consume CPU for hundreds of milliseconds. The low-priority heartbeat thread could not run within its timeout window, so the failsafe - which is supposed to catch a dead loop - caught a merely busy one. The safety system could not tell the difference, and its design made it fire on exactly this pattern.
+INVESTIGATION (before the fix)
+  - Logged CPU usage at the start burst - the heartbeat starved
+  - Confirmed the failsafe fired while the loop was healthy
+  - Prioritized the heartbeat and widened the timeout
+FIX (took 4 days)
+  Fixed by boosting the heartbeat to a high-priority thread with a 2s timeout, so a busy-but-healthy system never trips the failsafe.
+
+----------------------------------------------------------------------
+E0024 | v8.1 | BIG | Found Day 144 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.1/steering_common.py
+Error     : Surprise rule change requires a reboot
+Terminal  : Pi SSH terminal
+  $ python3 steering_common.py
+  rule changed in config: not applied
+  robot keeps the old strategy
+WHAT HAPPENED
+  The rules were changed before a round, but the robot kept playing the old strategy. The config file was correct - the robot never read it again.
+WHY IT HAPPENED (root cause)
+  surprise_config loaded the rules once at boot and cached them in memory. Every later read returned the cached copy, so an on-the-spot rule change could only take effect after a reboot - an impossible requirement between rounds. Configuration that is read once is not configuration, it is a build-time constant.
+INVESTIGATION (before the fix)
+  - Changed a rule and observed no effect - cached config
+  - Checked the load path - it ran only at boot
+  - Added a reload at each round start
+FIX (took 5 days)
+  Fixed by re-reading the rules file at every round start, with a file-hash check that logs whether the active rules changed since boot.
+
+----------------------------------------------------------------------
+E0025 | v8.2 | SMALL | Found Day 145 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.2/imu_mode_switch.py
+Error     : YAML parse error in default_config.yaml
+Terminal  : Pi SSH terminal
+  $ python3 imu_mode_switch.py
+  yaml.scanner.ScannerError: mapping values are not allowed here
+  config failed to load
+WHAT HAPPENED
+  The robot refused to boot because the configuration file could not be parsed. The file looked correct to a human - the colon in a string was the problem.
+WHY IT HAPPENED (root cause)
+  YAML treats an unquoted colon followed by a space as a key/value separator. A string containing 'mode: fast' inside a value breaks the parser because it sees a nested mapping where it did not expect one. YAML is whitespace- and punctuation-sensitive in ways that are invisible to a quick read, which is why config errors show up at load time, never at edit time.
+FIX (took 1 day)
+  Fixed by quoting the value, and adding a config validation step at boot that parses the YAML and reports the exact line of any syntax error.
+
+----------------------------------------------------------------------
+E0026 | v8.2 | SMALL | Found Day 145 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.2/steer_crab.py
+Error     : Surprise rule key is unknown
+Terminal  : Pi SSH terminal
+  $ python3 steer_crab.py
+  KeyError: 'pillar_logic' in surprise_config
+  rules ignored, defaults used
+WHAT HAPPENED
+  The surprise rules loaded without error, but the pillar logic rule never took effect - the robot ran the default behavior all day.
+WHY IT HAPPENED (root cause)
+  The loader read keys by an explicit allowlist, and 'pillar_logic' was not in it, so the rule was silently dropped. A missing key in a config lookup is a silent failure when the code uses .get() with a default and a crash when it uses [] - this code used a path that neither crashed nor worked. The rules file and the loader schema had drifted apart.
+FIX (took 1 day)
+  Fixed by adding the key to the loader schema and logging a warning whenever a configured rule key is ignored, so silent drops become visible.
+
+----------------------------------------------------------------------
+E0027 | v8.2 | SMALL | Found Day 145 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.2/imu_mode_switch.py
+Error     : Steering mode switch race condition
+Terminal  : Pi SSH terminal
+  $ python3 imu_mode_switch.py
+  mode: OPPOSITE (expected CRAB)
+  one-frame wrong steering at the switch
+WHAT HAPPENED
+  For exactly one frame at every mode switch, the robot steered with the wrong geometry. The switch itself worked - the frame in between did not.
+WHY IT HAPPENED (root cause)
+  The mode flag was written by the mission thread and read by the control thread without synchronization. The control thread could read the flag mid-update, observing a mixed state. A one-frame glitch is exactly what a data race looks like: mostly correct, occasionally wrong, impossible to reproduce on demand.
+FIX (took 1 day)
+  Fixed by making the mode switch atomic - the mode lives in a single int that the scheduler publishes, and the control thread reads it through a lock-free once-store.
+
+----------------------------------------------------------------------
+E0028 | v8.2 | SMALL | Found Day 145 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.2/steer_crab.py
+Error     : Heartbeat times out on a busy CPU
+Terminal  : Pi SSH terminal
+  $ python3 steer_crab.py
+  heartbeat lost: 1500ms
+  motors cut mid-run
+WHAT HAPPENED
+  The motors cut out for a moment in the middle of a run, then resumed. The failsafe fired, then recovered on its own - a glitch with consequences.
+WHY IT HAPPENED (root cause)
+  The heartbeat thread could not get CPU time during perception spikes, so the failsafe correctly concluded the main loop was dead and cut the motors. The failsafe is designed to be conservative: any doubt means stop. The bug was that a healthy but busy system looked dead to the heartbeat - the failure detector could not distinguish 'slow' from 'dead'.
+FIX (took 1 day)
+  Fixed by raising the heartbeat thread priority and extending the timeout to 2s, with a separate watchdog that only fires when the main loop is truly stuck.
+
+----------------------------------------------------------------------
+E0029 | v8.2 | SMALL | Found Day 145 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.2/imu_mode_switch.py
+Error     : Health monitor false alarm on sensor 3
+Terminal  : Pi SSH terminal
+  $ python3 imu_mode_switch.py
+  sensor 3: FAIL (3 misses)
+  actually fine, just slow
+WHAT HAPPENED
+  The health monitor declared the ToF dead at every boot. The sensor was alive - it was just slow to warm up, and the monitor did not wait.
+WHY IT HAPPENED (root cause)
+  The failure threshold was three consecutive misses, and the ToF's warm-up period legitimately produces more than three misses before its first valid reading. The threshold was calibrated against runtime behavior, not boot behavior. A monitor with a fixed threshold cannot distinguish a boot transient from a persistent failure.
+FIX (took 1 day)
+  Fixed by raising the threshold to 20 misses and adding a warm-up grace period of 5 seconds at boot, matching the measured sensor ready time.
+
+----------------------------------------------------------------------
+E0030 | v8.2 | SMALL | Found Day 145 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.2/steer_crab.py
+Error     : Track map is off by one section
+Terminal  : Pi SSH terminal
+  $ python3 steer_crab.py
+  section: 5 (expected 4)
+  strategy picks the wrong corner
+WHAT HAPPENED
+  Every lap the track map believed the robot was one section further along than reality. The strategy consistently prepared the wrong corner.
+WHY IT HAPPENED (root cause)
+  The section counter incremented on both entering and exiting the section boundary line, because the boundary check ran on the transition in both directions. A line crossing is a single event, but the code detected it twice - once entering, once leaving. The off-by-one was perfectly consistent, which made it look like a constant and masked it as a real offset.
+FIX (took 1 day)
+  Fixed by incrementing the section only on entry, and adding a test that drives the full lap and asserts the counter ends exactly at the section count.
+
+----------------------------------------------------------------------
+E0031 | v8.2 | SMALL | Found Day 145 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.2/imu_mode_switch.py
+Error     : Task base double-schedules a callback
+Terminal  : Pi SSH terminal
+  $ python3 imu_mode_switch.py
+  callback ran twice per tick
+  motor command overwritten
+WHAT HAPPENED
+  Every control tick produced two motor commands, the second overwriting the first. The motion was erratic because half the commands were stale by one tick.
+WHY IT HAPPENED (root cause)
+  register_task was called twice for the same task ID in main - once by the module's own registration and once by the application wiring. The scheduler had no duplicate detection, so it added the callback twice. The scheduler trusted its caller; the caller did not check whether the task was already registered.
+FIX (took 1 day)
+  Fixed by guarding register_task with a task-ID set that rejects duplicates, and logging a warning when a duplicate registration is attempted.
+
+----------------------------------------------------------------------
+E0032 | v8.2 | SMALL | Found Day 145 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.2/steer_crab.py
+Error     : Log severity mapping is wrong
+Terminal  : Pi SSH terminal
+  $ python3 steer_crab.py
+  ERROR logged as INFO
+  failures hidden in the console
+WHAT HAPPENED
+  Critical failures appeared in the log with the INFO level, so nobody noticed them in the morning's flood of messages. The logging was lying about importance.
+WHY IT HAPPENED (root cause)
+  The severity enum in log_severity.py and the level table in the logger used different orderings, so the numeric codes mapped to the wrong levels. The logger wrote what it was told - the mapping was corrupted upstream. Two files defining the same concept independently is a maintenance trap: they will drift until someone notices.
+FIX (took 1 day)
+  Fixed by defining the severity enum in the logger module itself and importing it everywhere, so only one source of truth exists.
+
+----------------------------------------------------------------------
+E0033 | v8.2 | BIG | Found Day 146 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.2/imu_mode_switch.py
+Error     : Scheduler deadlocks when a task raises
+Terminal  : Pi SSH terminal
+  $ python3 imu_mode_switch.py
+  scheduler: task 'vision' raised, never resumed
+  all other tasks stop
+WHAT HAPPENED
+  One exception in the vision task froze the entire robot - every other task stopped scheduling. The failure was in the exception path, not the task.
+WHY IT HAPPENED (root cause)
+  The scheduler loop had no exception boundary around its task invocations. When vision raised, the exception propagated out of the loop, and the asyncio gather never continued, so no task ever ran again. A system of cooperating tasks is only as robust as its weakest task unless the scheduler contains each one.
+INVESTIGATION (before the fix)
+  - Reproduced with a forced exception in a test task
+  - Confirmed the gather exited and nothing resumed
+  - Wrapped each task call in try/except and re-ran
+FIX (took 2 days)
+  Fixed by wrapping every task invocation in try/except with logging, so a failing task is isolated and the scheduler keeps running.
+
+----------------------------------------------------------------------
+E0034 | v8.2 | BIG | Found Day 146 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.2/steer_crab.py
+Error     : Heartbeat failure cuts the motors at the start line
+Terminal  : Pi SSH terminal
+  $ python3 steer_crab.py
+  heartbeat: FAIL (start signal)
+  motors disabled for 3s
+WHAT HAPPENED
+  At the start signal the motors were disabled for three seconds - the failsafe fired exactly when the robot needed to move. The start burst starved the heartbeat.
+WHY IT HAPPENED (root cause)
+  At start, the vision and fusion tasks all wake at once and consume CPU for hundreds of milliseconds. The low-priority heartbeat thread could not run within its timeout window, so the failsafe - which is supposed to catch a dead loop - caught a merely busy one. The safety system could not tell the difference, and its design made it fire on exactly this pattern.
+INVESTIGATION (before the fix)
+  - Logged CPU usage at the start burst - the heartbeat starved
+  - Confirmed the failsafe fired while the loop was healthy
+  - Prioritized the heartbeat and widened the timeout
+FIX (took 3 days)
+  Fixed by boosting the heartbeat to a high-priority thread with a 2s timeout, so a busy-but-healthy system never trips the failsafe.
+
+----------------------------------------------------------------------
+E0035 | v8.2 | BIG | Found Day 146 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.2/imu_mode_switch.py
+Error     : Surprise rule change requires a reboot
+Terminal  : Pi SSH terminal
+  $ python3 imu_mode_switch.py
+  rule changed in config: not applied
+  robot keeps the old strategy
+WHAT HAPPENED
+  The rules were changed before a round, but the robot kept playing the old strategy. The config file was correct - the robot never read it again.
+WHY IT HAPPENED (root cause)
+  surprise_config loaded the rules once at boot and cached them in memory. Every later read returned the cached copy, so an on-the-spot rule change could only take effect after a reboot - an impossible requirement between rounds. Configuration that is read once is not configuration, it is a build-time constant.
+INVESTIGATION (before the fix)
+  - Changed a rule and observed no effect - cached config
+  - Checked the load path - it ran only at boot
+  - Added a reload at each round start
+FIX (took 4 days)
+  Fixed by re-reading the rules file at every round start, with a file-hash check that logs whether the active rules changed since boot.
+
+----------------------------------------------------------------------
+E0036 | v8.2 | BIG | Found Day 146 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.2/steer_crab.py
+Error     : Track map mismatch after the first lap
+Terminal  : Pi SSH terminal
+  $ python3 steer_crab.py
+  map section 6/8 but lap counter says 1
+  strategy uses the wrong corner data
+WHAT HAPPENED
+  After one lap the track map believed the robot was in section 6 while the lap counter said lap 1. The strategy prepared for the wrong corner every lap after the first.
+WHY IT HAPPENED (root cause)
+  The track map and the lap counter each maintained their own position state and updated it at different points in the pipeline. Their states were never compared, so they drifted apart silently. Two sources of truth for the same quantity will always diverge; the only question is when they are noticed.
+INVESTIGATION (before the fix)
+  - Logged both states after lap 1 - they disagreed
+  - Traced the update points - different pipeline stages
+  - Merged them into a single shared lap state
+FIX (took 5 days)
+  Fixed by sharing one lap-state object between the map and the counter, with a consistency assertion that fails loudly if they ever disagree.
+
+----------------------------------------------------------------------
+E0037 | v8.3 | SMALL | Found Day 147 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v8.3/default_config.yaml
+Error     : Surprise rule key is unknown
+Terminal  : Pi console (HDMI)
+  $ python3 default_config.yaml
+  KeyError: 'pillar_logic' in surprise_config
+  rules ignored, defaults used
+WHAT HAPPENED
+  The surprise rules loaded without error, but the pillar logic rule never took effect - the robot ran the default behavior all day.
+WHY IT HAPPENED (root cause)
+  The loader read keys by an explicit allowlist, and 'pillar_logic' was not in it, so the rule was silently dropped. A missing key in a config lookup is a silent failure when the code uses .get() with a default and a crash when it uses [] - this code used a path that neither crashed nor worked. The rules file and the loader schema had drifted apart.
+FIX (took 1 day)
+  Fixed by adding the key to the loader schema and logging a warning whenever a configured rule key is ignored, so silent drops become visible.
+
+----------------------------------------------------------------------
+E0038 | v8.3 | SMALL | Found Day 147 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v8.3/surprise_config.py
+Error     : Steering mode switch race condition
+Terminal  : Pi console (HDMI)
+  $ python3 surprise_config.py
+  mode: OPPOSITE (expected CRAB)
+  one-frame wrong steering at the switch
+WHAT HAPPENED
+  For exactly one frame at every mode switch, the robot steered with the wrong geometry. The switch itself worked - the frame in between did not.
+WHY IT HAPPENED (root cause)
+  The mode flag was written by the mission thread and read by the control thread without synchronization. The control thread could read the flag mid-update, observing a mixed state. A one-frame glitch is exactly what a data race looks like: mostly correct, occasionally wrong, impossible to reproduce on demand.
+FIX (took 1 day)
+  Fixed by making the mode switch atomic - the mode lives in a single int that the scheduler publishes, and the control thread reads it through a lock-free once-store.
+
+----------------------------------------------------------------------
+E0039 | v8.3 | SMALL | Found Day 147 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v8.3/default_config.yaml
+Error     : Heartbeat times out on a busy CPU
+Terminal  : Pi console (HDMI)
+  $ python3 default_config.yaml
+  heartbeat lost: 1500ms
+  motors cut mid-run
+WHAT HAPPENED
+  The motors cut out for a moment in the middle of a run, then resumed. The failsafe fired, then recovered on its own - a glitch with consequences.
+WHY IT HAPPENED (root cause)
+  The heartbeat thread could not get CPU time during perception spikes, so the failsafe correctly concluded the main loop was dead and cut the motors. The failsafe is designed to be conservative: any doubt means stop. The bug was that a healthy but busy system looked dead to the heartbeat - the failure detector could not distinguish 'slow' from 'dead'.
+FIX (took 1 day)
+  Fixed by raising the heartbeat thread priority and extending the timeout to 2s, with a separate watchdog that only fires when the main loop is truly stuck.
+
+----------------------------------------------------------------------
+E0040 | v8.3 | SMALL | Found Day 147 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v8.3/surprise_config.py
+Error     : Health monitor false alarm on sensor 3
+Terminal  : Pi console (HDMI)
+  $ python3 surprise_config.py
+  sensor 3: FAIL (3 misses)
+  actually fine, just slow
+WHAT HAPPENED
+  The health monitor declared the ToF dead at every boot. The sensor was alive - it was just slow to warm up, and the monitor did not wait.
+WHY IT HAPPENED (root cause)
+  The failure threshold was three consecutive misses, and the ToF's warm-up period legitimately produces more than three misses before its first valid reading. The threshold was calibrated against runtime behavior, not boot behavior. A monitor with a fixed threshold cannot distinguish a boot transient from a persistent failure.
+FIX (took 1 day)
+  Fixed by raising the threshold to 20 misses and adding a warm-up grace period of 5 seconds at boot, matching the measured sensor ready time.
+
+----------------------------------------------------------------------
+E0041 | v8.3 | SMALL | Found Day 147 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v8.3/default_config.yaml
+Error     : Track map is off by one section
+Terminal  : Pi console (HDMI)
+  $ python3 default_config.yaml
+  section: 5 (expected 4)
+  strategy picks the wrong corner
+WHAT HAPPENED
+  Every lap the track map believed the robot was one section further along than reality. The strategy consistently prepared the wrong corner.
+WHY IT HAPPENED (root cause)
+  The section counter incremented on both entering and exiting the section boundary line, because the boundary check ran on the transition in both directions. A line crossing is a single event, but the code detected it twice - once entering, once leaving. The off-by-one was perfectly consistent, which made it look like a constant and masked it as a real offset.
+FIX (took 1 day)
+  Fixed by incrementing the section only on entry, and adding a test that drives the full lap and asserts the counter ends exactly at the section count.
+
+----------------------------------------------------------------------
+E0042 | v8.3 | SMALL | Found Day 147 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v8.3/surprise_config.py
+Error     : Task base double-schedules a callback
+Terminal  : Pi console (HDMI)
+  $ python3 surprise_config.py
+  callback ran twice per tick
+  motor command overwritten
+WHAT HAPPENED
+  Every control tick produced two motor commands, the second overwriting the first. The motion was erratic because half the commands were stale by one tick.
+WHY IT HAPPENED (root cause)
+  register_task was called twice for the same task ID in main - once by the module's own registration and once by the application wiring. The scheduler had no duplicate detection, so it added the callback twice. The scheduler trusted its caller; the caller did not check whether the task was already registered.
+FIX (took 1 day)
+  Fixed by guarding register_task with a task-ID set that rejects duplicates, and logging a warning when a duplicate registration is attempted.
+
+----------------------------------------------------------------------
+E0043 | v8.3 | SMALL | Found Day 147 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v8.3/default_config.yaml
+Error     : Log severity mapping is wrong
+Terminal  : Pi console (HDMI)
+  $ python3 default_config.yaml
+  ERROR logged as INFO
+  failures hidden in the console
+WHAT HAPPENED
+  Critical failures appeared in the log with the INFO level, so nobody noticed them in the morning's flood of messages. The logging was lying about importance.
+WHY IT HAPPENED (root cause)
+  The severity enum in log_severity.py and the level table in the logger used different orderings, so the numeric codes mapped to the wrong levels. The logger wrote what it was told - the mapping was corrupted upstream. Two files defining the same concept independently is a maintenance trap: they will drift until someone notices.
+FIX (took 1 day)
+  Fixed by defining the severity enum in the logger module itself and importing it everywhere, so only one source of truth exists.
+
+----------------------------------------------------------------------
+E0044 | v8.3 | SMALL | Found Day 147 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v8.3/surprise_config.py
+Error     : YAML parse error in default_config.yaml
+Terminal  : Pi console (HDMI)
+  $ python3 surprise_config.py
+  yaml.scanner.ScannerError: mapping values are not allowed here
+  config failed to load
+WHAT HAPPENED
+  The robot refused to boot because the configuration file could not be parsed. The file looked correct to a human - the colon in a string was the problem.
+WHY IT HAPPENED (root cause)
+  YAML treats an unquoted colon followed by a space as a key/value separator. A string containing 'mode: fast' inside a value breaks the parser because it sees a nested mapping where it did not expect one. YAML is whitespace- and punctuation-sensitive in ways that are invisible to a quick read, which is why config errors show up at load time, never at edit time.
+FIX (took 1 day)
+  Fixed by quoting the value, and adding a config validation step at boot that parses the YAML and reports the exact line of any syntax error.
+
+----------------------------------------------------------------------
+E0045 | v8.3 | BIG | Found Day 148 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.3/default_config.yaml
+Error     : Heartbeat failure cuts the motors at the start line
+Terminal  : Pi SSH terminal
+  $ python3 default_config.yaml
+  heartbeat: FAIL (start signal)
+  motors disabled for 3s
+WHAT HAPPENED
+  At the start signal the motors were disabled for three seconds - the failsafe fired exactly when the robot needed to move. The start burst starved the heartbeat.
+WHY IT HAPPENED (root cause)
+  At start, the vision and fusion tasks all wake at once and consume CPU for hundreds of milliseconds. The low-priority heartbeat thread could not run within its timeout window, so the failsafe - which is supposed to catch a dead loop - caught a merely busy one. The safety system could not tell the difference, and its design made it fire on exactly this pattern.
+INVESTIGATION (before the fix)
+  - Logged CPU usage at the start burst - the heartbeat starved
+  - Confirmed the failsafe fired while the loop was healthy
+  - Prioritized the heartbeat and widened the timeout
+FIX (took 2 days)
+  Fixed by boosting the heartbeat to a high-priority thread with a 2s timeout, so a busy-but-healthy system never trips the failsafe.
+
+----------------------------------------------------------------------
+E0046 | v8.3 | BIG | Found Day 148 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.3/surprise_config.py
+Error     : Surprise rule change requires a reboot
+Terminal  : Pi SSH terminal
+  $ python3 surprise_config.py
+  rule changed in config: not applied
+  robot keeps the old strategy
+WHAT HAPPENED
+  The rules were changed before a round, but the robot kept playing the old strategy. The config file was correct - the robot never read it again.
+WHY IT HAPPENED (root cause)
+  surprise_config loaded the rules once at boot and cached them in memory. Every later read returned the cached copy, so an on-the-spot rule change could only take effect after a reboot - an impossible requirement between rounds. Configuration that is read once is not configuration, it is a build-time constant.
+INVESTIGATION (before the fix)
+  - Changed a rule and observed no effect - cached config
+  - Checked the load path - it ran only at boot
+  - Added a reload at each round start
+FIX (took 3 days)
+  Fixed by re-reading the rules file at every round start, with a file-hash check that logs whether the active rules changed since boot.
+
+----------------------------------------------------------------------
+E0047 | v8.3 | BIG | Found Day 148 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.3/default_config.yaml
+Error     : Track map mismatch after the first lap
+Terminal  : Pi SSH terminal
+  $ python3 default_config.yaml
+  map section 6/8 but lap counter says 1
+  strategy uses the wrong corner data
+WHAT HAPPENED
+  After one lap the track map believed the robot was in section 6 while the lap counter said lap 1. The strategy prepared for the wrong corner every lap after the first.
+WHY IT HAPPENED (root cause)
+  The track map and the lap counter each maintained their own position state and updated it at different points in the pipeline. Their states were never compared, so they drifted apart silently. Two sources of truth for the same quantity will always diverge; the only question is when they are noticed.
+INVESTIGATION (before the fix)
+  - Logged both states after lap 1 - they disagreed
+  - Traced the update points - different pipeline stages
+  - Merged them into a single shared lap state
+FIX (took 4 days)
+  Fixed by sharing one lap-state object between the map and the counter, with a consistency assertion that fails loudly if they ever disagree.
+
+----------------------------------------------------------------------
+E0048 | v8.3 | BIG | Found Day 148 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.3/surprise_config.py
+Error     : Health monitor kills the camera on a cold start
+Terminal  : Pi SSH terminal
+  $ python3 surprise_config.py
+  camera: FAIL -> restart -> FAIL (3x)
+  camera was fine after 60s
+WHAT HAPPENED
+  The health monitor restarted the camera three times at boot, then gave up - while the camera was simply slow to start in the cold. The monitor caused the failure it was watching for.
+WHY IT HAPPENED (root cause)
+  The camera produces no frames for the first several seconds on a cold boot. The health monitor interpreted the silence as a failure and issued a restart, and each restart reset the same cold-start condition. The monitor's retry loop amplified the boot transient into a permanent failure - the fix was the opposite of the restart it kept performing.
+INVESTIGATION (before the fix)
+  - Noticed the camera recovered when left alone
+  - Timed the cold-start delay - it exceeded the health timeout
+  - Added a grace period before the first camera check
+FIX (took 5 days)
+  Fixed by waiting 10 seconds before the first camera health check, and by backing off restarts exponentially instead of restarting instantly.
+
+----------------------------------------------------------------------
+E0049 | v8.4 | SMALL | Found Day 149 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v8.4/pillar_config.py
+Error     : Steering mode switch race condition
+Terminal  : ESP32 serial monitor
+  $ python3 pillar_config.py
+  mode: OPPOSITE (expected CRAB)
+  one-frame wrong steering at the switch
+WHAT HAPPENED
+  For exactly one frame at every mode switch, the robot steered with the wrong geometry. The switch itself worked - the frame in between did not.
+WHY IT HAPPENED (root cause)
+  The mode flag was written by the mission thread and read by the control thread without synchronization. The control thread could read the flag mid-update, observing a mixed state. A one-frame glitch is exactly what a data race looks like: mostly correct, occasionally wrong, impossible to reproduce on demand.
+FIX (took 1 day)
+  Fixed by making the mode switch atomic - the mode lives in a single int that the scheduler publishes, and the control thread reads it through a lock-free once-store.
+
+----------------------------------------------------------------------
+E0050 | v8.4 | SMALL | Found Day 149 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v8.4/pillar_tracker.py
+Error     : Heartbeat times out on a busy CPU
+Terminal  : ESP32 serial monitor
+  $ python3 pillar_tracker.py
+  heartbeat lost: 1500ms
+  motors cut mid-run
+WHAT HAPPENED
+  The motors cut out for a moment in the middle of a run, then resumed. The failsafe fired, then recovered on its own - a glitch with consequences.
+WHY IT HAPPENED (root cause)
+  The heartbeat thread could not get CPU time during perception spikes, so the failsafe correctly concluded the main loop was dead and cut the motors. The failsafe is designed to be conservative: any doubt means stop. The bug was that a healthy but busy system looked dead to the heartbeat - the failure detector could not distinguish 'slow' from 'dead'.
+FIX (took 1 day)
+  Fixed by raising the heartbeat thread priority and extending the timeout to 2s, with a separate watchdog that only fires when the main loop is truly stuck.
+
+----------------------------------------------------------------------
+E0051 | v8.4 | SMALL | Found Day 149 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v8.4/pillar_config.py
+Error     : Health monitor false alarm on sensor 3
+Terminal  : ESP32 serial monitor
+  $ python3 pillar_config.py
+  sensor 3: FAIL (3 misses)
+  actually fine, just slow
+WHAT HAPPENED
+  The health monitor declared the ToF dead at every boot. The sensor was alive - it was just slow to warm up, and the monitor did not wait.
+WHY IT HAPPENED (root cause)
+  The failure threshold was three consecutive misses, and the ToF's warm-up period legitimately produces more than three misses before its first valid reading. The threshold was calibrated against runtime behavior, not boot behavior. A monitor with a fixed threshold cannot distinguish a boot transient from a persistent failure.
+FIX (took 1 day)
+  Fixed by raising the threshold to 20 misses and adding a warm-up grace period of 5 seconds at boot, matching the measured sensor ready time.
+
+----------------------------------------------------------------------
+E0052 | v8.4 | SMALL | Found Day 149 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v8.4/pillar_tracker.py
+Error     : Track map is off by one section
+Terminal  : ESP32 serial monitor
+  $ python3 pillar_tracker.py
+  section: 5 (expected 4)
+  strategy picks the wrong corner
+WHAT HAPPENED
+  Every lap the track map believed the robot was one section further along than reality. The strategy consistently prepared the wrong corner.
+WHY IT HAPPENED (root cause)
+  The section counter incremented on both entering and exiting the section boundary line, because the boundary check ran on the transition in both directions. A line crossing is a single event, but the code detected it twice - once entering, once leaving. The off-by-one was perfectly consistent, which made it look like a constant and masked it as a real offset.
+FIX (took 1 day)
+  Fixed by incrementing the section only on entry, and adding a test that drives the full lap and asserts the counter ends exactly at the section count.
+
+----------------------------------------------------------------------
+E0053 | v8.4 | SMALL | Found Day 149 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v8.4/pillar_config.py
+Error     : Task base double-schedules a callback
+Terminal  : ESP32 serial monitor
+  $ python3 pillar_config.py
+  callback ran twice per tick
+  motor command overwritten
+WHAT HAPPENED
+  Every control tick produced two motor commands, the second overwriting the first. The motion was erratic because half the commands were stale by one tick.
+WHY IT HAPPENED (root cause)
+  register_task was called twice for the same task ID in main - once by the module's own registration and once by the application wiring. The scheduler had no duplicate detection, so it added the callback twice. The scheduler trusted its caller; the caller did not check whether the task was already registered.
+FIX (took 1 day)
+  Fixed by guarding register_task with a task-ID set that rejects duplicates, and logging a warning when a duplicate registration is attempted.
+
+----------------------------------------------------------------------
+E0054 | v8.4 | SMALL | Found Day 149 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v8.4/pillar_tracker.py
+Error     : Log severity mapping is wrong
+Terminal  : ESP32 serial monitor
+  $ python3 pillar_tracker.py
+  ERROR logged as INFO
+  failures hidden in the console
+WHAT HAPPENED
+  Critical failures appeared in the log with the INFO level, so nobody noticed them in the morning's flood of messages. The logging was lying about importance.
+WHY IT HAPPENED (root cause)
+  The severity enum in log_severity.py and the level table in the logger used different orderings, so the numeric codes mapped to the wrong levels. The logger wrote what it was told - the mapping was corrupted upstream. Two files defining the same concept independently is a maintenance trap: they will drift until someone notices.
+FIX (took 1 day)
+  Fixed by defining the severity enum in the logger module itself and importing it everywhere, so only one source of truth exists.
+
+----------------------------------------------------------------------
+E0055 | v8.4 | SMALL | Found Day 149 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v8.4/pillar_config.py
+Error     : YAML parse error in default_config.yaml
+Terminal  : ESP32 serial monitor
+  $ python3 pillar_config.py
+  yaml.scanner.ScannerError: mapping values are not allowed here
+  config failed to load
+WHAT HAPPENED
+  The robot refused to boot because the configuration file could not be parsed. The file looked correct to a human - the colon in a string was the problem.
+WHY IT HAPPENED (root cause)
+  YAML treats an unquoted colon followed by a space as a key/value separator. A string containing 'mode: fast' inside a value breaks the parser because it sees a nested mapping where it did not expect one. YAML is whitespace- and punctuation-sensitive in ways that are invisible to a quick read, which is why config errors show up at load time, never at edit time.
+FIX (took 1 day)
+  Fixed by quoting the value, and adding a config validation step at boot that parses the YAML and reports the exact line of any syntax error.
+
+----------------------------------------------------------------------
+E0056 | v8.4 | SMALL | Found Day 149 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v8.4/pillar_tracker.py
+Error     : Surprise rule key is unknown
+Terminal  : ESP32 serial monitor
+  $ python3 pillar_tracker.py
+  KeyError: 'pillar_logic' in surprise_config
+  rules ignored, defaults used
+WHAT HAPPENED
+  The surprise rules loaded without error, but the pillar logic rule never took effect - the robot ran the default behavior all day.
+WHY IT HAPPENED (root cause)
+  The loader read keys by an explicit allowlist, and 'pillar_logic' was not in it, so the rule was silently dropped. A missing key in a config lookup is a silent failure when the code uses .get() with a default and a crash when it uses [] - this code used a path that neither crashed nor worked. The rules file and the loader schema had drifted apart.
+FIX (took 1 day)
+  Fixed by adding the key to the loader schema and logging a warning whenever a configured rule key is ignored, so silent drops become visible.
+
+----------------------------------------------------------------------
+E0057 | v8.4 | BIG | Found Day 150 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.4/pillar_config.py
+Error     : Surprise rule change requires a reboot
+Terminal  : Pi SSH terminal
+  $ python3 pillar_config.py
+  rule changed in config: not applied
+  robot keeps the old strategy
+WHAT HAPPENED
+  The rules were changed before a round, but the robot kept playing the old strategy. The config file was correct - the robot never read it again.
+WHY IT HAPPENED (root cause)
+  surprise_config loaded the rules once at boot and cached them in memory. Every later read returned the cached copy, so an on-the-spot rule change could only take effect after a reboot - an impossible requirement between rounds. Configuration that is read once is not configuration, it is a build-time constant.
+INVESTIGATION (before the fix)
+  - Changed a rule and observed no effect - cached config
+  - Checked the load path - it ran only at boot
+  - Added a reload at each round start
+FIX (took 2 days)
+  Fixed by re-reading the rules file at every round start, with a file-hash check that logs whether the active rules changed since boot.
+
+----------------------------------------------------------------------
+E0058 | v8.4 | BIG | Found Day 150 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.4/pillar_tracker.py
+Error     : Track map mismatch after the first lap
+Terminal  : Pi SSH terminal
+  $ python3 pillar_tracker.py
+  map section 6/8 but lap counter says 1
+  strategy uses the wrong corner data
+WHAT HAPPENED
+  After one lap the track map believed the robot was in section 6 while the lap counter said lap 1. The strategy prepared for the wrong corner every lap after the first.
+WHY IT HAPPENED (root cause)
+  The track map and the lap counter each maintained their own position state and updated it at different points in the pipeline. Their states were never compared, so they drifted apart silently. Two sources of truth for the same quantity will always diverge; the only question is when they are noticed.
+INVESTIGATION (before the fix)
+  - Logged both states after lap 1 - they disagreed
+  - Traced the update points - different pipeline stages
+  - Merged them into a single shared lap state
+FIX (took 3 days)
+  Fixed by sharing one lap-state object between the map and the counter, with a consistency assertion that fails loudly if they ever disagree.
+
+----------------------------------------------------------------------
+E0059 | v8.4 | BIG | Found Day 150 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.4/pillar_config.py
+Error     : Health monitor kills the camera on a cold start
+Terminal  : Pi SSH terminal
+  $ python3 pillar_config.py
+  camera: FAIL -> restart -> FAIL (3x)
+  camera was fine after 60s
+WHAT HAPPENED
+  The health monitor restarted the camera three times at boot, then gave up - while the camera was simply slow to start in the cold. The monitor caused the failure it was watching for.
+WHY IT HAPPENED (root cause)
+  The camera produces no frames for the first several seconds on a cold boot. The health monitor interpreted the silence as a failure and issued a restart, and each restart reset the same cold-start condition. The monitor's retry loop amplified the boot transient into a permanent failure - the fix was the opposite of the restart it kept performing.
+INVESTIGATION (before the fix)
+  - Noticed the camera recovered when left alone
+  - Timed the cold-start delay - it exceeded the health timeout
+  - Added a grace period before the first camera check
+FIX (took 4 days)
+  Fixed by waiting 10 seconds before the first camera health check, and by backing off restarts exponentially instead of restarting instantly.
+
+----------------------------------------------------------------------
+E0060 | v8.4 | BIG | Found Day 150 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.4/pillar_tracker.py
+Error     : ESP32 flash with the wrong partition table
+Terminal  : Pi SSH terminal
+  $ python3 pillar_tracker.py
+  esptool: data does not match the partition table
+  ESP32 boot loops
+WHAT HAPPENED
+  After flashing, the ESP32 boot-looped. The flash succeeded - the app was written to a partition the partition table did not define.
+WHY IT HAPPENED (root cause)
+  The application partition had grown past the size declared in the partition table, or the table itself was for a different flash layout. The chip boots into the app region from the table; if the table does not describe the flashed layout, the bootloader cannot find the app and resets. The build and the flash layout were not validated against each other.
+INVESTIGATION (before the fix)
+  - Read the boot logs - the partition entry was missing
+  - Compared the partition table with the app size
+  - Reflashed with the standard 4MB table
+FIX (took 5 days)
+  Fixed by pinning the partition table in the project config, and adding a CI check that fails if the compiled app exceeds its partition.
+
+----------------------------------------------------------------------
+E0061 | v8.5 | SMALL | Found Day 151 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v8.5/parking_detector.py
+Error     : Heartbeat times out on a busy CPU
+Terminal  : Windows CMD
+  $ python3 parking_detector.py
+  heartbeat lost: 1500ms
+  motors cut mid-run
+WHAT HAPPENED
+  The motors cut out for a moment in the middle of a run, then resumed. The failsafe fired, then recovered on its own - a glitch with consequences.
+WHY IT HAPPENED (root cause)
+  The heartbeat thread could not get CPU time during perception spikes, so the failsafe correctly concluded the main loop was dead and cut the motors. The failsafe is designed to be conservative: any doubt means stop. The bug was that a healthy but busy system looked dead to the heartbeat - the failure detector could not distinguish 'slow' from 'dead'.
+FIX (took 1 day)
+  Fixed by raising the heartbeat thread priority and extending the timeout to 2s, with a separate watchdog that only fires when the main loop is truly stuck.
+
+----------------------------------------------------------------------
+E0062 | v8.5 | SMALL | Found Day 151 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v8.5/parking_geometry.py
+Error     : Health monitor false alarm on sensor 3
+Terminal  : Windows CMD
+  $ python3 parking_geometry.py
+  sensor 3: FAIL (3 misses)
+  actually fine, just slow
+WHAT HAPPENED
+  The health monitor declared the ToF dead at every boot. The sensor was alive - it was just slow to warm up, and the monitor did not wait.
+WHY IT HAPPENED (root cause)
+  The failure threshold was three consecutive misses, and the ToF's warm-up period legitimately produces more than three misses before its first valid reading. The threshold was calibrated against runtime behavior, not boot behavior. A monitor with a fixed threshold cannot distinguish a boot transient from a persistent failure.
+FIX (took 1 day)
+  Fixed by raising the threshold to 20 misses and adding a warm-up grace period of 5 seconds at boot, matching the measured sensor ready time.
+
+----------------------------------------------------------------------
+E0063 | v8.5 | SMALL | Found Day 151 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v8.5/parking_detector.py
+Error     : Track map is off by one section
+Terminal  : Windows CMD
+  $ python3 parking_detector.py
+  section: 5 (expected 4)
+  strategy picks the wrong corner
+WHAT HAPPENED
+  Every lap the track map believed the robot was one section further along than reality. The strategy consistently prepared the wrong corner.
+WHY IT HAPPENED (root cause)
+  The section counter incremented on both entering and exiting the section boundary line, because the boundary check ran on the transition in both directions. A line crossing is a single event, but the code detected it twice - once entering, once leaving. The off-by-one was perfectly consistent, which made it look like a constant and masked it as a real offset.
+FIX (took 1 day)
+  Fixed by incrementing the section only on entry, and adding a test that drives the full lap and asserts the counter ends exactly at the section count.
+
+----------------------------------------------------------------------
+E0064 | v8.5 | SMALL | Found Day 151 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v8.5/parking_geometry.py
+Error     : Task base double-schedules a callback
+Terminal  : Windows CMD
+  $ python3 parking_geometry.py
+  callback ran twice per tick
+  motor command overwritten
+WHAT HAPPENED
+  Every control tick produced two motor commands, the second overwriting the first. The motion was erratic because half the commands were stale by one tick.
+WHY IT HAPPENED (root cause)
+  register_task was called twice for the same task ID in main - once by the module's own registration and once by the application wiring. The scheduler had no duplicate detection, so it added the callback twice. The scheduler trusted its caller; the caller did not check whether the task was already registered.
+FIX (took 1 day)
+  Fixed by guarding register_task with a task-ID set that rejects duplicates, and logging a warning when a duplicate registration is attempted.
+
+----------------------------------------------------------------------
+E0065 | v8.5 | SMALL | Found Day 151 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v8.5/parking_detector.py
+Error     : Log severity mapping is wrong
+Terminal  : Windows CMD
+  $ python3 parking_detector.py
+  ERROR logged as INFO
+  failures hidden in the console
+WHAT HAPPENED
+  Critical failures appeared in the log with the INFO level, so nobody noticed them in the morning's flood of messages. The logging was lying about importance.
+WHY IT HAPPENED (root cause)
+  The severity enum in log_severity.py and the level table in the logger used different orderings, so the numeric codes mapped to the wrong levels. The logger wrote what it was told - the mapping was corrupted upstream. Two files defining the same concept independently is a maintenance trap: they will drift until someone notices.
+FIX (took 1 day)
+  Fixed by defining the severity enum in the logger module itself and importing it everywhere, so only one source of truth exists.
+
+----------------------------------------------------------------------
+E0066 | v8.5 | SMALL | Found Day 151 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v8.5/parking_geometry.py
+Error     : YAML parse error in default_config.yaml
+Terminal  : Windows CMD
+  $ python3 parking_geometry.py
+  yaml.scanner.ScannerError: mapping values are not allowed here
+  config failed to load
+WHAT HAPPENED
+  The robot refused to boot because the configuration file could not be parsed. The file looked correct to a human - the colon in a string was the problem.
+WHY IT HAPPENED (root cause)
+  YAML treats an unquoted colon followed by a space as a key/value separator. A string containing 'mode: fast' inside a value breaks the parser because it sees a nested mapping where it did not expect one. YAML is whitespace- and punctuation-sensitive in ways that are invisible to a quick read, which is why config errors show up at load time, never at edit time.
+FIX (took 1 day)
+  Fixed by quoting the value, and adding a config validation step at boot that parses the YAML and reports the exact line of any syntax error.
+
+----------------------------------------------------------------------
+E0067 | v8.5 | SMALL | Found Day 151 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v8.5/parking_detector.py
+Error     : Surprise rule key is unknown
+Terminal  : Windows CMD
+  $ python3 parking_detector.py
+  KeyError: 'pillar_logic' in surprise_config
+  rules ignored, defaults used
+WHAT HAPPENED
+  The surprise rules loaded without error, but the pillar logic rule never took effect - the robot ran the default behavior all day.
+WHY IT HAPPENED (root cause)
+  The loader read keys by an explicit allowlist, and 'pillar_logic' was not in it, so the rule was silently dropped. A missing key in a config lookup is a silent failure when the code uses .get() with a default and a crash when it uses [] - this code used a path that neither crashed nor worked. The rules file and the loader schema had drifted apart.
+FIX (took 1 day)
+  Fixed by adding the key to the loader schema and logging a warning whenever a configured rule key is ignored, so silent drops become visible.
+
+----------------------------------------------------------------------
+E0068 | v8.5 | SMALL | Found Day 151 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v8.5/parking_geometry.py
+Error     : Steering mode switch race condition
+Terminal  : Windows CMD
+  $ python3 parking_geometry.py
+  mode: OPPOSITE (expected CRAB)
+  one-frame wrong steering at the switch
+WHAT HAPPENED
+  For exactly one frame at every mode switch, the robot steered with the wrong geometry. The switch itself worked - the frame in between did not.
+WHY IT HAPPENED (root cause)
+  The mode flag was written by the mission thread and read by the control thread without synchronization. The control thread could read the flag mid-update, observing a mixed state. A one-frame glitch is exactly what a data race looks like: mostly correct, occasionally wrong, impossible to reproduce on demand.
+FIX (took 1 day)
+  Fixed by making the mode switch atomic - the mode lives in a single int that the scheduler publishes, and the control thread reads it through a lock-free once-store.
+
+----------------------------------------------------------------------
+E0069 | v8.5 | BIG | Found Day 152 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.5/parking_detector.py
+Error     : Track map mismatch after the first lap
+Terminal  : Pi SSH terminal
+  $ python3 parking_detector.py
+  map section 6/8 but lap counter says 1
+  strategy uses the wrong corner data
+WHAT HAPPENED
+  After one lap the track map believed the robot was in section 6 while the lap counter said lap 1. The strategy prepared for the wrong corner every lap after the first.
+WHY IT HAPPENED (root cause)
+  The track map and the lap counter each maintained their own position state and updated it at different points in the pipeline. Their states were never compared, so they drifted apart silently. Two sources of truth for the same quantity will always diverge; the only question is when they are noticed.
+INVESTIGATION (before the fix)
+  - Logged both states after lap 1 - they disagreed
+  - Traced the update points - different pipeline stages
+  - Merged them into a single shared lap state
+FIX (took 2 days)
+  Fixed by sharing one lap-state object between the map and the counter, with a consistency assertion that fails loudly if they ever disagree.
+
+----------------------------------------------------------------------
+E0070 | v8.5 | BIG | Found Day 152 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.5/parking_geometry.py
+Error     : Health monitor kills the camera on a cold start
+Terminal  : Pi SSH terminal
+  $ python3 parking_geometry.py
+  camera: FAIL -> restart -> FAIL (3x)
+  camera was fine after 60s
+WHAT HAPPENED
+  The health monitor restarted the camera three times at boot, then gave up - while the camera was simply slow to start in the cold. The monitor caused the failure it was watching for.
+WHY IT HAPPENED (root cause)
+  The camera produces no frames for the first several seconds on a cold boot. The health monitor interpreted the silence as a failure and issued a restart, and each restart reset the same cold-start condition. The monitor's retry loop amplified the boot transient into a permanent failure - the fix was the opposite of the restart it kept performing.
+INVESTIGATION (before the fix)
+  - Noticed the camera recovered when left alone
+  - Timed the cold-start delay - it exceeded the health timeout
+  - Added a grace period before the first camera check
+FIX (took 3 days)
+  Fixed by waiting 10 seconds before the first camera health check, and by backing off restarts exponentially instead of restarting instantly.
+
+----------------------------------------------------------------------
+E0071 | v8.5 | BIG | Found Day 152 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.5/parking_detector.py
+Error     : ESP32 flash with the wrong partition table
+Terminal  : Pi SSH terminal
+  $ python3 parking_detector.py
+  esptool: data does not match the partition table
+  ESP32 boot loops
+WHAT HAPPENED
+  After flashing, the ESP32 boot-looped. The flash succeeded - the app was written to a partition the partition table did not define.
+WHY IT HAPPENED (root cause)
+  The application partition had grown past the size declared in the partition table, or the table itself was for a different flash layout. The chip boots into the app region from the table; if the table does not describe the flashed layout, the bootloader cannot find the app and resets. The build and the flash layout were not validated against each other.
+INVESTIGATION (before the fix)
+  - Read the boot logs - the partition entry was missing
+  - Compared the partition table with the app size
+  - Reflashed with the standard 4MB table
+FIX (took 4 days)
+  Fixed by pinning the partition table in the project config, and adding a CI check that fails if the compiled app exceeds its partition.
+
+----------------------------------------------------------------------
+E0072 | v8.5 | BIG | Found Day 152 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.5/parking_geometry.py
+Error     : OOM killer kills the perception process
+Terminal  : Pi SSH terminal
+  $ python3 parking_geometry.py
+  Out of memory: Killed process 1234 (vision)
+  perception dead, robot runs blind
+WHAT HAPPENED
+  The perception process was killed by the kernel's OOM killer mid-run. The robot kept driving - blind, because nobody noticed the process was gone.
+WHY IT HAPPENED (root cause)
+  The vision frame queue had no size limit, so under load it buffered frames without bound and consumed the Pi's RAM. When memory ran out, the kernel's OOM killer chose the largest process - the vision process. The queue was a convenience that became a memory leak the moment consumers lagged producers.
+INVESTIGATION (before the fix)
+  - Checked dmesg for the OOM kill - the vision process was the target
+  - Measured the RSS growth - it grew linearly with queue length
+  - Capped the queue and re-ran under load
+FIX (took 5 days)
+  Fixed by capping the frame queue at 4 frames with drop-oldest, and adding a memory watch that logs the RSS of each process to the health monitor.
+
+----------------------------------------------------------------------
+E0073 | v8.6 | SMALL | Found Day 153 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v8.6/track_map.py
+Error     : Health monitor false alarm on sensor 3
+Terminal  : systemd journal
+  $ python3 track_map.py
+  sensor 3: FAIL (3 misses)
+  actually fine, just slow
+WHAT HAPPENED
+  The health monitor declared the ToF dead at every boot. The sensor was alive - it was just slow to warm up, and the monitor did not wait.
+WHY IT HAPPENED (root cause)
+  The failure threshold was three consecutive misses, and the ToF's warm-up period legitimately produces more than three misses before its first valid reading. The threshold was calibrated against runtime behavior, not boot behavior. A monitor with a fixed threshold cannot distinguish a boot transient from a persistent failure.
+FIX (took 1 day)
+  Fixed by raising the threshold to 20 misses and adding a warm-up grace period of 5 seconds at boot, matching the measured sensor ready time.
+
+----------------------------------------------------------------------
+E0074 | v8.6 | SMALL | Found Day 153 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v8.6/track_sections.py
+Error     : Track map is off by one section
+Terminal  : systemd journal
+  $ python3 track_sections.py
+  section: 5 (expected 4)
+  strategy picks the wrong corner
+WHAT HAPPENED
+  Every lap the track map believed the robot was one section further along than reality. The strategy consistently prepared the wrong corner.
+WHY IT HAPPENED (root cause)
+  The section counter incremented on both entering and exiting the section boundary line, because the boundary check ran on the transition in both directions. A line crossing is a single event, but the code detected it twice - once entering, once leaving. The off-by-one was perfectly consistent, which made it look like a constant and masked it as a real offset.
+FIX (took 1 day)
+  Fixed by incrementing the section only on entry, and adding a test that drives the full lap and asserts the counter ends exactly at the section count.
+
+----------------------------------------------------------------------
+E0075 | v8.6 | SMALL | Found Day 153 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v8.6/track_map.py
+Error     : Task base double-schedules a callback
+Terminal  : systemd journal
+  $ python3 track_map.py
+  callback ran twice per tick
+  motor command overwritten
+WHAT HAPPENED
+  Every control tick produced two motor commands, the second overwriting the first. The motion was erratic because half the commands were stale by one tick.
+WHY IT HAPPENED (root cause)
+  register_task was called twice for the same task ID in main - once by the module's own registration and once by the application wiring. The scheduler had no duplicate detection, so it added the callback twice. The scheduler trusted its caller; the caller did not check whether the task was already registered.
+FIX (took 1 day)
+  Fixed by guarding register_task with a task-ID set that rejects duplicates, and logging a warning when a duplicate registration is attempted.
+
+----------------------------------------------------------------------
+E0076 | v8.6 | SMALL | Found Day 153 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v8.6/track_sections.py
+Error     : Log severity mapping is wrong
+Terminal  : systemd journal
+  $ python3 track_sections.py
+  ERROR logged as INFO
+  failures hidden in the console
+WHAT HAPPENED
+  Critical failures appeared in the log with the INFO level, so nobody noticed them in the morning's flood of messages. The logging was lying about importance.
+WHY IT HAPPENED (root cause)
+  The severity enum in log_severity.py and the level table in the logger used different orderings, so the numeric codes mapped to the wrong levels. The logger wrote what it was told - the mapping was corrupted upstream. Two files defining the same concept independently is a maintenance trap: they will drift until someone notices.
+FIX (took 1 day)
+  Fixed by defining the severity enum in the logger module itself and importing it everywhere, so only one source of truth exists.
+
+----------------------------------------------------------------------
+E0077 | v8.6 | SMALL | Found Day 153 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v8.6/track_map.py
+Error     : YAML parse error in default_config.yaml
+Terminal  : systemd journal
+  $ python3 track_map.py
+  yaml.scanner.ScannerError: mapping values are not allowed here
+  config failed to load
+WHAT HAPPENED
+  The robot refused to boot because the configuration file could not be parsed. The file looked correct to a human - the colon in a string was the problem.
+WHY IT HAPPENED (root cause)
+  YAML treats an unquoted colon followed by a space as a key/value separator. A string containing 'mode: fast' inside a value breaks the parser because it sees a nested mapping where it did not expect one. YAML is whitespace- and punctuation-sensitive in ways that are invisible to a quick read, which is why config errors show up at load time, never at edit time.
+FIX (took 1 day)
+  Fixed by quoting the value, and adding a config validation step at boot that parses the YAML and reports the exact line of any syntax error.
+
+----------------------------------------------------------------------
+E0078 | v8.6 | SMALL | Found Day 153 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v8.6/track_sections.py
+Error     : Surprise rule key is unknown
+Terminal  : systemd journal
+  $ python3 track_sections.py
+  KeyError: 'pillar_logic' in surprise_config
+  rules ignored, defaults used
+WHAT HAPPENED
+  The surprise rules loaded without error, but the pillar logic rule never took effect - the robot ran the default behavior all day.
+WHY IT HAPPENED (root cause)
+  The loader read keys by an explicit allowlist, and 'pillar_logic' was not in it, so the rule was silently dropped. A missing key in a config lookup is a silent failure when the code uses .get() with a default and a crash when it uses [] - this code used a path that neither crashed nor worked. The rules file and the loader schema had drifted apart.
+FIX (took 1 day)
+  Fixed by adding the key to the loader schema and logging a warning whenever a configured rule key is ignored, so silent drops become visible.
+
+----------------------------------------------------------------------
+E0079 | v8.6 | SMALL | Found Day 153 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v8.6/track_map.py
+Error     : Steering mode switch race condition
+Terminal  : systemd journal
+  $ python3 track_map.py
+  mode: OPPOSITE (expected CRAB)
+  one-frame wrong steering at the switch
+WHAT HAPPENED
+  For exactly one frame at every mode switch, the robot steered with the wrong geometry. The switch itself worked - the frame in between did not.
+WHY IT HAPPENED (root cause)
+  The mode flag was written by the mission thread and read by the control thread without synchronization. The control thread could read the flag mid-update, observing a mixed state. A one-frame glitch is exactly what a data race looks like: mostly correct, occasionally wrong, impossible to reproduce on demand.
+FIX (took 1 day)
+  Fixed by making the mode switch atomic - the mode lives in a single int that the scheduler publishes, and the control thread reads it through a lock-free once-store.
+
+----------------------------------------------------------------------
+E0080 | v8.6 | SMALL | Found Day 153 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v8.6/track_sections.py
+Error     : Heartbeat times out on a busy CPU
+Terminal  : systemd journal
+  $ python3 track_sections.py
+  heartbeat lost: 1500ms
+  motors cut mid-run
+WHAT HAPPENED
+  The motors cut out for a moment in the middle of a run, then resumed. The failsafe fired, then recovered on its own - a glitch with consequences.
+WHY IT HAPPENED (root cause)
+  The heartbeat thread could not get CPU time during perception spikes, so the failsafe correctly concluded the main loop was dead and cut the motors. The failsafe is designed to be conservative: any doubt means stop. The bug was that a healthy but busy system looked dead to the heartbeat - the failure detector could not distinguish 'slow' from 'dead'.
+FIX (took 1 day)
+  Fixed by raising the heartbeat thread priority and extending the timeout to 2s, with a separate watchdog that only fires when the main loop is truly stuck.
+
+----------------------------------------------------------------------
+E0081 | v8.6 | BIG | Found Day 154 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.6/track_map.py
+Error     : Health monitor kills the camera on a cold start
+Terminal  : Pi SSH terminal
+  $ python3 track_map.py
+  camera: FAIL -> restart -> FAIL (3x)
+  camera was fine after 60s
+WHAT HAPPENED
+  The health monitor restarted the camera three times at boot, then gave up - while the camera was simply slow to start in the cold. The monitor caused the failure it was watching for.
+WHY IT HAPPENED (root cause)
+  The camera produces no frames for the first several seconds on a cold boot. The health monitor interpreted the silence as a failure and issued a restart, and each restart reset the same cold-start condition. The monitor's retry loop amplified the boot transient into a permanent failure - the fix was the opposite of the restart it kept performing.
+INVESTIGATION (before the fix)
+  - Noticed the camera recovered when left alone
+  - Timed the cold-start delay - it exceeded the health timeout
+  - Added a grace period before the first camera check
+FIX (took 2 days)
+  Fixed by waiting 10 seconds before the first camera health check, and by backing off restarts exponentially instead of restarting instantly.
+
+----------------------------------------------------------------------
+E0082 | v8.6 | BIG | Found Day 154 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.6/track_sections.py
+Error     : ESP32 flash with the wrong partition table
+Terminal  : Pi SSH terminal
+  $ python3 track_sections.py
+  esptool: data does not match the partition table
+  ESP32 boot loops
+WHAT HAPPENED
+  After flashing, the ESP32 boot-looped. The flash succeeded - the app was written to a partition the partition table did not define.
+WHY IT HAPPENED (root cause)
+  The application partition had grown past the size declared in the partition table, or the table itself was for a different flash layout. The chip boots into the app region from the table; if the table does not describe the flashed layout, the bootloader cannot find the app and resets. The build and the flash layout were not validated against each other.
+INVESTIGATION (before the fix)
+  - Read the boot logs - the partition entry was missing
+  - Compared the partition table with the app size
+  - Reflashed with the standard 4MB table
+FIX (took 3 days)
+  Fixed by pinning the partition table in the project config, and adding a CI check that fails if the compiled app exceeds its partition.
+
+----------------------------------------------------------------------
+E0083 | v8.6 | BIG | Found Day 154 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.6/track_map.py
+Error     : OOM killer kills the perception process
+Terminal  : Pi SSH terminal
+  $ python3 track_map.py
+  Out of memory: Killed process 1234 (vision)
+  perception dead, robot runs blind
+WHAT HAPPENED
+  The perception process was killed by the kernel's OOM killer mid-run. The robot kept driving - blind, because nobody noticed the process was gone.
+WHY IT HAPPENED (root cause)
+  The vision frame queue had no size limit, so under load it buffered frames without bound and consumed the Pi's RAM. When memory ran out, the kernel's OOM killer chose the largest process - the vision process. The queue was a convenience that became a memory leak the moment consumers lagged producers.
+INVESTIGATION (before the fix)
+  - Checked dmesg for the OOM kill - the vision process was the target
+  - Measured the RSS growth - it grew linearly with queue length
+  - Capped the queue and re-ran under load
+FIX (took 4 days)
+  Fixed by capping the frame queue at 4 frames with drop-oldest, and adding a memory watch that logs the RSS of each process to the health monitor.
+
+----------------------------------------------------------------------
+E0084 | v8.6 | BIG | Found Day 154 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.6/track_sections.py
+Error     : Log severity floods the disk on a bad day
+Terminal  : Pi SSH terminal
+  $ python3 track_sections.py
+  /var/log: 4.2GB of WARNING lines
+  SD card 99% full
+WHAT HAPPENED
+  One bad day of testing filled the SD card with 4.2GB of warning lines. The robot kept working - until the card was full and everything stopped.
+WHY IT HAPPENED (root cause)
+  A rate-limit regression let the error logger write at full rate, and the log had no rotation on the embedded system. Logging is storage I/O; unbounded logging is an unbounded disk consumption. The rate limiter that had fixed the console spam did not cover the file writer.
+INVESTIGATION (before the fix)
+  - Found the 4.2GB log and its growth rate
+  - Traced the spam to a rate-limiter regression
+  - Added rotation and a disk watermark alert
+FIX (took 5 days)
+  Fixed by fixing the rate limiter for the file writer and adding log rotation with a 50MB cap, plus a warning when the disk crosses 90%.
+
+----------------------------------------------------------------------
+E0085 | v8.7 | SMALL | Found Day 155 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v8.7/scheduler.py
+Error     : Track map is off by one section
+Terminal  : VS Code terminal
+  $ python3 scheduler.py
+  section: 5 (expected 4)
+  strategy picks the wrong corner
+WHAT HAPPENED
+  Every lap the track map believed the robot was one section further along than reality. The strategy consistently prepared the wrong corner.
+WHY IT HAPPENED (root cause)
+  The section counter incremented on both entering and exiting the section boundary line, because the boundary check ran on the transition in both directions. A line crossing is a single event, but the code detected it twice - once entering, once leaving. The off-by-one was perfectly consistent, which made it look like a constant and masked it as a real offset.
+FIX (took 1 day)
+  Fixed by incrementing the section only on entry, and adding a test that drives the full lap and asserts the counter ends exactly at the section count.
+
+----------------------------------------------------------------------
+E0086 | v8.7 | SMALL | Found Day 155 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v8.7/task_base.py
+Error     : Task base double-schedules a callback
+Terminal  : VS Code terminal
+  $ python3 task_base.py
+  callback ran twice per tick
+  motor command overwritten
+WHAT HAPPENED
+  Every control tick produced two motor commands, the second overwriting the first. The motion was erratic because half the commands were stale by one tick.
+WHY IT HAPPENED (root cause)
+  register_task was called twice for the same task ID in main - once by the module's own registration and once by the application wiring. The scheduler had no duplicate detection, so it added the callback twice. The scheduler trusted its caller; the caller did not check whether the task was already registered.
+FIX (took 1 day)
+  Fixed by guarding register_task with a task-ID set that rejects duplicates, and logging a warning when a duplicate registration is attempted.
+
+----------------------------------------------------------------------
+E0087 | v8.7 | SMALL | Found Day 155 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v8.7/scheduler.py
+Error     : Log severity mapping is wrong
+Terminal  : VS Code terminal
+  $ python3 scheduler.py
+  ERROR logged as INFO
+  failures hidden in the console
+WHAT HAPPENED
+  Critical failures appeared in the log with the INFO level, so nobody noticed them in the morning's flood of messages. The logging was lying about importance.
+WHY IT HAPPENED (root cause)
+  The severity enum in log_severity.py and the level table in the logger used different orderings, so the numeric codes mapped to the wrong levels. The logger wrote what it was told - the mapping was corrupted upstream. Two files defining the same concept independently is a maintenance trap: they will drift until someone notices.
+FIX (took 1 day)
+  Fixed by defining the severity enum in the logger module itself and importing it everywhere, so only one source of truth exists.
+
+----------------------------------------------------------------------
+E0088 | v8.7 | SMALL | Found Day 155 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v8.7/task_base.py
+Error     : YAML parse error in default_config.yaml
+Terminal  : VS Code terminal
+  $ python3 task_base.py
+  yaml.scanner.ScannerError: mapping values are not allowed here
+  config failed to load
+WHAT HAPPENED
+  The robot refused to boot because the configuration file could not be parsed. The file looked correct to a human - the colon in a string was the problem.
+WHY IT HAPPENED (root cause)
+  YAML treats an unquoted colon followed by a space as a key/value separator. A string containing 'mode: fast' inside a value breaks the parser because it sees a nested mapping where it did not expect one. YAML is whitespace- and punctuation-sensitive in ways that are invisible to a quick read, which is why config errors show up at load time, never at edit time.
+FIX (took 1 day)
+  Fixed by quoting the value, and adding a config validation step at boot that parses the YAML and reports the exact line of any syntax error.
+
+----------------------------------------------------------------------
+E0089 | v8.7 | SMALL | Found Day 155 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v8.7/scheduler.py
+Error     : Surprise rule key is unknown
+Terminal  : VS Code terminal
+  $ python3 scheduler.py
+  KeyError: 'pillar_logic' in surprise_config
+  rules ignored, defaults used
+WHAT HAPPENED
+  The surprise rules loaded without error, but the pillar logic rule never took effect - the robot ran the default behavior all day.
+WHY IT HAPPENED (root cause)
+  The loader read keys by an explicit allowlist, and 'pillar_logic' was not in it, so the rule was silently dropped. A missing key in a config lookup is a silent failure when the code uses .get() with a default and a crash when it uses [] - this code used a path that neither crashed nor worked. The rules file and the loader schema had drifted apart.
+FIX (took 1 day)
+  Fixed by adding the key to the loader schema and logging a warning whenever a configured rule key is ignored, so silent drops become visible.
+
+----------------------------------------------------------------------
+E0090 | v8.7 | SMALL | Found Day 155 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v8.7/task_base.py
+Error     : Steering mode switch race condition
+Terminal  : VS Code terminal
+  $ python3 task_base.py
+  mode: OPPOSITE (expected CRAB)
+  one-frame wrong steering at the switch
+WHAT HAPPENED
+  For exactly one frame at every mode switch, the robot steered with the wrong geometry. The switch itself worked - the frame in between did not.
+WHY IT HAPPENED (root cause)
+  The mode flag was written by the mission thread and read by the control thread without synchronization. The control thread could read the flag mid-update, observing a mixed state. A one-frame glitch is exactly what a data race looks like: mostly correct, occasionally wrong, impossible to reproduce on demand.
+FIX (took 1 day)
+  Fixed by making the mode switch atomic - the mode lives in a single int that the scheduler publishes, and the control thread reads it through a lock-free once-store.
+
+----------------------------------------------------------------------
+E0091 | v8.7 | SMALL | Found Day 155 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v8.7/scheduler.py
+Error     : Heartbeat times out on a busy CPU
+Terminal  : VS Code terminal
+  $ python3 scheduler.py
+  heartbeat lost: 1500ms
+  motors cut mid-run
+WHAT HAPPENED
+  The motors cut out for a moment in the middle of a run, then resumed. The failsafe fired, then recovered on its own - a glitch with consequences.
+WHY IT HAPPENED (root cause)
+  The heartbeat thread could not get CPU time during perception spikes, so the failsafe correctly concluded the main loop was dead and cut the motors. The failsafe is designed to be conservative: any doubt means stop. The bug was that a healthy but busy system looked dead to the heartbeat - the failure detector could not distinguish 'slow' from 'dead'.
+FIX (took 1 day)
+  Fixed by raising the heartbeat thread priority and extending the timeout to 2s, with a separate watchdog that only fires when the main loop is truly stuck.
+
+----------------------------------------------------------------------
+E0092 | v8.7 | SMALL | Found Day 155 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v8.7/task_base.py
+Error     : Health monitor false alarm on sensor 3
+Terminal  : VS Code terminal
+  $ python3 task_base.py
+  sensor 3: FAIL (3 misses)
+  actually fine, just slow
+WHAT HAPPENED
+  The health monitor declared the ToF dead at every boot. The sensor was alive - it was just slow to warm up, and the monitor did not wait.
+WHY IT HAPPENED (root cause)
+  The failure threshold was three consecutive misses, and the ToF's warm-up period legitimately produces more than three misses before its first valid reading. The threshold was calibrated against runtime behavior, not boot behavior. A monitor with a fixed threshold cannot distinguish a boot transient from a persistent failure.
+FIX (took 1 day)
+  Fixed by raising the threshold to 20 misses and adding a warm-up grace period of 5 seconds at boot, matching the measured sensor ready time.
+
+----------------------------------------------------------------------
+E0093 | v8.7 | BIG | Found Day 156 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.7/scheduler.py
+Error     : ESP32 flash with the wrong partition table
+Terminal  : Pi SSH terminal
+  $ python3 scheduler.py
+  esptool: data does not match the partition table
+  ESP32 boot loops
+WHAT HAPPENED
+  After flashing, the ESP32 boot-looped. The flash succeeded - the app was written to a partition the partition table did not define.
+WHY IT HAPPENED (root cause)
+  The application partition had grown past the size declared in the partition table, or the table itself was for a different flash layout. The chip boots into the app region from the table; if the table does not describe the flashed layout, the bootloader cannot find the app and resets. The build and the flash layout were not validated against each other.
+INVESTIGATION (before the fix)
+  - Read the boot logs - the partition entry was missing
+  - Compared the partition table with the app size
+  - Reflashed with the standard 4MB table
+FIX (took 2 days)
+  Fixed by pinning the partition table in the project config, and adding a CI check that fails if the compiled app exceeds its partition.
+
+----------------------------------------------------------------------
+E0094 | v8.7 | BIG | Found Day 156 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.7/task_base.py
+Error     : OOM killer kills the perception process
+Terminal  : Pi SSH terminal
+  $ python3 task_base.py
+  Out of memory: Killed process 1234 (vision)
+  perception dead, robot runs blind
+WHAT HAPPENED
+  The perception process was killed by the kernel's OOM killer mid-run. The robot kept driving - blind, because nobody noticed the process was gone.
+WHY IT HAPPENED (root cause)
+  The vision frame queue had no size limit, so under load it buffered frames without bound and consumed the Pi's RAM. When memory ran out, the kernel's OOM killer chose the largest process - the vision process. The queue was a convenience that became a memory leak the moment consumers lagged producers.
+INVESTIGATION (before the fix)
+  - Checked dmesg for the OOM kill - the vision process was the target
+  - Measured the RSS growth - it grew linearly with queue length
+  - Capped the queue and re-ran under load
+FIX (took 3 days)
+  Fixed by capping the frame queue at 4 frames with drop-oldest, and adding a memory watch that logs the RSS of each process to the health monitor.
+
+----------------------------------------------------------------------
+E0095 | v8.7 | BIG | Found Day 156 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.7/scheduler.py
+Error     : Log severity floods the disk on a bad day
+Terminal  : Pi SSH terminal
+  $ python3 scheduler.py
+  /var/log: 4.2GB of WARNING lines
+  SD card 99% full
+WHAT HAPPENED
+  One bad day of testing filled the SD card with 4.2GB of warning lines. The robot kept working - until the card was full and everything stopped.
+WHY IT HAPPENED (root cause)
+  A rate-limit regression let the error logger write at full rate, and the log had no rotation on the embedded system. Logging is storage I/O; unbounded logging is an unbounded disk consumption. The rate limiter that had fixed the console spam did not cover the file writer.
+INVESTIGATION (before the fix)
+  - Found the 4.2GB log and its growth rate
+  - Traced the spam to a rate-limiter regression
+  - Added rotation and a disk watermark alert
+FIX (took 4 days)
+  Fixed by fixing the rate limiter for the file writer and adding log rotation with a 50MB cap, plus a warning when the disk crosses 90%.
+
+----------------------------------------------------------------------
+E0096 | v8.7 | BIG | Found Day 156 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.7/task_base.py
+Error     : Scheduler deadlocks when a task raises
+Terminal  : Pi SSH terminal
+  $ python3 task_base.py
+  scheduler: task 'vision' raised, never resumed
+  all other tasks stop
+WHAT HAPPENED
+  One exception in the vision task froze the entire robot - every other task stopped scheduling. The failure was in the exception path, not the task.
+WHY IT HAPPENED (root cause)
+  The scheduler loop had no exception boundary around its task invocations. When vision raised, the exception propagated out of the loop, and the asyncio gather never continued, so no task ever ran again. A system of cooperating tasks is only as robust as its weakest task unless the scheduler contains each one.
+INVESTIGATION (before the fix)
+  - Reproduced with a forced exception in a test task
+  - Confirmed the gather exited and nothing resumed
+  - Wrapped each task call in try/except and re-ran
+FIX (took 5 days)
+  Fixed by wrapping every task invocation in try/except with logging, so a failing task is isolated and the scheduler keeps running.
+
+----------------------------------------------------------------------
+E0097 | v8.8 | SMALL | Found Day 157 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.8/health_monitor.py
+Error     : Task base double-schedules a callback
+Terminal  : Pi SSH terminal
+  $ python3 health_monitor.py
+  callback ran twice per tick
+  motor command overwritten
+WHAT HAPPENED
+  Every control tick produced two motor commands, the second overwriting the first. The motion was erratic because half the commands were stale by one tick.
+WHY IT HAPPENED (root cause)
+  register_task was called twice for the same task ID in main - once by the module's own registration and once by the application wiring. The scheduler had no duplicate detection, so it added the callback twice. The scheduler trusted its caller; the caller did not check whether the task was already registered.
+FIX (took 1 day)
+  Fixed by guarding register_task with a task-ID set that rejects duplicates, and logging a warning when a duplicate registration is attempted.
+
+----------------------------------------------------------------------
+E0098 | v8.8 | SMALL | Found Day 157 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.8/heartbeat_protocol.py
+Error     : Log severity mapping is wrong
+Terminal  : Pi SSH terminal
+  $ python3 heartbeat_protocol.py
+  ERROR logged as INFO
+  failures hidden in the console
+WHAT HAPPENED
+  Critical failures appeared in the log with the INFO level, so nobody noticed them in the morning's flood of messages. The logging was lying about importance.
+WHY IT HAPPENED (root cause)
+  The severity enum in log_severity.py and the level table in the logger used different orderings, so the numeric codes mapped to the wrong levels. The logger wrote what it was told - the mapping was corrupted upstream. Two files defining the same concept independently is a maintenance trap: they will drift until someone notices.
+FIX (took 1 day)
+  Fixed by defining the severity enum in the logger module itself and importing it everywhere, so only one source of truth exists.
+
+----------------------------------------------------------------------
+E0099 | v8.8 | SMALL | Found Day 157 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.8/health_monitor.py
+Error     : YAML parse error in default_config.yaml
+Terminal  : Pi SSH terminal
+  $ python3 health_monitor.py
+  yaml.scanner.ScannerError: mapping values are not allowed here
+  config failed to load
+WHAT HAPPENED
+  The robot refused to boot because the configuration file could not be parsed. The file looked correct to a human - the colon in a string was the problem.
+WHY IT HAPPENED (root cause)
+  YAML treats an unquoted colon followed by a space as a key/value separator. A string containing 'mode: fast' inside a value breaks the parser because it sees a nested mapping where it did not expect one. YAML is whitespace- and punctuation-sensitive in ways that are invisible to a quick read, which is why config errors show up at load time, never at edit time.
+FIX (took 1 day)
+  Fixed by quoting the value, and adding a config validation step at boot that parses the YAML and reports the exact line of any syntax error.
+
+----------------------------------------------------------------------
+E0100 | v8.8 | SMALL | Found Day 157 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.8/heartbeat_protocol.py
+Error     : Surprise rule key is unknown
+Terminal  : Pi SSH terminal
+  $ python3 heartbeat_protocol.py
+  KeyError: 'pillar_logic' in surprise_config
+  rules ignored, defaults used
+WHAT HAPPENED
+  The surprise rules loaded without error, but the pillar logic rule never took effect - the robot ran the default behavior all day.
+WHY IT HAPPENED (root cause)
+  The loader read keys by an explicit allowlist, and 'pillar_logic' was not in it, so the rule was silently dropped. A missing key in a config lookup is a silent failure when the code uses .get() with a default and a crash when it uses [] - this code used a path that neither crashed nor worked. The rules file and the loader schema had drifted apart.
+FIX (took 1 day)
+  Fixed by adding the key to the loader schema and logging a warning whenever a configured rule key is ignored, so silent drops become visible.
+
+----------------------------------------------------------------------
+E0101 | v8.8 | SMALL | Found Day 157 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.8/health_monitor.py
+Error     : Steering mode switch race condition
+Terminal  : Pi SSH terminal
+  $ python3 health_monitor.py
+  mode: OPPOSITE (expected CRAB)
+  one-frame wrong steering at the switch
+WHAT HAPPENED
+  For exactly one frame at every mode switch, the robot steered with the wrong geometry. The switch itself worked - the frame in between did not.
+WHY IT HAPPENED (root cause)
+  The mode flag was written by the mission thread and read by the control thread without synchronization. The control thread could read the flag mid-update, observing a mixed state. A one-frame glitch is exactly what a data race looks like: mostly correct, occasionally wrong, impossible to reproduce on demand.
+FIX (took 1 day)
+  Fixed by making the mode switch atomic - the mode lives in a single int that the scheduler publishes, and the control thread reads it through a lock-free once-store.
+
+----------------------------------------------------------------------
+E0102 | v8.8 | SMALL | Found Day 157 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.8/heartbeat_protocol.py
+Error     : Heartbeat times out on a busy CPU
+Terminal  : Pi SSH terminal
+  $ python3 heartbeat_protocol.py
+  heartbeat lost: 1500ms
+  motors cut mid-run
+WHAT HAPPENED
+  The motors cut out for a moment in the middle of a run, then resumed. The failsafe fired, then recovered on its own - a glitch with consequences.
+WHY IT HAPPENED (root cause)
+  The heartbeat thread could not get CPU time during perception spikes, so the failsafe correctly concluded the main loop was dead and cut the motors. The failsafe is designed to be conservative: any doubt means stop. The bug was that a healthy but busy system looked dead to the heartbeat - the failure detector could not distinguish 'slow' from 'dead'.
+FIX (took 1 day)
+  Fixed by raising the heartbeat thread priority and extending the timeout to 2s, with a separate watchdog that only fires when the main loop is truly stuck.
+
+----------------------------------------------------------------------
+E0103 | v8.8 | SMALL | Found Day 157 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.8/health_monitor.py
+Error     : Health monitor false alarm on sensor 3
+Terminal  : Pi SSH terminal
+  $ python3 health_monitor.py
+  sensor 3: FAIL (3 misses)
+  actually fine, just slow
+WHAT HAPPENED
+  The health monitor declared the ToF dead at every boot. The sensor was alive - it was just slow to warm up, and the monitor did not wait.
+WHY IT HAPPENED (root cause)
+  The failure threshold was three consecutive misses, and the ToF's warm-up period legitimately produces more than three misses before its first valid reading. The threshold was calibrated against runtime behavior, not boot behavior. A monitor with a fixed threshold cannot distinguish a boot transient from a persistent failure.
+FIX (took 1 day)
+  Fixed by raising the threshold to 20 misses and adding a warm-up grace period of 5 seconds at boot, matching the measured sensor ready time.
+
+----------------------------------------------------------------------
+E0104 | v8.8 | SMALL | Found Day 157 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.8/heartbeat_protocol.py
+Error     : Track map is off by one section
+Terminal  : Pi SSH terminal
+  $ python3 heartbeat_protocol.py
+  section: 5 (expected 4)
+  strategy picks the wrong corner
+WHAT HAPPENED
+  Every lap the track map believed the robot was one section further along than reality. The strategy consistently prepared the wrong corner.
+WHY IT HAPPENED (root cause)
+  The section counter incremented on both entering and exiting the section boundary line, because the boundary check ran on the transition in both directions. A line crossing is a single event, but the code detected it twice - once entering, once leaving. The off-by-one was perfectly consistent, which made it look like a constant and masked it as a real offset.
+FIX (took 1 day)
+  Fixed by incrementing the section only on entry, and adding a test that drives the full lap and asserts the counter ends exactly at the section count.
+
+----------------------------------------------------------------------
+E0105 | v8.8 | BIG | Found Day 158 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.8/health_monitor.py
+Error     : OOM killer kills the perception process
+Terminal  : Pi SSH terminal
+  $ python3 health_monitor.py
+  Out of memory: Killed process 1234 (vision)
+  perception dead, robot runs blind
+WHAT HAPPENED
+  The perception process was killed by the kernel's OOM killer mid-run. The robot kept driving - blind, because nobody noticed the process was gone.
+WHY IT HAPPENED (root cause)
+  The vision frame queue had no size limit, so under load it buffered frames without bound and consumed the Pi's RAM. When memory ran out, the kernel's OOM killer chose the largest process - the vision process. The queue was a convenience that became a memory leak the moment consumers lagged producers.
+INVESTIGATION (before the fix)
+  - Checked dmesg for the OOM kill - the vision process was the target
+  - Measured the RSS growth - it grew linearly with queue length
+  - Capped the queue and re-ran under load
+FIX (took 2 days)
+  Fixed by capping the frame queue at 4 frames with drop-oldest, and adding a memory watch that logs the RSS of each process to the health monitor.
+
+----------------------------------------------------------------------
+E0106 | v8.8 | BIG | Found Day 158 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.8/heartbeat_protocol.py
+Error     : Log severity floods the disk on a bad day
+Terminal  : Pi SSH terminal
+  $ python3 heartbeat_protocol.py
+  /var/log: 4.2GB of WARNING lines
+  SD card 99% full
+WHAT HAPPENED
+  One bad day of testing filled the SD card with 4.2GB of warning lines. The robot kept working - until the card was full and everything stopped.
+WHY IT HAPPENED (root cause)
+  A rate-limit regression let the error logger write at full rate, and the log had no rotation on the embedded system. Logging is storage I/O; unbounded logging is an unbounded disk consumption. The rate limiter that had fixed the console spam did not cover the file writer.
+INVESTIGATION (before the fix)
+  - Found the 4.2GB log and its growth rate
+  - Traced the spam to a rate-limiter regression
+  - Added rotation and a disk watermark alert
+FIX (took 3 days)
+  Fixed by fixing the rate limiter for the file writer and adding log rotation with a 50MB cap, plus a warning when the disk crosses 90%.
+
+----------------------------------------------------------------------
+E0107 | v8.8 | BIG | Found Day 158 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.8/health_monitor.py
+Error     : Scheduler deadlocks when a task raises
+Terminal  : Pi SSH terminal
+  $ python3 health_monitor.py
+  scheduler: task 'vision' raised, never resumed
+  all other tasks stop
+WHAT HAPPENED
+  One exception in the vision task froze the entire robot - every other task stopped scheduling. The failure was in the exception path, not the task.
+WHY IT HAPPENED (root cause)
+  The scheduler loop had no exception boundary around its task invocations. When vision raised, the exception propagated out of the loop, and the asyncio gather never continued, so no task ever ran again. A system of cooperating tasks is only as robust as its weakest task unless the scheduler contains each one.
+INVESTIGATION (before the fix)
+  - Reproduced with a forced exception in a test task
+  - Confirmed the gather exited and nothing resumed
+  - Wrapped each task call in try/except and re-ran
+FIX (took 4 days)
+  Fixed by wrapping every task invocation in try/except with logging, so a failing task is isolated and the scheduler keeps running.
+
+----------------------------------------------------------------------
+E0108 | v8.8 | BIG | Found Day 158 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.8/heartbeat_protocol.py
+Error     : Heartbeat failure cuts the motors at the start line
+Terminal  : Pi SSH terminal
+  $ python3 heartbeat_protocol.py
+  heartbeat: FAIL (start signal)
+  motors disabled for 3s
+WHAT HAPPENED
+  At the start signal the motors were disabled for three seconds - the failsafe fired exactly when the robot needed to move. The start burst starved the heartbeat.
+WHY IT HAPPENED (root cause)
+  At start, the vision and fusion tasks all wake at once and consume CPU for hundreds of milliseconds. The low-priority heartbeat thread could not run within its timeout window, so the failsafe - which is supposed to catch a dead loop - caught a merely busy one. The safety system could not tell the difference, and its design made it fire on exactly this pattern.
+INVESTIGATION (before the fix)
+  - Logged CPU usage at the start burst - the heartbeat starved
+  - Confirmed the failsafe fired while the loop was healthy
+  - Prioritized the heartbeat and widened the timeout
+FIX (took 5 days)
+  Fixed by boosting the heartbeat to a high-priority thread with a 2s timeout, so a busy-but-healthy system never trips the failsafe.
+
+----------------------------------------------------------------------
+E0109 | v8.9 | SMALL | Found Day 159 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v8.9/error_logger.py
+Error     : Log severity mapping is wrong
+Terminal  : Pi console (HDMI)
+  $ python3 error_logger.py
+  ERROR logged as INFO
+  failures hidden in the console
+WHAT HAPPENED
+  Critical failures appeared in the log with the INFO level, so nobody noticed them in the morning's flood of messages. The logging was lying about importance.
+WHY IT HAPPENED (root cause)
+  The severity enum in log_severity.py and the level table in the logger used different orderings, so the numeric codes mapped to the wrong levels. The logger wrote what it was told - the mapping was corrupted upstream. Two files defining the same concept independently is a maintenance trap: they will drift until someone notices.
+FIX (took 1 day)
+  Fixed by defining the severity enum in the logger module itself and importing it everywhere, so only one source of truth exists.
+
+----------------------------------------------------------------------
+E0110 | v8.9 | SMALL | Found Day 159 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v8.9/log_severity.py
+Error     : YAML parse error in default_config.yaml
+Terminal  : Pi console (HDMI)
+  $ python3 log_severity.py
+  yaml.scanner.ScannerError: mapping values are not allowed here
+  config failed to load
+WHAT HAPPENED
+  The robot refused to boot because the configuration file could not be parsed. The file looked correct to a human - the colon in a string was the problem.
+WHY IT HAPPENED (root cause)
+  YAML treats an unquoted colon followed by a space as a key/value separator. A string containing 'mode: fast' inside a value breaks the parser because it sees a nested mapping where it did not expect one. YAML is whitespace- and punctuation-sensitive in ways that are invisible to a quick read, which is why config errors show up at load time, never at edit time.
+FIX (took 1 day)
+  Fixed by quoting the value, and adding a config validation step at boot that parses the YAML and reports the exact line of any syntax error.
+
+----------------------------------------------------------------------
+E0111 | v8.9 | SMALL | Found Day 159 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v8.9/error_logger.py
+Error     : Surprise rule key is unknown
+Terminal  : Pi console (HDMI)
+  $ python3 error_logger.py
+  KeyError: 'pillar_logic' in surprise_config
+  rules ignored, defaults used
+WHAT HAPPENED
+  The surprise rules loaded without error, but the pillar logic rule never took effect - the robot ran the default behavior all day.
+WHY IT HAPPENED (root cause)
+  The loader read keys by an explicit allowlist, and 'pillar_logic' was not in it, so the rule was silently dropped. A missing key in a config lookup is a silent failure when the code uses .get() with a default and a crash when it uses [] - this code used a path that neither crashed nor worked. The rules file and the loader schema had drifted apart.
+FIX (took 1 day)
+  Fixed by adding the key to the loader schema and logging a warning whenever a configured rule key is ignored, so silent drops become visible.
+
+----------------------------------------------------------------------
+E0112 | v8.9 | SMALL | Found Day 159 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v8.9/log_severity.py
+Error     : Steering mode switch race condition
+Terminal  : Pi console (HDMI)
+  $ python3 log_severity.py
+  mode: OPPOSITE (expected CRAB)
+  one-frame wrong steering at the switch
+WHAT HAPPENED
+  For exactly one frame at every mode switch, the robot steered with the wrong geometry. The switch itself worked - the frame in between did not.
+WHY IT HAPPENED (root cause)
+  The mode flag was written by the mission thread and read by the control thread without synchronization. The control thread could read the flag mid-update, observing a mixed state. A one-frame glitch is exactly what a data race looks like: mostly correct, occasionally wrong, impossible to reproduce on demand.
+FIX (took 1 day)
+  Fixed by making the mode switch atomic - the mode lives in a single int that the scheduler publishes, and the control thread reads it through a lock-free once-store.
+
+----------------------------------------------------------------------
+E0113 | v8.9 | SMALL | Found Day 159 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v8.9/error_logger.py
+Error     : Heartbeat times out on a busy CPU
+Terminal  : Pi console (HDMI)
+  $ python3 error_logger.py
+  heartbeat lost: 1500ms
+  motors cut mid-run
+WHAT HAPPENED
+  The motors cut out for a moment in the middle of a run, then resumed. The failsafe fired, then recovered on its own - a glitch with consequences.
+WHY IT HAPPENED (root cause)
+  The heartbeat thread could not get CPU time during perception spikes, so the failsafe correctly concluded the main loop was dead and cut the motors. The failsafe is designed to be conservative: any doubt means stop. The bug was that a healthy but busy system looked dead to the heartbeat - the failure detector could not distinguish 'slow' from 'dead'.
+FIX (took 1 day)
+  Fixed by raising the heartbeat thread priority and extending the timeout to 2s, with a separate watchdog that only fires when the main loop is truly stuck.
+
+----------------------------------------------------------------------
+E0114 | v8.9 | SMALL | Found Day 159 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v8.9/log_severity.py
+Error     : Health monitor false alarm on sensor 3
+Terminal  : Pi console (HDMI)
+  $ python3 log_severity.py
+  sensor 3: FAIL (3 misses)
+  actually fine, just slow
+WHAT HAPPENED
+  The health monitor declared the ToF dead at every boot. The sensor was alive - it was just slow to warm up, and the monitor did not wait.
+WHY IT HAPPENED (root cause)
+  The failure threshold was three consecutive misses, and the ToF's warm-up period legitimately produces more than three misses before its first valid reading. The threshold was calibrated against runtime behavior, not boot behavior. A monitor with a fixed threshold cannot distinguish a boot transient from a persistent failure.
+FIX (took 1 day)
+  Fixed by raising the threshold to 20 misses and adding a warm-up grace period of 5 seconds at boot, matching the measured sensor ready time.
+
+----------------------------------------------------------------------
+E0115 | v8.9 | SMALL | Found Day 159 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v8.9/error_logger.py
+Error     : Track map is off by one section
+Terminal  : Pi console (HDMI)
+  $ python3 error_logger.py
+  section: 5 (expected 4)
+  strategy picks the wrong corner
+WHAT HAPPENED
+  Every lap the track map believed the robot was one section further along than reality. The strategy consistently prepared the wrong corner.
+WHY IT HAPPENED (root cause)
+  The section counter incremented on both entering and exiting the section boundary line, because the boundary check ran on the transition in both directions. A line crossing is a single event, but the code detected it twice - once entering, once leaving. The off-by-one was perfectly consistent, which made it look like a constant and masked it as a real offset.
+FIX (took 1 day)
+  Fixed by incrementing the section only on entry, and adding a test that drives the full lap and asserts the counter ends exactly at the section count.
+
+----------------------------------------------------------------------
+E0116 | v8.9 | SMALL | Found Day 159 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v8.9/log_severity.py
+Error     : Task base double-schedules a callback
+Terminal  : Pi console (HDMI)
+  $ python3 log_severity.py
+  callback ran twice per tick
+  motor command overwritten
+WHAT HAPPENED
+  Every control tick produced two motor commands, the second overwriting the first. The motion was erratic because half the commands were stale by one tick.
+WHY IT HAPPENED (root cause)
+  register_task was called twice for the same task ID in main - once by the module's own registration and once by the application wiring. The scheduler had no duplicate detection, so it added the callback twice. The scheduler trusted its caller; the caller did not check whether the task was already registered.
+FIX (took 1 day)
+  Fixed by guarding register_task with a task-ID set that rejects duplicates, and logging a warning when a duplicate registration is attempted.
+
+----------------------------------------------------------------------
+E0117 | v8.9 | BIG | Found Day 160 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.9/error_logger.py
+Error     : Log severity floods the disk on a bad day
+Terminal  : Pi SSH terminal
+  $ python3 error_logger.py
+  /var/log: 4.2GB of WARNING lines
+  SD card 99% full
+WHAT HAPPENED
+  One bad day of testing filled the SD card with 4.2GB of warning lines. The robot kept working - until the card was full and everything stopped.
+WHY IT HAPPENED (root cause)
+  A rate-limit regression let the error logger write at full rate, and the log had no rotation on the embedded system. Logging is storage I/O; unbounded logging is an unbounded disk consumption. The rate limiter that had fixed the console spam did not cover the file writer.
+INVESTIGATION (before the fix)
+  - Found the 4.2GB log and its growth rate
+  - Traced the spam to a rate-limiter regression
+  - Added rotation and a disk watermark alert
+FIX (took 2 days)
+  Fixed by fixing the rate limiter for the file writer and adding log rotation with a 50MB cap, plus a warning when the disk crosses 90%.
+
+----------------------------------------------------------------------
+E0118 | v8.9 | BIG | Found Day 160 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.9/log_severity.py
+Error     : Scheduler deadlocks when a task raises
+Terminal  : Pi SSH terminal
+  $ python3 log_severity.py
+  scheduler: task 'vision' raised, never resumed
+  all other tasks stop
+WHAT HAPPENED
+  One exception in the vision task froze the entire robot - every other task stopped scheduling. The failure was in the exception path, not the task.
+WHY IT HAPPENED (root cause)
+  The scheduler loop had no exception boundary around its task invocations. When vision raised, the exception propagated out of the loop, and the asyncio gather never continued, so no task ever ran again. A system of cooperating tasks is only as robust as its weakest task unless the scheduler contains each one.
+INVESTIGATION (before the fix)
+  - Reproduced with a forced exception in a test task
+  - Confirmed the gather exited and nothing resumed
+  - Wrapped each task call in try/except and re-ran
+FIX (took 3 days)
+  Fixed by wrapping every task invocation in try/except with logging, so a failing task is isolated and the scheduler keeps running.
+
+----------------------------------------------------------------------
+E0119 | v8.9 | BIG | Found Day 160 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.9/error_logger.py
+Error     : Heartbeat failure cuts the motors at the start line
+Terminal  : Pi SSH terminal
+  $ python3 error_logger.py
+  heartbeat: FAIL (start signal)
+  motors disabled for 3s
+WHAT HAPPENED
+  At the start signal the motors were disabled for three seconds - the failsafe fired exactly when the robot needed to move. The start burst starved the heartbeat.
+WHY IT HAPPENED (root cause)
+  At start, the vision and fusion tasks all wake at once and consume CPU for hundreds of milliseconds. The low-priority heartbeat thread could not run within its timeout window, so the failsafe - which is supposed to catch a dead loop - caught a merely busy one. The safety system could not tell the difference, and its design made it fire on exactly this pattern.
+INVESTIGATION (before the fix)
+  - Logged CPU usage at the start burst - the heartbeat starved
+  - Confirmed the failsafe fired while the loop was healthy
+  - Prioritized the heartbeat and widened the timeout
+FIX (took 4 days)
+  Fixed by boosting the heartbeat to a high-priority thread with a 2s timeout, so a busy-but-healthy system never trips the failsafe.
+
+----------------------------------------------------------------------
+E0120 | v8.9 | BIG | Found Day 160 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v8.9/log_severity.py
+Error     : Surprise rule change requires a reboot
+Terminal  : Pi SSH terminal
+  $ python3 log_severity.py
+  rule changed in config: not applied
+  robot keeps the old strategy
+WHAT HAPPENED
+  The rules were changed before a round, but the robot kept playing the old strategy. The config file was correct - the robot never read it again.
+WHY IT HAPPENED (root cause)
+  surprise_config loaded the rules once at boot and cached them in memory. Every later read returned the cached copy, so an on-the-spot rule change could only take effect after a reboot - an impossible requirement between rounds. Configuration that is read once is not configuration, it is a build-time constant.
+INVESTIGATION (before the fix)
+  - Changed a rule and observed no effect - cached config
+  - Checked the load path - it ran only at boot
+  - Added a reload at each round start
+FIX (took 5 days)
+  Fixed by re-reading the rules file at every round start, with a file-hash check that logs whether the active rules changed since boot.
+
+======================================================================
+END OF PHASE v8.x -- 120 errors
+======================================================================

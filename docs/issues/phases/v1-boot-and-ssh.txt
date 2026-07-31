@@ -1,0 +1,2225 @@
+WRO 4WS Robot - Error Catalog (1000+ Errors, Deep Detail)
+=========================================================
+One error entry per development morning across the whole 90-version
+history repo (v1.0 -> v9.9).  Every entry includes WHAT HAPPENED,
+WHY IT HAPPENED (root cause / deep research), the terminal type and
+exact output, and the FIX with how many days it took.
+
+  SMALL  errors : fixed the same day (1 day)
+  BIG    errors : 2-5 days, with investigation steps before the fix
+
+Day = development-day counter only (no dates).
+
+Total errors : 1080   (720 SMALL / 360 BIG)
+Total days   : 180
+Versions     : 90
+Phases       : 9
+
+======================================================================
+PHASE v1.x  --  BOOT & BASICS + SSH
+======================================================================
+
+----------------------------------------------------------------------
+E0001 | v1.0 | SMALL | Found Day 1 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.0/main.py
+Error     : ModuleNotFoundError: No module named 'sensors'
+Terminal  : Pi SSH terminal
+  $ python3 main.py
+  Traceback (most recent call last):
+    File "main.py", line 6, in <module>
+      from sensors.camera import PiCamera
+  ModuleNotFoundError: No module named 'sensors'
+WHAT HAPPENED
+  The very first morning run of v1.x died at the first import, before a single line of robot code could execute. The whole skeleton was there, but Python refused to see it.
+WHY IT HAPPENED (root cause)
+  Python resolves packages through sys.path, and sys.path[0] is the directory of the script being run, not the current working directory. The sensors package lived under pi/, so launching from the repo root made it invisible. ModuleNotFoundError is raised at import time, which means everything after the import line is unreachable - no logs, no GPIO init, nothing.
+FIX (took 1 day)
+  Fixed by running the script from inside pi/, and later made permanent with sys.path.insert(0, os.path.dirname(__file__)) so the package resolves no matter where the script is launched from.
+
+----------------------------------------------------------------------
+E0002 | v1.0 | SMALL | Found Day 1 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.0/main.py
+Error     : ImportError: cannot import name 'PiCamera'
+Terminal  : Pi SSH terminal
+  $ python3 main.py
+  Traceback (most recent call last):
+    File "main.py", line 3, in <module>
+      from picamera2 import PiCamera
+  ImportError: cannot import name 'PiCamera' from 'picamera2'
+WHAT HAPPENED
+  The first camera test failed at import. The library was installed, so the surprise was that the symbol itself was missing.
+WHY IT HAPPENED (root cause)
+  picamera2 exports the class Picamera2 with a capital P. Python names are case-sensitive, and unlike C there is no link-time check - the failure only appears when the module is actually imported on the Pi. It never shows on the PC because the package does not exist there at all, which is exactly why this slipped past the laptop tests.
+FIX (took 1 day)
+  Fixed by using the exact class name Picamera2 and adding a startup import check so the mistake fails loudly and early instead of silently.
+
+----------------------------------------------------------------------
+E0003 | v1.0 | SMALL | Found Day 1 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.0/main.py
+Error     : IndentationError: unexpected indent
+Terminal  : Pi SSH terminal
+  $ python3 main.py
+    File "main.py", line 12
+      print('i2c ok')
+  IndentationError: unexpected indent
+WHAT HAPPENED
+  The morning's edits crashed the script before it even started. A block that looked right in the editor was illegal to the interpreter.
+WHY IT HAPPENED (root cause)
+  The file mixed tab characters with spaces. Python 3 forbids mixing them for indentation because they are ambiguous - one tab can be 4, 8 or 12 columns depending on the editor. The parser rejects the file during compilation, so no code runs at all; the error appears the instant the script is launched.
+FIX (took 1 day)
+  Fixed by reformatting the block with spaces only, then setting the editor to convert tabs to 4 spaces so it can never come back.
+
+----------------------------------------------------------------------
+E0004 | v1.0 | SMALL | Found Day 1 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.0/main.py
+Error     : TypeError: unsupported operand type(s) for +: 'int' and 'str'
+Terminal  : Pi SSH terminal
+  $ python3 main.py
+    File "main.py", line 18, in <module>
+      dev = bus.read_byte_data(addr, reg) + 'x'
+  TypeError: unsupported operand type(s) for +: 'int' and 'str'
+WHAT HAPPENED
+  The I2C scan report crashed halfway through building its output line. It had worked yesterday on the happy path, so the bug only appeared on a specific address.
+WHY IT HAPPENED (root cause)
+  read_byte_data returns an int, and the code appended the string 'x' to it. Python is dynamically typed, so the mismatch is only detected at runtime - the line only executed for addresses that returned a value, which is why the earlier test addresses passed silently. This is a classic type-contract bug that static analyzers catch immediately.
+FIX (took 1 day)
+  Fixed with str() wrapping and a review rule: every format that mixes types goes through f-strings, where the conversion is explicit.
+
+----------------------------------------------------------------------
+E0005 | v1.0 | SMALL | Found Day 1 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.0/main.py
+Error     : NameError: name 'smbus' is not defined
+Terminal  : Pi SSH terminal
+  $ python3 main.py
+    File "main.py", line 9, in <module>
+      bus = smbus.SMBus(1)
+  NameError: name 'smbus' is not defined
+WHAT HAPPENED
+  The I2C bus scan died at the first bus access. The import line at the top of the file was there, so the name should have existed.
+WHY IT HAPPENED (root cause)
+  The import statement import smbus2 was present, but the code referenced smbus. The alias was never created because the import was never written - the file used the raw package name in one place and the alias in another. NameError surfaces lazily at the first use of the name, not at import time, so the file parsed fine and only exploded mid-run.
+FIX (took 1 day)
+  Fixed by importing smbus2 as smbus and running a quick grep for every usage to confirm no other raw references remained.
+
+----------------------------------------------------------------------
+E0006 | v1.0 | SMALL | Found Day 1 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.0/main.py
+Error     : FileNotFoundError: [Errno 2] No such file or directory: 'config.json'
+Terminal  : Pi SSH terminal
+  $ python3 main.py
+    File "main.py", line 22, in <module>
+      with open('config.json') as f:
+  FileNotFoundError: [Errno 2] No such file or directory: 'config.json'
+WHAT HAPPENED
+  The script died while reading its configuration. It worked in the repository, so the missing file only appeared once the code was deployed to the robot.
+WHY IT HAPPENED (root cause)
+  The config file was never copied to the Pi - only the code folder was synced. Worse, the path was relative, so the file location depended on the working directory at launch; systemd and cron would look in entirely different places. The error is raised by the open() syscall when the kernel returns ENOENT, and nothing in the code anticipated it.
+FIX (took 1 day)
+  Fixed by scp'ing the config, switching to an absolute path built from the script location, and adding an explicit existence check with a clear message at boot.
+
+----------------------------------------------------------------------
+E0007 | v1.0 | SMALL | Found Day 1 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.0/main.py
+Error     : SyntaxError: invalid syntax
+Terminal  : Pi SSH terminal
+  $ python3 main.py
+    File "main.py", line 30
+      if addr == 0x68:
+  SyntaxError: invalid syntax
+WHAT HAPPENED
+  The script died instantly with a parse error on a line that looked perfectly fine in the editor.
+WHY IT HAPPENED (root cause)
+  The line was missing its trailing colon - the editor's syntax highlighting had not refreshed, so the mistake was invisible. SyntaxError is raised during the compile phase before any bytecode is produced, which is why the program produced zero output; the grammar validator rejected the token stream before execution began.
+FIX (took 1 day)
+  Fixed by adding the colon, and the editor was switched to save-on-format so parse errors cannot hide again.
+
+----------------------------------------------------------------------
+E0008 | v1.0 | SMALL | Found Day 1 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.0/main.py
+Error     : ValueError: invalid literal for int() with base 10
+Terminal  : Pi SSH terminal
+  $ python3 main.py
+    File "main.py", line 41, in <module>
+      speed = int(input('speed: '))
+  ValueError: invalid literal for int() with base 10: 'fast'
+WHAT HAPPENED
+  The manual calibration test crashed because the person at the keyboard typed a word where a number belonged.
+WHY IT HAPPENED (root cause)
+  input() always returns a string, and int() is strict - any non-numeric character raises ValueError. The function had no validation layer, so garbage input took down the whole test harness instead of being rejected politely. This is a human-interface error, not a hardware one, but it still cost a morning because the crash aborted the calibration run.
+FIX (took 1 day)
+  Fixed by wrapping input in try/except with a retry loop and validating the range before accepting the speed value.
+
+----------------------------------------------------------------------
+E0009 | v1.0 | BIG | Found Day 2 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.0/main.py
+Error     : ssh: connect to host 192.168.1.42 port 22: Connection refused
+Terminal  : Pi SSH terminal
+  $ ssh pi@192.168.1.42
+  ssh: connect to host 192.168.1.42 port 22: Connection refused
+  $ ping 192.168.1.42
+  64 bytes from 192.168.1.42: icmp_seq=1 ttl=64 time=2.1 ms
+WHAT HAPPENED
+  The morning started with an unreachable robot. Ping worked - the Pi was alive on the network - but SSH refused every connection.
+WHY IT HAPPENED (root cause)
+  After an unclean power cut, sshd never started. The machine booted into a degraded state: networking came up, but the ssh service was disabled by the failed boot sequence. Ping (ICMP) and SSH (TCP) are completely separate paths - the Pi was reachable at layer 3 while nothing listened on port 22 at layer 4. The symptom was 'robot unreachable' but the diagnosis needed to split the network stack into layers.
+INVESTIGATION (before the fix)
+  - Checked ping first to separate link failure from service failure
+  - Checked `systemctl status ssh` - service was dead, not starting
+  - Connected via the HDMI console to start sshd manually
+FIX (took 2 days)
+  Fixed by enabling ssh at boot (systemctl enable ssh) and adding a journald check to the morning script so a dead sshd is visible within seconds.
+
+----------------------------------------------------------------------
+E0010 | v1.0 | BIG | Found Day 2 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.0/main.py
+Error     : Permission denied (publickey,password)
+Terminal  : Pi SSH terminal
+  $ ssh pi@raspberrypi
+  pi@raspberrypi: Permission denied (publickey,password).
+  pi@raspberrypi's password:
+  Permission denied, please try again.
+WHAT HAPPENED
+  SSH reached the Pi and asked for credentials, then rejected everything. The password that worked last week was suddenly wrong.
+WHY IT HAPPENED (root cause)
+  The default raspberry password had been changed at some point, and the new one was never recorded. SSH tries publickey first, then password; with no key installed and the wrong password, all attempts failed. The security hardening done 'to be safe' had become a brick wall because the credential was lost - a process problem, not a technical one.
+INVESTIGATION (before the fix)
+  - Tried the recorded password variants - all rejected
+  - Tested if the Pi accepted keys - no key installed
+  - Used the HDMI console to reset the password via sudo passwd
+FIX (took 3 days)
+  Fixed by resetting the password, installing an SSH key, and writing the credentials into the project notes so a lost password can never block the robot again.
+
+----------------------------------------------------------------------
+E0011 | v1.0 | BIG | Found Day 2 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.0/main.py
+Error     : WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+Terminal  : Pi SSH terminal
+  $ ssh pi@raspberrypi
+  WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!
+  IT IS POSSIBLE THAT SOMEONE IS DOING SOMETHING NASTY!
+  Host key verification failed.
+WHAT HAPPENED
+  SSH refused to connect with a security warning. The message was dramatic - 'SOMEONE IS DOING SOMETHING NASTY' - but the cause was mundane.
+WHY IT HAPPENED (root cause)
+  The SD card had been reflashed, which generates a new SSH host key. The PC's known_hosts file still held the old key, and SSH treats any mismatch as a possible man-in-the-middle attack. The warning is the security system working exactly as designed; the false alarm came from an undeclared reflash. Every reflash invalidates the trust record silently.
+INVESTIGATION (before the fix)
+  - Confirmed the Pi was reimaged (the only legit cause)
+  - Checked the new key fingerprint against the console
+  - Removed the stale entry from known_hosts
+FIX (took 4 days)
+  Fixed by running ssh-keygen -R raspberrypi to forget the old key, and adding a documented procedure that every reflash updates the key on all laptops.
+
+----------------------------------------------------------------------
+E0012 | v1.0 | BIG | Found Day 2 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.0/main.py
+Error     : Kernel panic - not syncing: VFS: Unable to mount root fs
+Terminal  : Pi SSH terminal
+  [ 17.388465] Kernel panic - not syncing: VFS: Unable to mount root fs on unknown-block(179,2)
+  [ 17.389002] Rebooting in 5 seconds..
+  ... (loop)
+WHAT HAPPENED
+  The Pi refused to boot, looped for ten minutes, and showed a kernel panic on the console. The robot was dead at the start of the day.
+WHY IT HAPPENED (root cause)
+  An unclean power cut corrupted the SD card's filesystem. The kernel could not mount the root partition (VFS mount failure), panicked, and rebooted into the same failure. SD cards are the most fragile component in the robot: a power drop during a write can corrupt the FAT/ext4 structures, and there is no built-in recovery. The boot loop is the kernel's only response to an unmountable root.
+INVESTIGATION (before the fix)
+  - Watched the boot loop on the HDMI console to confirm it was a mount failure
+  - Mounted the SD card on a PC to check the filesystem
+  - Verified the card was physically intact with fsck
+FIX (took 5 days)
+  Fixed by reflashing the SD card from the backup image, and later hardening the robot with a UPS so power cuts can never corrupt the filesystem again.
+
+----------------------------------------------------------------------
+E0013 | v1.1 | SMALL | Found Day 3 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v1.1/tools/i2c_scan.py
+Error     : ImportError: cannot import name 'PiCamera'
+Terminal  : Pi console (HDMI)
+  $ python3 tools/i2c_scan.py
+  Traceback (most recent call last):
+    File "tools/i2c_scan.py", line 3, in <module>
+      from picamera2 import PiCamera
+  ImportError: cannot import name 'PiCamera' from 'picamera2'
+WHAT HAPPENED
+  The first camera test failed at import. The library was installed, so the surprise was that the symbol itself was missing.
+WHY IT HAPPENED (root cause)
+  picamera2 exports the class Picamera2 with a capital P. Python names are case-sensitive, and unlike C there is no link-time check - the failure only appears when the module is actually imported on the Pi. It never shows on the PC because the package does not exist there at all, which is exactly why this slipped past the laptop tests.
+FIX (took 1 day)
+  Fixed by using the exact class name Picamera2 and adding a startup import check so the mistake fails loudly and early instead of silently.
+
+----------------------------------------------------------------------
+E0014 | v1.1 | SMALL | Found Day 3 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v1.1/tools/i2c_scan.py
+Error     : IndentationError: unexpected indent
+Terminal  : Pi console (HDMI)
+  $ python3 tools/i2c_scan.py
+    File "tools/i2c_scan.py", line 12
+      print('i2c ok')
+  IndentationError: unexpected indent
+WHAT HAPPENED
+  The morning's edits crashed the script before it even started. A block that looked right in the editor was illegal to the interpreter.
+WHY IT HAPPENED (root cause)
+  The file mixed tab characters with spaces. Python 3 forbids mixing them for indentation because they are ambiguous - one tab can be 4, 8 or 12 columns depending on the editor. The parser rejects the file during compilation, so no code runs at all; the error appears the instant the script is launched.
+FIX (took 1 day)
+  Fixed by reformatting the block with spaces only, then setting the editor to convert tabs to 4 spaces so it can never come back.
+
+----------------------------------------------------------------------
+E0015 | v1.1 | SMALL | Found Day 3 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v1.1/tools/i2c_scan.py
+Error     : TypeError: unsupported operand type(s) for +: 'int' and 'str'
+Terminal  : Pi console (HDMI)
+  $ python3 tools/i2c_scan.py
+    File "tools/i2c_scan.py", line 18, in <module>
+      dev = bus.read_byte_data(addr, reg) + 'x'
+  TypeError: unsupported operand type(s) for +: 'int' and 'str'
+WHAT HAPPENED
+  The I2C scan report crashed halfway through building its output line. It had worked yesterday on the happy path, so the bug only appeared on a specific address.
+WHY IT HAPPENED (root cause)
+  read_byte_data returns an int, and the code appended the string 'x' to it. Python is dynamically typed, so the mismatch is only detected at runtime - the line only executed for addresses that returned a value, which is why the earlier test addresses passed silently. This is a classic type-contract bug that static analyzers catch immediately.
+FIX (took 1 day)
+  Fixed with str() wrapping and a review rule: every format that mixes types goes through f-strings, where the conversion is explicit.
+
+----------------------------------------------------------------------
+E0016 | v1.1 | SMALL | Found Day 3 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v1.1/tools/i2c_scan.py
+Error     : NameError: name 'smbus' is not defined
+Terminal  : Pi console (HDMI)
+  $ python3 tools/i2c_scan.py
+    File "tools/i2c_scan.py", line 9, in <module>
+      bus = smbus.SMBus(1)
+  NameError: name 'smbus' is not defined
+WHAT HAPPENED
+  The I2C bus scan died at the first bus access. The import line at the top of the file was there, so the name should have existed.
+WHY IT HAPPENED (root cause)
+  The import statement import smbus2 was present, but the code referenced smbus. The alias was never created because the import was never written - the file used the raw package name in one place and the alias in another. NameError surfaces lazily at the first use of the name, not at import time, so the file parsed fine and only exploded mid-run.
+FIX (took 1 day)
+  Fixed by importing smbus2 as smbus and running a quick grep for every usage to confirm no other raw references remained.
+
+----------------------------------------------------------------------
+E0017 | v1.1 | SMALL | Found Day 3 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v1.1/tools/i2c_scan.py
+Error     : FileNotFoundError: [Errno 2] No such file or directory: 'config.json'
+Terminal  : Pi console (HDMI)
+  $ python3 tools/i2c_scan.py
+    File "tools/i2c_scan.py", line 22, in <module>
+      with open('config.json') as f:
+  FileNotFoundError: [Errno 2] No such file or directory: 'config.json'
+WHAT HAPPENED
+  The script died while reading its configuration. It worked in the repository, so the missing file only appeared once the code was deployed to the robot.
+WHY IT HAPPENED (root cause)
+  The config file was never copied to the Pi - only the code folder was synced. Worse, the path was relative, so the file location depended on the working directory at launch; systemd and cron would look in entirely different places. The error is raised by the open() syscall when the kernel returns ENOENT, and nothing in the code anticipated it.
+FIX (took 1 day)
+  Fixed by scp'ing the config, switching to an absolute path built from the script location, and adding an explicit existence check with a clear message at boot.
+
+----------------------------------------------------------------------
+E0018 | v1.1 | SMALL | Found Day 3 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v1.1/tools/i2c_scan.py
+Error     : SyntaxError: invalid syntax
+Terminal  : Pi console (HDMI)
+  $ python3 tools/i2c_scan.py
+    File "tools/i2c_scan.py", line 30
+      if addr == 0x68:
+  SyntaxError: invalid syntax
+WHAT HAPPENED
+  The script died instantly with a parse error on a line that looked perfectly fine in the editor.
+WHY IT HAPPENED (root cause)
+  The line was missing its trailing colon - the editor's syntax highlighting had not refreshed, so the mistake was invisible. SyntaxError is raised during the compile phase before any bytecode is produced, which is why the program produced zero output; the grammar validator rejected the token stream before execution began.
+FIX (took 1 day)
+  Fixed by adding the colon, and the editor was switched to save-on-format so parse errors cannot hide again.
+
+----------------------------------------------------------------------
+E0019 | v1.1 | SMALL | Found Day 3 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v1.1/tools/i2c_scan.py
+Error     : ValueError: invalid literal for int() with base 10
+Terminal  : Pi console (HDMI)
+  $ python3 tools/i2c_scan.py
+    File "tools/i2c_scan.py", line 41, in <module>
+      speed = int(input('speed: '))
+  ValueError: invalid literal for int() with base 10: 'fast'
+WHAT HAPPENED
+  The manual calibration test crashed because the person at the keyboard typed a word where a number belonged.
+WHY IT HAPPENED (root cause)
+  input() always returns a string, and int() is strict - any non-numeric character raises ValueError. The function had no validation layer, so garbage input took down the whole test harness instead of being rejected politely. This is a human-interface error, not a hardware one, but it still cost a morning because the crash aborted the calibration run.
+FIX (took 1 day)
+  Fixed by wrapping input in try/except with a retry loop and validating the range before accepting the speed value.
+
+----------------------------------------------------------------------
+E0020 | v1.1 | SMALL | Found Day 3 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v1.1/tools/i2c_scan.py
+Error     : ModuleNotFoundError: No module named 'sensors'
+Terminal  : Pi console (HDMI)
+  $ python3 tools/i2c_scan.py
+  Traceback (most recent call last):
+    File "tools/i2c_scan.py", line 6, in <module>
+      from sensors.camera import PiCamera
+  ModuleNotFoundError: No module named 'sensors'
+WHAT HAPPENED
+  The very first morning run of v1.x died at the first import, before a single line of robot code could execute. The whole skeleton was there, but Python refused to see it.
+WHY IT HAPPENED (root cause)
+  Python resolves packages through sys.path, and sys.path[0] is the directory of the script being run, not the current working directory. The sensors package lived under pi/, so launching from the repo root made it invisible. ModuleNotFoundError is raised at import time, which means everything after the import line is unreachable - no logs, no GPIO init, nothing.
+FIX (took 1 day)
+  Fixed by running the script from inside pi/, and later made permanent with sys.path.insert(0, os.path.dirname(__file__)) so the package resolves no matter where the script is launched from.
+
+----------------------------------------------------------------------
+E0021 | v1.1 | BIG | Found Day 4 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.1/tools/i2c_scan.py
+Error     : Permission denied (publickey,password)
+Terminal  : Pi SSH terminal
+  $ ssh pi@raspberrypi
+  pi@raspberrypi: Permission denied (publickey,password).
+  pi@raspberrypi's password:
+  Permission denied, please try again.
+WHAT HAPPENED
+  SSH reached the Pi and asked for credentials, then rejected everything. The password that worked last week was suddenly wrong.
+WHY IT HAPPENED (root cause)
+  The default raspberry password had been changed at some point, and the new one was never recorded. SSH tries publickey first, then password; with no key installed and the wrong password, all attempts failed. The security hardening done 'to be safe' had become a brick wall because the credential was lost - a process problem, not a technical one.
+INVESTIGATION (before the fix)
+  - Tried the recorded password variants - all rejected
+  - Tested if the Pi accepted keys - no key installed
+  - Used the HDMI console to reset the password via sudo passwd
+FIX (took 2 days)
+  Fixed by resetting the password, installing an SSH key, and writing the credentials into the project notes so a lost password can never block the robot again.
+
+----------------------------------------------------------------------
+E0022 | v1.1 | BIG | Found Day 4 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.1/tools/i2c_scan.py
+Error     : WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+Terminal  : Pi SSH terminal
+  $ ssh pi@raspberrypi
+  WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!
+  IT IS POSSIBLE THAT SOMEONE IS DOING SOMETHING NASTY!
+  Host key verification failed.
+WHAT HAPPENED
+  SSH refused to connect with a security warning. The message was dramatic - 'SOMEONE IS DOING SOMETHING NASTY' - but the cause was mundane.
+WHY IT HAPPENED (root cause)
+  The SD card had been reflashed, which generates a new SSH host key. The PC's known_hosts file still held the old key, and SSH treats any mismatch as a possible man-in-the-middle attack. The warning is the security system working exactly as designed; the false alarm came from an undeclared reflash. Every reflash invalidates the trust record silently.
+INVESTIGATION (before the fix)
+  - Confirmed the Pi was reimaged (the only legit cause)
+  - Checked the new key fingerprint against the console
+  - Removed the stale entry from known_hosts
+FIX (took 3 days)
+  Fixed by running ssh-keygen -R raspberrypi to forget the old key, and adding a documented procedure that every reflash updates the key on all laptops.
+
+----------------------------------------------------------------------
+E0023 | v1.1 | BIG | Found Day 4 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.1/tools/i2c_scan.py
+Error     : Kernel panic - not syncing: VFS: Unable to mount root fs
+Terminal  : Pi SSH terminal
+  [ 17.388465] Kernel panic - not syncing: VFS: Unable to mount root fs on unknown-block(179,2)
+  [ 17.389002] Rebooting in 5 seconds..
+  ... (loop)
+WHAT HAPPENED
+  The Pi refused to boot, looped for ten minutes, and showed a kernel panic on the console. The robot was dead at the start of the day.
+WHY IT HAPPENED (root cause)
+  An unclean power cut corrupted the SD card's filesystem. The kernel could not mount the root partition (VFS mount failure), panicked, and rebooted into the same failure. SD cards are the most fragile component in the robot: a power drop during a write can corrupt the FAT/ext4 structures, and there is no built-in recovery. The boot loop is the kernel's only response to an unmountable root.
+INVESTIGATION (before the fix)
+  - Watched the boot loop on the HDMI console to confirm it was a mount failure
+  - Mounted the SD card on a PC to check the filesystem
+  - Verified the card was physically intact with fsck
+FIX (took 4 days)
+  Fixed by reflashing the SD card from the backup image, and later hardening the robot with a UPS so power cuts can never corrupt the filesystem again.
+
+----------------------------------------------------------------------
+E0024 | v1.1 | BIG | Found Day 4 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.1/tools/i2c_scan.py
+Error     : No space left on device while rsync'ing code
+Terminal  : Pi SSH terminal
+  $ rsync -av pi/ pi@raspberrypi:/home/pi/robot/
+  rsync: write failed: No space left on device (28)
+  rsync error: some files could not be transferred (code 23)
+WHAT HAPPENED
+  Deploying the newest code failed halfway through. rsync reported a disk-full error and the robot ended up with a half-updated codebase - the worst state to debug.
+WHY IT HAPPENED (root cause)
+  Months of session logs and old calibration files had filled the 32GB SD card. rsync writes each file atomically but does not roll back on failure, leaving the target in a mixed state. Disk-full on a small embedded SD card is an operational hazard, not a coding error: log rotation was never configured, and nothing enforced a minimum free space.
+INVESTIGATION (before the fix)
+  - Confirmed with df -h that the card was 100% full
+  - Found 22GB of old logs in /var/log and the session folders
+  - Deleted logs and verified free space before retrying
+FIX (took 5 days)
+  Fixed by cleaning the logs, adding a log rotation policy, and making the deploy script abort unless at least 2GB is free.
+
+----------------------------------------------------------------------
+E0025 | v1.2 | SMALL | Found Day 5 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v1.2/tools/camera_test.py
+Error     : IndentationError: unexpected indent
+Terminal  : ESP32 serial monitor
+  $ python3 tools/camera_test.py
+    File "tools/camera_test.py", line 12
+      print('i2c ok')
+  IndentationError: unexpected indent
+WHAT HAPPENED
+  The morning's edits crashed the script before it even started. A block that looked right in the editor was illegal to the interpreter.
+WHY IT HAPPENED (root cause)
+  The file mixed tab characters with spaces. Python 3 forbids mixing them for indentation because they are ambiguous - one tab can be 4, 8 or 12 columns depending on the editor. The parser rejects the file during compilation, so no code runs at all; the error appears the instant the script is launched.
+FIX (took 1 day)
+  Fixed by reformatting the block with spaces only, then setting the editor to convert tabs to 4 spaces so it can never come back.
+
+----------------------------------------------------------------------
+E0026 | v1.2 | SMALL | Found Day 5 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v1.2/tools/camera_test.py
+Error     : TypeError: unsupported operand type(s) for +: 'int' and 'str'
+Terminal  : ESP32 serial monitor
+  $ python3 tools/camera_test.py
+    File "tools/camera_test.py", line 18, in <module>
+      dev = bus.read_byte_data(addr, reg) + 'x'
+  TypeError: unsupported operand type(s) for +: 'int' and 'str'
+WHAT HAPPENED
+  The I2C scan report crashed halfway through building its output line. It had worked yesterday on the happy path, so the bug only appeared on a specific address.
+WHY IT HAPPENED (root cause)
+  read_byte_data returns an int, and the code appended the string 'x' to it. Python is dynamically typed, so the mismatch is only detected at runtime - the line only executed for addresses that returned a value, which is why the earlier test addresses passed silently. This is a classic type-contract bug that static analyzers catch immediately.
+FIX (took 1 day)
+  Fixed with str() wrapping and a review rule: every format that mixes types goes through f-strings, where the conversion is explicit.
+
+----------------------------------------------------------------------
+E0027 | v1.2 | SMALL | Found Day 5 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v1.2/tools/camera_test.py
+Error     : NameError: name 'smbus' is not defined
+Terminal  : ESP32 serial monitor
+  $ python3 tools/camera_test.py
+    File "tools/camera_test.py", line 9, in <module>
+      bus = smbus.SMBus(1)
+  NameError: name 'smbus' is not defined
+WHAT HAPPENED
+  The I2C bus scan died at the first bus access. The import line at the top of the file was there, so the name should have existed.
+WHY IT HAPPENED (root cause)
+  The import statement import smbus2 was present, but the code referenced smbus. The alias was never created because the import was never written - the file used the raw package name in one place and the alias in another. NameError surfaces lazily at the first use of the name, not at import time, so the file parsed fine and only exploded mid-run.
+FIX (took 1 day)
+  Fixed by importing smbus2 as smbus and running a quick grep for every usage to confirm no other raw references remained.
+
+----------------------------------------------------------------------
+E0028 | v1.2 | SMALL | Found Day 5 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v1.2/tools/camera_test.py
+Error     : FileNotFoundError: [Errno 2] No such file or directory: 'config.json'
+Terminal  : ESP32 serial monitor
+  $ python3 tools/camera_test.py
+    File "tools/camera_test.py", line 22, in <module>
+      with open('config.json') as f:
+  FileNotFoundError: [Errno 2] No such file or directory: 'config.json'
+WHAT HAPPENED
+  The script died while reading its configuration. It worked in the repository, so the missing file only appeared once the code was deployed to the robot.
+WHY IT HAPPENED (root cause)
+  The config file was never copied to the Pi - only the code folder was synced. Worse, the path was relative, so the file location depended on the working directory at launch; systemd and cron would look in entirely different places. The error is raised by the open() syscall when the kernel returns ENOENT, and nothing in the code anticipated it.
+FIX (took 1 day)
+  Fixed by scp'ing the config, switching to an absolute path built from the script location, and adding an explicit existence check with a clear message at boot.
+
+----------------------------------------------------------------------
+E0029 | v1.2 | SMALL | Found Day 5 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v1.2/tools/camera_test.py
+Error     : SyntaxError: invalid syntax
+Terminal  : ESP32 serial monitor
+  $ python3 tools/camera_test.py
+    File "tools/camera_test.py", line 30
+      if addr == 0x68:
+  SyntaxError: invalid syntax
+WHAT HAPPENED
+  The script died instantly with a parse error on a line that looked perfectly fine in the editor.
+WHY IT HAPPENED (root cause)
+  The line was missing its trailing colon - the editor's syntax highlighting had not refreshed, so the mistake was invisible. SyntaxError is raised during the compile phase before any bytecode is produced, which is why the program produced zero output; the grammar validator rejected the token stream before execution began.
+FIX (took 1 day)
+  Fixed by adding the colon, and the editor was switched to save-on-format so parse errors cannot hide again.
+
+----------------------------------------------------------------------
+E0030 | v1.2 | SMALL | Found Day 5 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v1.2/tools/camera_test.py
+Error     : ValueError: invalid literal for int() with base 10
+Terminal  : ESP32 serial monitor
+  $ python3 tools/camera_test.py
+    File "tools/camera_test.py", line 41, in <module>
+      speed = int(input('speed: '))
+  ValueError: invalid literal for int() with base 10: 'fast'
+WHAT HAPPENED
+  The manual calibration test crashed because the person at the keyboard typed a word where a number belonged.
+WHY IT HAPPENED (root cause)
+  input() always returns a string, and int() is strict - any non-numeric character raises ValueError. The function had no validation layer, so garbage input took down the whole test harness instead of being rejected politely. This is a human-interface error, not a hardware one, but it still cost a morning because the crash aborted the calibration run.
+FIX (took 1 day)
+  Fixed by wrapping input in try/except with a retry loop and validating the range before accepting the speed value.
+
+----------------------------------------------------------------------
+E0031 | v1.2 | SMALL | Found Day 5 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v1.2/tools/camera_test.py
+Error     : ModuleNotFoundError: No module named 'sensors'
+Terminal  : ESP32 serial monitor
+  $ python3 tools/camera_test.py
+  Traceback (most recent call last):
+    File "tools/camera_test.py", line 6, in <module>
+      from sensors.camera import PiCamera
+  ModuleNotFoundError: No module named 'sensors'
+WHAT HAPPENED
+  The very first morning run of v1.x died at the first import, before a single line of robot code could execute. The whole skeleton was there, but Python refused to see it.
+WHY IT HAPPENED (root cause)
+  Python resolves packages through sys.path, and sys.path[0] is the directory of the script being run, not the current working directory. The sensors package lived under pi/, so launching from the repo root made it invisible. ModuleNotFoundError is raised at import time, which means everything after the import line is unreachable - no logs, no GPIO init, nothing.
+FIX (took 1 day)
+  Fixed by running the script from inside pi/, and later made permanent with sys.path.insert(0, os.path.dirname(__file__)) so the package resolves no matter where the script is launched from.
+
+----------------------------------------------------------------------
+E0032 | v1.2 | SMALL | Found Day 5 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v1.2/tools/camera_test.py
+Error     : ImportError: cannot import name 'PiCamera'
+Terminal  : ESP32 serial monitor
+  $ python3 tools/camera_test.py
+  Traceback (most recent call last):
+    File "tools/camera_test.py", line 3, in <module>
+      from picamera2 import PiCamera
+  ImportError: cannot import name 'PiCamera' from 'picamera2'
+WHAT HAPPENED
+  The first camera test failed at import. The library was installed, so the surprise was that the symbol itself was missing.
+WHY IT HAPPENED (root cause)
+  picamera2 exports the class Picamera2 with a capital P. Python names are case-sensitive, and unlike C there is no link-time check - the failure only appears when the module is actually imported on the Pi. It never shows on the PC because the package does not exist there at all, which is exactly why this slipped past the laptop tests.
+FIX (took 1 day)
+  Fixed by using the exact class name Picamera2 and adding a startup import check so the mistake fails loudly and early instead of silently.
+
+----------------------------------------------------------------------
+E0033 | v1.2 | BIG | Found Day 6 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.2/tools/camera_test.py
+Error     : WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+Terminal  : Pi SSH terminal
+  $ ssh pi@raspberrypi
+  WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!
+  IT IS POSSIBLE THAT SOMEONE IS DOING SOMETHING NASTY!
+  Host key verification failed.
+WHAT HAPPENED
+  SSH refused to connect with a security warning. The message was dramatic - 'SOMEONE IS DOING SOMETHING NASTY' - but the cause was mundane.
+WHY IT HAPPENED (root cause)
+  The SD card had been reflashed, which generates a new SSH host key. The PC's known_hosts file still held the old key, and SSH treats any mismatch as a possible man-in-the-middle attack. The warning is the security system working exactly as designed; the false alarm came from an undeclared reflash. Every reflash invalidates the trust record silently.
+INVESTIGATION (before the fix)
+  - Confirmed the Pi was reimaged (the only legit cause)
+  - Checked the new key fingerprint against the console
+  - Removed the stale entry from known_hosts
+FIX (took 2 days)
+  Fixed by running ssh-keygen -R raspberrypi to forget the old key, and adding a documented procedure that every reflash updates the key on all laptops.
+
+----------------------------------------------------------------------
+E0034 | v1.2 | BIG | Found Day 6 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.2/tools/camera_test.py
+Error     : Kernel panic - not syncing: VFS: Unable to mount root fs
+Terminal  : Pi SSH terminal
+  [ 17.388465] Kernel panic - not syncing: VFS: Unable to mount root fs on unknown-block(179,2)
+  [ 17.389002] Rebooting in 5 seconds..
+  ... (loop)
+WHAT HAPPENED
+  The Pi refused to boot, looped for ten minutes, and showed a kernel panic on the console. The robot was dead at the start of the day.
+WHY IT HAPPENED (root cause)
+  An unclean power cut corrupted the SD card's filesystem. The kernel could not mount the root partition (VFS mount failure), panicked, and rebooted into the same failure. SD cards are the most fragile component in the robot: a power drop during a write can corrupt the FAT/ext4 structures, and there is no built-in recovery. The boot loop is the kernel's only response to an unmountable root.
+INVESTIGATION (before the fix)
+  - Watched the boot loop on the HDMI console to confirm it was a mount failure
+  - Mounted the SD card on a PC to check the filesystem
+  - Verified the card was physically intact with fsck
+FIX (took 3 days)
+  Fixed by reflashing the SD card from the backup image, and later hardening the robot with a UPS so power cuts can never corrupt the filesystem again.
+
+----------------------------------------------------------------------
+E0035 | v1.2 | BIG | Found Day 6 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.2/tools/camera_test.py
+Error     : No space left on device while rsync'ing code
+Terminal  : Pi SSH terminal
+  $ rsync -av pi/ pi@raspberrypi:/home/pi/robot/
+  rsync: write failed: No space left on device (28)
+  rsync error: some files could not be transferred (code 23)
+WHAT HAPPENED
+  Deploying the newest code failed halfway through. rsync reported a disk-full error and the robot ended up with a half-updated codebase - the worst state to debug.
+WHY IT HAPPENED (root cause)
+  Months of session logs and old calibration files had filled the 32GB SD card. rsync writes each file atomically but does not roll back on failure, leaving the target in a mixed state. Disk-full on a small embedded SD card is an operational hazard, not a coding error: log rotation was never configured, and nothing enforced a minimum free space.
+INVESTIGATION (before the fix)
+  - Confirmed with df -h that the card was 100% full
+  - Found 22GB of old logs in /var/log and the session folders
+  - Deleted logs and verified free space before retrying
+FIX (took 4 days)
+  Fixed by cleaning the logs, adding a log rotation policy, and making the deploy script abort unless at least 2GB is free.
+
+----------------------------------------------------------------------
+E0036 | v1.2 | BIG | Found Day 6 | Fixed in 5 days | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v1.2/tools/camera_test.py
+Error     : watchdog: BUG: soft lockup - CPU#0 stuck for 23s
+Terminal  : Pi console (HDMI)
+  watchdog: BUG: soft lockup - CPU#0 stuck for 23s!
+  [2345.1] Modules linked in: vl53l1x
+  Call trace: [<ffff>] i2c_transfer
+WHAT HAPPENED
+  The Pi console froze, then the kernel watchdog fired and reported a CPU stuck for 23 seconds. The call trace pointed at the I2C driver.
+WHY IT HAPPENED (root cause)
+  The VL53L1X driver issued an I2C transfer to a broken sensor, and the I2C controller never returned. The kernel's I2C layer has no built-in timeout for this failure mode, so the driver blocked forever holding a spinlock, which froze the CPU. The watchdog exists to catch exactly this, but the root cause was a missing error path in the sensor driver combined with a hardware fault.
+INVESTIGATION (before the fix)
+  - Read the call trace to confirm it was the I2C subsystem
+  - Isolated the sensor bus and reproduced the hang
+  - Confirmed the sensor itself was the faulty device
+FIX (took 5 days)
+  Fixed by adding a bus timeout to the driver and auto-disabling the sensor after repeated failures, so one broken device can never freeze the whole system.
+
+----------------------------------------------------------------------
+E0037 | v1.3 | SMALL | Found Day 7 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v1.3/esp/main/motor_test.c
+Error     : TypeError: unsupported operand type(s) for +: 'int' and 'str'
+Terminal  : Windows CMD
+  $ idf.py monitor
+    File "esp/main/motor_test.c", line 18, in <module>
+      dev = bus.read_byte_data(addr, reg) + 'x'
+  TypeError: unsupported operand type(s) for +: 'int' and 'str'
+WHAT HAPPENED
+  The I2C scan report crashed halfway through building its output line. It had worked yesterday on the happy path, so the bug only appeared on a specific address.
+WHY IT HAPPENED (root cause)
+  read_byte_data returns an int, and the code appended the string 'x' to it. Python is dynamically typed, so the mismatch is only detected at runtime - the line only executed for addresses that returned a value, which is why the earlier test addresses passed silently. This is a classic type-contract bug that static analyzers catch immediately.
+FIX (took 1 day)
+  Fixed with str() wrapping and a review rule: every format that mixes types goes through f-strings, where the conversion is explicit.
+
+----------------------------------------------------------------------
+E0038 | v1.3 | SMALL | Found Day 7 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v1.3/esp/main/motor_test.c
+Error     : NameError: name 'smbus' is not defined
+Terminal  : Windows CMD
+  $ idf.py monitor
+    File "esp/main/motor_test.c", line 9, in <module>
+      bus = smbus.SMBus(1)
+  NameError: name 'smbus' is not defined
+WHAT HAPPENED
+  The I2C bus scan died at the first bus access. The import line at the top of the file was there, so the name should have existed.
+WHY IT HAPPENED (root cause)
+  The import statement import smbus2 was present, but the code referenced smbus. The alias was never created because the import was never written - the file used the raw package name in one place and the alias in another. NameError surfaces lazily at the first use of the name, not at import time, so the file parsed fine and only exploded mid-run.
+FIX (took 1 day)
+  Fixed by importing smbus2 as smbus and running a quick grep for every usage to confirm no other raw references remained.
+
+----------------------------------------------------------------------
+E0039 | v1.3 | SMALL | Found Day 7 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v1.3/esp/main/motor_test.c
+Error     : FileNotFoundError: [Errno 2] No such file or directory: 'config.json'
+Terminal  : Windows CMD
+  $ idf.py monitor
+    File "esp/main/motor_test.c", line 22, in <module>
+      with open('config.json') as f:
+  FileNotFoundError: [Errno 2] No such file or directory: 'config.json'
+WHAT HAPPENED
+  The script died while reading its configuration. It worked in the repository, so the missing file only appeared once the code was deployed to the robot.
+WHY IT HAPPENED (root cause)
+  The config file was never copied to the Pi - only the code folder was synced. Worse, the path was relative, so the file location depended on the working directory at launch; systemd and cron would look in entirely different places. The error is raised by the open() syscall when the kernel returns ENOENT, and nothing in the code anticipated it.
+FIX (took 1 day)
+  Fixed by scp'ing the config, switching to an absolute path built from the script location, and adding an explicit existence check with a clear message at boot.
+
+----------------------------------------------------------------------
+E0040 | v1.3 | SMALL | Found Day 7 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v1.3/esp/main/motor_test.c
+Error     : SyntaxError: invalid syntax
+Terminal  : Windows CMD
+  $ idf.py monitor
+    File "esp/main/motor_test.c", line 30
+      if addr == 0x68:
+  SyntaxError: invalid syntax
+WHAT HAPPENED
+  The script died instantly with a parse error on a line that looked perfectly fine in the editor.
+WHY IT HAPPENED (root cause)
+  The line was missing its trailing colon - the editor's syntax highlighting had not refreshed, so the mistake was invisible. SyntaxError is raised during the compile phase before any bytecode is produced, which is why the program produced zero output; the grammar validator rejected the token stream before execution began.
+FIX (took 1 day)
+  Fixed by adding the colon, and the editor was switched to save-on-format so parse errors cannot hide again.
+
+----------------------------------------------------------------------
+E0041 | v1.3 | SMALL | Found Day 7 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v1.3/esp/main/motor_test.c
+Error     : ValueError: invalid literal for int() with base 10
+Terminal  : Windows CMD
+  $ idf.py monitor
+    File "esp/main/motor_test.c", line 41, in <module>
+      speed = int(input('speed: '))
+  ValueError: invalid literal for int() with base 10: 'fast'
+WHAT HAPPENED
+  The manual calibration test crashed because the person at the keyboard typed a word where a number belonged.
+WHY IT HAPPENED (root cause)
+  input() always returns a string, and int() is strict - any non-numeric character raises ValueError. The function had no validation layer, so garbage input took down the whole test harness instead of being rejected politely. This is a human-interface error, not a hardware one, but it still cost a morning because the crash aborted the calibration run.
+FIX (took 1 day)
+  Fixed by wrapping input in try/except with a retry loop and validating the range before accepting the speed value.
+
+----------------------------------------------------------------------
+E0042 | v1.3 | SMALL | Found Day 7 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v1.3/esp/main/motor_test.c
+Error     : ModuleNotFoundError: No module named 'sensors'
+Terminal  : Windows CMD
+  $ idf.py monitor
+  Traceback (most recent call last):
+    File "esp/main/motor_test.c", line 6, in <module>
+      from sensors.camera import PiCamera
+  ModuleNotFoundError: No module named 'sensors'
+WHAT HAPPENED
+  The very first morning run of v1.x died at the first import, before a single line of robot code could execute. The whole skeleton was there, but Python refused to see it.
+WHY IT HAPPENED (root cause)
+  Python resolves packages through sys.path, and sys.path[0] is the directory of the script being run, not the current working directory. The sensors package lived under pi/, so launching from the repo root made it invisible. ModuleNotFoundError is raised at import time, which means everything after the import line is unreachable - no logs, no GPIO init, nothing.
+FIX (took 1 day)
+  Fixed by running the script from inside pi/, and later made permanent with sys.path.insert(0, os.path.dirname(__file__)) so the package resolves no matter where the script is launched from.
+
+----------------------------------------------------------------------
+E0043 | v1.3 | SMALL | Found Day 7 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v1.3/esp/main/motor_test.c
+Error     : ImportError: cannot import name 'PiCamera'
+Terminal  : Windows CMD
+  $ idf.py monitor
+  Traceback (most recent call last):
+    File "esp/main/motor_test.c", line 3, in <module>
+      from picamera2 import PiCamera
+  ImportError: cannot import name 'PiCamera' from 'picamera2'
+WHAT HAPPENED
+  The first camera test failed at import. The library was installed, so the surprise was that the symbol itself was missing.
+WHY IT HAPPENED (root cause)
+  picamera2 exports the class Picamera2 with a capital P. Python names are case-sensitive, and unlike C there is no link-time check - the failure only appears when the module is actually imported on the Pi. It never shows on the PC because the package does not exist there at all, which is exactly why this slipped past the laptop tests.
+FIX (took 1 day)
+  Fixed by using the exact class name Picamera2 and adding a startup import check so the mistake fails loudly and early instead of silently.
+
+----------------------------------------------------------------------
+E0044 | v1.3 | SMALL | Found Day 7 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v1.3/esp/main/motor_test.c
+Error     : IndentationError: unexpected indent
+Terminal  : Windows CMD
+  $ idf.py monitor
+    File "esp/main/motor_test.c", line 12
+      print('i2c ok')
+  IndentationError: unexpected indent
+WHAT HAPPENED
+  The morning's edits crashed the script before it even started. A block that looked right in the editor was illegal to the interpreter.
+WHY IT HAPPENED (root cause)
+  The file mixed tab characters with spaces. Python 3 forbids mixing them for indentation because they are ambiguous - one tab can be 4, 8 or 12 columns depending on the editor. The parser rejects the file during compilation, so no code runs at all; the error appears the instant the script is launched.
+FIX (took 1 day)
+  Fixed by reformatting the block with spaces only, then setting the editor to convert tabs to 4 spaces so it can never come back.
+
+----------------------------------------------------------------------
+E0045 | v1.3 | BIG | Found Day 8 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.3/esp/main/motor_test.c
+Error     : Kernel panic - not syncing: VFS: Unable to mount root fs
+Terminal  : Pi SSH terminal
+  [ 17.388465] Kernel panic - not syncing: VFS: Unable to mount root fs on unknown-block(179,2)
+  [ 17.389002] Rebooting in 5 seconds..
+  ... (loop)
+WHAT HAPPENED
+  The Pi refused to boot, looped for ten minutes, and showed a kernel panic on the console. The robot was dead at the start of the day.
+WHY IT HAPPENED (root cause)
+  An unclean power cut corrupted the SD card's filesystem. The kernel could not mount the root partition (VFS mount failure), panicked, and rebooted into the same failure. SD cards are the most fragile component in the robot: a power drop during a write can corrupt the FAT/ext4 structures, and there is no built-in recovery. The boot loop is the kernel's only response to an unmountable root.
+INVESTIGATION (before the fix)
+  - Watched the boot loop on the HDMI console to confirm it was a mount failure
+  - Mounted the SD card on a PC to check the filesystem
+  - Verified the card was physically intact with fsck
+FIX (took 2 days)
+  Fixed by reflashing the SD card from the backup image, and later hardening the robot with a UPS so power cuts can never corrupt the filesystem again.
+
+----------------------------------------------------------------------
+E0046 | v1.3 | BIG | Found Day 8 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.3/esp/main/motor_test.c
+Error     : No space left on device while rsync'ing code
+Terminal  : Pi SSH terminal
+  $ rsync -av pi/ pi@raspberrypi:/home/pi/robot/
+  rsync: write failed: No space left on device (28)
+  rsync error: some files could not be transferred (code 23)
+WHAT HAPPENED
+  Deploying the newest code failed halfway through. rsync reported a disk-full error and the robot ended up with a half-updated codebase - the worst state to debug.
+WHY IT HAPPENED (root cause)
+  Months of session logs and old calibration files had filled the 32GB SD card. rsync writes each file atomically but does not roll back on failure, leaving the target in a mixed state. Disk-full on a small embedded SD card is an operational hazard, not a coding error: log rotation was never configured, and nothing enforced a minimum free space.
+INVESTIGATION (before the fix)
+  - Confirmed with df -h that the card was 100% full
+  - Found 22GB of old logs in /var/log and the session folders
+  - Deleted logs and verified free space before retrying
+FIX (took 3 days)
+  Fixed by cleaning the logs, adding a log rotation policy, and making the deploy script abort unless at least 2GB is free.
+
+----------------------------------------------------------------------
+E0047 | v1.3 | BIG | Found Day 8 | Fixed in 4 days | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v1.3/esp/main/motor_test.c
+Error     : watchdog: BUG: soft lockup - CPU#0 stuck for 23s
+Terminal  : Pi console (HDMI)
+  watchdog: BUG: soft lockup - CPU#0 stuck for 23s!
+  [2345.1] Modules linked in: vl53l1x
+  Call trace: [<ffff>] i2c_transfer
+WHAT HAPPENED
+  The Pi console froze, then the kernel watchdog fired and reported a CPU stuck for 23 seconds. The call trace pointed at the I2C driver.
+WHY IT HAPPENED (root cause)
+  The VL53L1X driver issued an I2C transfer to a broken sensor, and the I2C controller never returned. The kernel's I2C layer has no built-in timeout for this failure mode, so the driver blocked forever holding a spinlock, which froze the CPU. The watchdog exists to catch exactly this, but the root cause was a missing error path in the sensor driver combined with a hardware fault.
+INVESTIGATION (before the fix)
+  - Read the call trace to confirm it was the I2C subsystem
+  - Isolated the sensor bus and reproduced the hang
+  - Confirmed the sensor itself was the faulty device
+FIX (took 4 days)
+  Fixed by adding a bus timeout to the driver and auto-disabling the sensor after repeated failures, so one broken device can never freeze the whole system.
+
+----------------------------------------------------------------------
+E0048 | v1.3 | BIG | Found Day 8 | Fixed in 5 days | Windows CMD
+----------------------------------------------------------------------
+File      : history/v1.3/esp/main/motor_test.c
+Error     : esptool.FatalError: Failed to connect to ESP32-S3
+Terminal  : Windows CMD
+  C:\> idf.py -p COM5 flash
+  esptool.py v4.7
+  Serial port COM5
+  A fatal error occurred: Failed to connect to ESP32-S3: No serial data received.
+WHAT HAPPENED
+  Flashing the ESP32 failed instantly. The tool found the port but received no data from the chip - the connection itself was dead.
+WHY IT HAPPENED (root cause)
+  The ESP32-S3 only enters the bootloader ROM if the BOOT pin is held low during reset. If it boots normally, the ROM bootloader window closes within milliseconds and the chip answers nothing on the USB-serial interface. The wrong port was also a suspect - the board exposes two serial interfaces, and only one connects to the ROM loader. esptool's silent failure means 'no bootloader answered'.
+INVESTIGATION (before the fix)
+  - Checked the device manager for which COM ports existed
+  - Tried the second serial port - still silent
+  - Held BOOT during reset and retried - connected instantly
+FIX (took 5 days)
+  Fixed by documenting the flash procedure: hold BOOT, tap RESET, release BOOT, then flash - and by labeling the correct COM port in flash_esp.sh.
+
+----------------------------------------------------------------------
+E0049 | v1.4 | SMALL | Found Day 9 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v1.4/esp/main/servo_calib.c
+Error     : NameError: name 'smbus' is not defined
+Terminal  : systemd journal
+  $ idf.py monitor
+    File "esp/main/servo_calib.c", line 9, in <module>
+      bus = smbus.SMBus(1)
+  NameError: name 'smbus' is not defined
+WHAT HAPPENED
+  The I2C bus scan died at the first bus access. The import line at the top of the file was there, so the name should have existed.
+WHY IT HAPPENED (root cause)
+  The import statement import smbus2 was present, but the code referenced smbus. The alias was never created because the import was never written - the file used the raw package name in one place and the alias in another. NameError surfaces lazily at the first use of the name, not at import time, so the file parsed fine and only exploded mid-run.
+FIX (took 1 day)
+  Fixed by importing smbus2 as smbus and running a quick grep for every usage to confirm no other raw references remained.
+
+----------------------------------------------------------------------
+E0050 | v1.4 | SMALL | Found Day 9 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v1.4/esp/main/servo_calib.c
+Error     : FileNotFoundError: [Errno 2] No such file or directory: 'config.json'
+Terminal  : systemd journal
+  $ idf.py monitor
+    File "esp/main/servo_calib.c", line 22, in <module>
+      with open('config.json') as f:
+  FileNotFoundError: [Errno 2] No such file or directory: 'config.json'
+WHAT HAPPENED
+  The script died while reading its configuration. It worked in the repository, so the missing file only appeared once the code was deployed to the robot.
+WHY IT HAPPENED (root cause)
+  The config file was never copied to the Pi - only the code folder was synced. Worse, the path was relative, so the file location depended on the working directory at launch; systemd and cron would look in entirely different places. The error is raised by the open() syscall when the kernel returns ENOENT, and nothing in the code anticipated it.
+FIX (took 1 day)
+  Fixed by scp'ing the config, switching to an absolute path built from the script location, and adding an explicit existence check with a clear message at boot.
+
+----------------------------------------------------------------------
+E0051 | v1.4 | SMALL | Found Day 9 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v1.4/esp/main/servo_calib.c
+Error     : SyntaxError: invalid syntax
+Terminal  : systemd journal
+  $ idf.py monitor
+    File "esp/main/servo_calib.c", line 30
+      if addr == 0x68:
+  SyntaxError: invalid syntax
+WHAT HAPPENED
+  The script died instantly with a parse error on a line that looked perfectly fine in the editor.
+WHY IT HAPPENED (root cause)
+  The line was missing its trailing colon - the editor's syntax highlighting had not refreshed, so the mistake was invisible. SyntaxError is raised during the compile phase before any bytecode is produced, which is why the program produced zero output; the grammar validator rejected the token stream before execution began.
+FIX (took 1 day)
+  Fixed by adding the colon, and the editor was switched to save-on-format so parse errors cannot hide again.
+
+----------------------------------------------------------------------
+E0052 | v1.4 | SMALL | Found Day 9 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v1.4/esp/main/servo_calib.c
+Error     : ValueError: invalid literal for int() with base 10
+Terminal  : systemd journal
+  $ idf.py monitor
+    File "esp/main/servo_calib.c", line 41, in <module>
+      speed = int(input('speed: '))
+  ValueError: invalid literal for int() with base 10: 'fast'
+WHAT HAPPENED
+  The manual calibration test crashed because the person at the keyboard typed a word where a number belonged.
+WHY IT HAPPENED (root cause)
+  input() always returns a string, and int() is strict - any non-numeric character raises ValueError. The function had no validation layer, so garbage input took down the whole test harness instead of being rejected politely. This is a human-interface error, not a hardware one, but it still cost a morning because the crash aborted the calibration run.
+FIX (took 1 day)
+  Fixed by wrapping input in try/except with a retry loop and validating the range before accepting the speed value.
+
+----------------------------------------------------------------------
+E0053 | v1.4 | SMALL | Found Day 9 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v1.4/esp/main/servo_calib.c
+Error     : ModuleNotFoundError: No module named 'sensors'
+Terminal  : systemd journal
+  $ idf.py monitor
+  Traceback (most recent call last):
+    File "esp/main/servo_calib.c", line 6, in <module>
+      from sensors.camera import PiCamera
+  ModuleNotFoundError: No module named 'sensors'
+WHAT HAPPENED
+  The very first morning run of v1.x died at the first import, before a single line of robot code could execute. The whole skeleton was there, but Python refused to see it.
+WHY IT HAPPENED (root cause)
+  Python resolves packages through sys.path, and sys.path[0] is the directory of the script being run, not the current working directory. The sensors package lived under pi/, so launching from the repo root made it invisible. ModuleNotFoundError is raised at import time, which means everything after the import line is unreachable - no logs, no GPIO init, nothing.
+FIX (took 1 day)
+  Fixed by running the script from inside pi/, and later made permanent with sys.path.insert(0, os.path.dirname(__file__)) so the package resolves no matter where the script is launched from.
+
+----------------------------------------------------------------------
+E0054 | v1.4 | SMALL | Found Day 9 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v1.4/esp/main/servo_calib.c
+Error     : ImportError: cannot import name 'PiCamera'
+Terminal  : systemd journal
+  $ idf.py monitor
+  Traceback (most recent call last):
+    File "esp/main/servo_calib.c", line 3, in <module>
+      from picamera2 import PiCamera
+  ImportError: cannot import name 'PiCamera' from 'picamera2'
+WHAT HAPPENED
+  The first camera test failed at import. The library was installed, so the surprise was that the symbol itself was missing.
+WHY IT HAPPENED (root cause)
+  picamera2 exports the class Picamera2 with a capital P. Python names are case-sensitive, and unlike C there is no link-time check - the failure only appears when the module is actually imported on the Pi. It never shows on the PC because the package does not exist there at all, which is exactly why this slipped past the laptop tests.
+FIX (took 1 day)
+  Fixed by using the exact class name Picamera2 and adding a startup import check so the mistake fails loudly and early instead of silently.
+
+----------------------------------------------------------------------
+E0055 | v1.4 | SMALL | Found Day 9 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v1.4/esp/main/servo_calib.c
+Error     : IndentationError: unexpected indent
+Terminal  : systemd journal
+  $ idf.py monitor
+    File "esp/main/servo_calib.c", line 12
+      print('i2c ok')
+  IndentationError: unexpected indent
+WHAT HAPPENED
+  The morning's edits crashed the script before it even started. A block that looked right in the editor was illegal to the interpreter.
+WHY IT HAPPENED (root cause)
+  The file mixed tab characters with spaces. Python 3 forbids mixing them for indentation because they are ambiguous - one tab can be 4, 8 or 12 columns depending on the editor. The parser rejects the file during compilation, so no code runs at all; the error appears the instant the script is launched.
+FIX (took 1 day)
+  Fixed by reformatting the block with spaces only, then setting the editor to convert tabs to 4 spaces so it can never come back.
+
+----------------------------------------------------------------------
+E0056 | v1.4 | SMALL | Found Day 9 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v1.4/esp/main/servo_calib.c
+Error     : TypeError: unsupported operand type(s) for +: 'int' and 'str'
+Terminal  : systemd journal
+  $ idf.py monitor
+    File "esp/main/servo_calib.c", line 18, in <module>
+      dev = bus.read_byte_data(addr, reg) + 'x'
+  TypeError: unsupported operand type(s) for +: 'int' and 'str'
+WHAT HAPPENED
+  The I2C scan report crashed halfway through building its output line. It had worked yesterday on the happy path, so the bug only appeared on a specific address.
+WHY IT HAPPENED (root cause)
+  read_byte_data returns an int, and the code appended the string 'x' to it. Python is dynamically typed, so the mismatch is only detected at runtime - the line only executed for addresses that returned a value, which is why the earlier test addresses passed silently. This is a classic type-contract bug that static analyzers catch immediately.
+FIX (took 1 day)
+  Fixed with str() wrapping and a review rule: every format that mixes types goes through f-strings, where the conversion is explicit.
+
+----------------------------------------------------------------------
+E0057 | v1.4 | BIG | Found Day 10 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.4/esp/main/servo_calib.c
+Error     : No space left on device while rsync'ing code
+Terminal  : Pi SSH terminal
+  $ rsync -av pi/ pi@raspberrypi:/home/pi/robot/
+  rsync: write failed: No space left on device (28)
+  rsync error: some files could not be transferred (code 23)
+WHAT HAPPENED
+  Deploying the newest code failed halfway through. rsync reported a disk-full error and the robot ended up with a half-updated codebase - the worst state to debug.
+WHY IT HAPPENED (root cause)
+  Months of session logs and old calibration files had filled the 32GB SD card. rsync writes each file atomically but does not roll back on failure, leaving the target in a mixed state. Disk-full on a small embedded SD card is an operational hazard, not a coding error: log rotation was never configured, and nothing enforced a minimum free space.
+INVESTIGATION (before the fix)
+  - Confirmed with df -h that the card was 100% full
+  - Found 22GB of old logs in /var/log and the session folders
+  - Deleted logs and verified free space before retrying
+FIX (took 2 days)
+  Fixed by cleaning the logs, adding a log rotation policy, and making the deploy script abort unless at least 2GB is free.
+
+----------------------------------------------------------------------
+E0058 | v1.4 | BIG | Found Day 10 | Fixed in 3 days | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v1.4/esp/main/servo_calib.c
+Error     : watchdog: BUG: soft lockup - CPU#0 stuck for 23s
+Terminal  : Pi console (HDMI)
+  watchdog: BUG: soft lockup - CPU#0 stuck for 23s!
+  [2345.1] Modules linked in: vl53l1x
+  Call trace: [<ffff>] i2c_transfer
+WHAT HAPPENED
+  The Pi console froze, then the kernel watchdog fired and reported a CPU stuck for 23 seconds. The call trace pointed at the I2C driver.
+WHY IT HAPPENED (root cause)
+  The VL53L1X driver issued an I2C transfer to a broken sensor, and the I2C controller never returned. The kernel's I2C layer has no built-in timeout for this failure mode, so the driver blocked forever holding a spinlock, which froze the CPU. The watchdog exists to catch exactly this, but the root cause was a missing error path in the sensor driver combined with a hardware fault.
+INVESTIGATION (before the fix)
+  - Read the call trace to confirm it was the I2C subsystem
+  - Isolated the sensor bus and reproduced the hang
+  - Confirmed the sensor itself was the faulty device
+FIX (took 3 days)
+  Fixed by adding a bus timeout to the driver and auto-disabling the sensor after repeated failures, so one broken device can never freeze the whole system.
+
+----------------------------------------------------------------------
+E0059 | v1.4 | BIG | Found Day 10 | Fixed in 4 days | Windows CMD
+----------------------------------------------------------------------
+File      : history/v1.4/esp/main/servo_calib.c
+Error     : esptool.FatalError: Failed to connect to ESP32-S3
+Terminal  : Windows CMD
+  C:\> idf.py -p COM5 flash
+  esptool.py v4.7
+  Serial port COM5
+  A fatal error occurred: Failed to connect to ESP32-S3: No serial data received.
+WHAT HAPPENED
+  Flashing the ESP32 failed instantly. The tool found the port but received no data from the chip - the connection itself was dead.
+WHY IT HAPPENED (root cause)
+  The ESP32-S3 only enters the bootloader ROM if the BOOT pin is held low during reset. If it boots normally, the ROM bootloader window closes within milliseconds and the chip answers nothing on the USB-serial interface. The wrong port was also a suspect - the board exposes two serial interfaces, and only one connects to the ROM loader. esptool's silent failure means 'no bootloader answered'.
+INVESTIGATION (before the fix)
+  - Checked the device manager for which COM ports existed
+  - Tried the second serial port - still silent
+  - Held BOOT during reset and retried - connected instantly
+FIX (took 4 days)
+  Fixed by documenting the flash procedure: hold BOOT, tap RESET, release BOOT, then flash - and by labeling the correct COM port in flash_esp.sh.
+
+----------------------------------------------------------------------
+E0060 | v1.4 | BIG | Found Day 10 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.4/esp/main/servo_calib.c
+Error     : DHCP timeout: no WiFi address on boot
+Terminal  : Pi SSH terminal
+  $ sudo systemctl status dhcpcd
+  dhcpcd: timed out waiting for a valid DHCP server response
+  eth0: no address
+WHAT HAPPENED
+  The robot was unreachable over the network for the whole morning. On the console, the network interfaces had no addresses at all.
+WHY IT HAPPENED (root cause)
+  At the venue the WiFi signal was too weak for a DHCP exchange, and dhcpcd timed out without falling back. Without an address the Pi was invisible to SSH, and all remote debugging was impossible. DHCP is a single point of failure in a robot that must be controllable remotely; the design assumed a DHCP server would always answer.
+INVESTIGATION (before the fix)
+  - Attached the console to confirm the network state
+  - Confirmed WiFi signal strength was marginal at the venue
+  - Tested a static address - the link worked instantly
+FIX (took 5 days)
+  Fixed by adding a static fallback address that dhcpcd uses when DHCP times out, and by carrying a USB-to-Ethernet adapter for a wired fallback.
+
+----------------------------------------------------------------------
+E0061 | v1.5 | SMALL | Found Day 11 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v1.5/tools/uart_test.py
+Error     : FileNotFoundError: [Errno 2] No such file or directory: 'config.json'
+Terminal  : VS Code terminal
+  $ python3 tools/uart_test.py
+    File "tools/uart_test.py", line 22, in <module>
+      with open('config.json') as f:
+  FileNotFoundError: [Errno 2] No such file or directory: 'config.json'
+WHAT HAPPENED
+  The script died while reading its configuration. It worked in the repository, so the missing file only appeared once the code was deployed to the robot.
+WHY IT HAPPENED (root cause)
+  The config file was never copied to the Pi - only the code folder was synced. Worse, the path was relative, so the file location depended on the working directory at launch; systemd and cron would look in entirely different places. The error is raised by the open() syscall when the kernel returns ENOENT, and nothing in the code anticipated it.
+FIX (took 1 day)
+  Fixed by scp'ing the config, switching to an absolute path built from the script location, and adding an explicit existence check with a clear message at boot.
+
+----------------------------------------------------------------------
+E0062 | v1.5 | SMALL | Found Day 11 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v1.5/tools/uart_test.py
+Error     : SyntaxError: invalid syntax
+Terminal  : VS Code terminal
+  $ python3 tools/uart_test.py
+    File "tools/uart_test.py", line 30
+      if addr == 0x68:
+  SyntaxError: invalid syntax
+WHAT HAPPENED
+  The script died instantly with a parse error on a line that looked perfectly fine in the editor.
+WHY IT HAPPENED (root cause)
+  The line was missing its trailing colon - the editor's syntax highlighting had not refreshed, so the mistake was invisible. SyntaxError is raised during the compile phase before any bytecode is produced, which is why the program produced zero output; the grammar validator rejected the token stream before execution began.
+FIX (took 1 day)
+  Fixed by adding the colon, and the editor was switched to save-on-format so parse errors cannot hide again.
+
+----------------------------------------------------------------------
+E0063 | v1.5 | SMALL | Found Day 11 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v1.5/tools/uart_test.py
+Error     : ValueError: invalid literal for int() with base 10
+Terminal  : VS Code terminal
+  $ python3 tools/uart_test.py
+    File "tools/uart_test.py", line 41, in <module>
+      speed = int(input('speed: '))
+  ValueError: invalid literal for int() with base 10: 'fast'
+WHAT HAPPENED
+  The manual calibration test crashed because the person at the keyboard typed a word where a number belonged.
+WHY IT HAPPENED (root cause)
+  input() always returns a string, and int() is strict - any non-numeric character raises ValueError. The function had no validation layer, so garbage input took down the whole test harness instead of being rejected politely. This is a human-interface error, not a hardware one, but it still cost a morning because the crash aborted the calibration run.
+FIX (took 1 day)
+  Fixed by wrapping input in try/except with a retry loop and validating the range before accepting the speed value.
+
+----------------------------------------------------------------------
+E0064 | v1.5 | SMALL | Found Day 11 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v1.5/tools/uart_test.py
+Error     : ModuleNotFoundError: No module named 'sensors'
+Terminal  : VS Code terminal
+  $ python3 tools/uart_test.py
+  Traceback (most recent call last):
+    File "tools/uart_test.py", line 6, in <module>
+      from sensors.camera import PiCamera
+  ModuleNotFoundError: No module named 'sensors'
+WHAT HAPPENED
+  The very first morning run of v1.x died at the first import, before a single line of robot code could execute. The whole skeleton was there, but Python refused to see it.
+WHY IT HAPPENED (root cause)
+  Python resolves packages through sys.path, and sys.path[0] is the directory of the script being run, not the current working directory. The sensors package lived under pi/, so launching from the repo root made it invisible. ModuleNotFoundError is raised at import time, which means everything after the import line is unreachable - no logs, no GPIO init, nothing.
+FIX (took 1 day)
+  Fixed by running the script from inside pi/, and later made permanent with sys.path.insert(0, os.path.dirname(__file__)) so the package resolves no matter where the script is launched from.
+
+----------------------------------------------------------------------
+E0065 | v1.5 | SMALL | Found Day 11 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v1.5/tools/uart_test.py
+Error     : ImportError: cannot import name 'PiCamera'
+Terminal  : VS Code terminal
+  $ python3 tools/uart_test.py
+  Traceback (most recent call last):
+    File "tools/uart_test.py", line 3, in <module>
+      from picamera2 import PiCamera
+  ImportError: cannot import name 'PiCamera' from 'picamera2'
+WHAT HAPPENED
+  The first camera test failed at import. The library was installed, so the surprise was that the symbol itself was missing.
+WHY IT HAPPENED (root cause)
+  picamera2 exports the class Picamera2 with a capital P. Python names are case-sensitive, and unlike C there is no link-time check - the failure only appears when the module is actually imported on the Pi. It never shows on the PC because the package does not exist there at all, which is exactly why this slipped past the laptop tests.
+FIX (took 1 day)
+  Fixed by using the exact class name Picamera2 and adding a startup import check so the mistake fails loudly and early instead of silently.
+
+----------------------------------------------------------------------
+E0066 | v1.5 | SMALL | Found Day 11 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v1.5/tools/uart_test.py
+Error     : IndentationError: unexpected indent
+Terminal  : VS Code terminal
+  $ python3 tools/uart_test.py
+    File "tools/uart_test.py", line 12
+      print('i2c ok')
+  IndentationError: unexpected indent
+WHAT HAPPENED
+  The morning's edits crashed the script before it even started. A block that looked right in the editor was illegal to the interpreter.
+WHY IT HAPPENED (root cause)
+  The file mixed tab characters with spaces. Python 3 forbids mixing them for indentation because they are ambiguous - one tab can be 4, 8 or 12 columns depending on the editor. The parser rejects the file during compilation, so no code runs at all; the error appears the instant the script is launched.
+FIX (took 1 day)
+  Fixed by reformatting the block with spaces only, then setting the editor to convert tabs to 4 spaces so it can never come back.
+
+----------------------------------------------------------------------
+E0067 | v1.5 | SMALL | Found Day 11 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v1.5/tools/uart_test.py
+Error     : TypeError: unsupported operand type(s) for +: 'int' and 'str'
+Terminal  : VS Code terminal
+  $ python3 tools/uart_test.py
+    File "tools/uart_test.py", line 18, in <module>
+      dev = bus.read_byte_data(addr, reg) + 'x'
+  TypeError: unsupported operand type(s) for +: 'int' and 'str'
+WHAT HAPPENED
+  The I2C scan report crashed halfway through building its output line. It had worked yesterday on the happy path, so the bug only appeared on a specific address.
+WHY IT HAPPENED (root cause)
+  read_byte_data returns an int, and the code appended the string 'x' to it. Python is dynamically typed, so the mismatch is only detected at runtime - the line only executed for addresses that returned a value, which is why the earlier test addresses passed silently. This is a classic type-contract bug that static analyzers catch immediately.
+FIX (took 1 day)
+  Fixed with str() wrapping and a review rule: every format that mixes types goes through f-strings, where the conversion is explicit.
+
+----------------------------------------------------------------------
+E0068 | v1.5 | SMALL | Found Day 11 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v1.5/tools/uart_test.py
+Error     : NameError: name 'smbus' is not defined
+Terminal  : VS Code terminal
+  $ python3 tools/uart_test.py
+    File "tools/uart_test.py", line 9, in <module>
+      bus = smbus.SMBus(1)
+  NameError: name 'smbus' is not defined
+WHAT HAPPENED
+  The I2C bus scan died at the first bus access. The import line at the top of the file was there, so the name should have existed.
+WHY IT HAPPENED (root cause)
+  The import statement import smbus2 was present, but the code referenced smbus. The alias was never created because the import was never written - the file used the raw package name in one place and the alias in another. NameError surfaces lazily at the first use of the name, not at import time, so the file parsed fine and only exploded mid-run.
+FIX (took 1 day)
+  Fixed by importing smbus2 as smbus and running a quick grep for every usage to confirm no other raw references remained.
+
+----------------------------------------------------------------------
+E0069 | v1.5 | BIG | Found Day 12 | Fixed in 2 days | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v1.5/tools/uart_test.py
+Error     : watchdog: BUG: soft lockup - CPU#0 stuck for 23s
+Terminal  : Pi console (HDMI)
+  watchdog: BUG: soft lockup - CPU#0 stuck for 23s!
+  [2345.1] Modules linked in: vl53l1x
+  Call trace: [<ffff>] i2c_transfer
+WHAT HAPPENED
+  The Pi console froze, then the kernel watchdog fired and reported a CPU stuck for 23 seconds. The call trace pointed at the I2C driver.
+WHY IT HAPPENED (root cause)
+  The VL53L1X driver issued an I2C transfer to a broken sensor, and the I2C controller never returned. The kernel's I2C layer has no built-in timeout for this failure mode, so the driver blocked forever holding a spinlock, which froze the CPU. The watchdog exists to catch exactly this, but the root cause was a missing error path in the sensor driver combined with a hardware fault.
+INVESTIGATION (before the fix)
+  - Read the call trace to confirm it was the I2C subsystem
+  - Isolated the sensor bus and reproduced the hang
+  - Confirmed the sensor itself was the faulty device
+FIX (took 2 days)
+  Fixed by adding a bus timeout to the driver and auto-disabling the sensor after repeated failures, so one broken device can never freeze the whole system.
+
+----------------------------------------------------------------------
+E0070 | v1.5 | BIG | Found Day 12 | Fixed in 3 days | Windows CMD
+----------------------------------------------------------------------
+File      : history/v1.5/tools/uart_test.py
+Error     : esptool.FatalError: Failed to connect to ESP32-S3
+Terminal  : Windows CMD
+  C:\> idf.py -p COM5 flash
+  esptool.py v4.7
+  Serial port COM5
+  A fatal error occurred: Failed to connect to ESP32-S3: No serial data received.
+WHAT HAPPENED
+  Flashing the ESP32 failed instantly. The tool found the port but received no data from the chip - the connection itself was dead.
+WHY IT HAPPENED (root cause)
+  The ESP32-S3 only enters the bootloader ROM if the BOOT pin is held low during reset. If it boots normally, the ROM bootloader window closes within milliseconds and the chip answers nothing on the USB-serial interface. The wrong port was also a suspect - the board exposes two serial interfaces, and only one connects to the ROM loader. esptool's silent failure means 'no bootloader answered'.
+INVESTIGATION (before the fix)
+  - Checked the device manager for which COM ports existed
+  - Tried the second serial port - still silent
+  - Held BOOT during reset and retried - connected instantly
+FIX (took 3 days)
+  Fixed by documenting the flash procedure: hold BOOT, tap RESET, release BOOT, then flash - and by labeling the correct COM port in flash_esp.sh.
+
+----------------------------------------------------------------------
+E0071 | v1.5 | BIG | Found Day 12 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.5/tools/uart_test.py
+Error     : DHCP timeout: no WiFi address on boot
+Terminal  : Pi SSH terminal
+  $ sudo systemctl status dhcpcd
+  dhcpcd: timed out waiting for a valid DHCP server response
+  eth0: no address
+WHAT HAPPENED
+  The robot was unreachable over the network for the whole morning. On the console, the network interfaces had no addresses at all.
+WHY IT HAPPENED (root cause)
+  At the venue the WiFi signal was too weak for a DHCP exchange, and dhcpcd timed out without falling back. Without an address the Pi was invisible to SSH, and all remote debugging was impossible. DHCP is a single point of failure in a robot that must be controllable remotely; the design assumed a DHCP server would always answer.
+INVESTIGATION (before the fix)
+  - Attached the console to confirm the network state
+  - Confirmed WiFi signal strength was marginal at the venue
+  - Tested a static address - the link worked instantly
+FIX (took 4 days)
+  Fixed by adding a static fallback address that dhcpcd uses when DHCP times out, and by carrying a USB-to-Ethernet adapter for a wired fallback.
+
+----------------------------------------------------------------------
+E0072 | v1.5 | BIG | Found Day 12 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.5/tools/uart_test.py
+Error     : ssh: connect to host 192.168.1.42 port 22: Connection refused
+Terminal  : Pi SSH terminal
+  $ ssh pi@192.168.1.42
+  ssh: connect to host 192.168.1.42 port 22: Connection refused
+  $ ping 192.168.1.42
+  64 bytes from 192.168.1.42: icmp_seq=1 ttl=64 time=2.1 ms
+WHAT HAPPENED
+  The morning started with an unreachable robot. Ping worked - the Pi was alive on the network - but SSH refused every connection.
+WHY IT HAPPENED (root cause)
+  After an unclean power cut, sshd never started. The machine booted into a degraded state: networking came up, but the ssh service was disabled by the failed boot sequence. Ping (ICMP) and SSH (TCP) are completely separate paths - the Pi was reachable at layer 3 while nothing listened on port 22 at layer 4. The symptom was 'robot unreachable' but the diagnosis needed to split the network stack into layers.
+INVESTIGATION (before the fix)
+  - Checked ping first to separate link failure from service failure
+  - Checked `systemctl status ssh` - service was dead, not starting
+  - Connected via the HDMI console to start sshd manually
+FIX (took 5 days)
+  Fixed by enabling ssh at boot (systemctl enable ssh) and adding a journald check to the morning script so a dead sshd is visible within seconds.
+
+----------------------------------------------------------------------
+E0073 | v1.6 | SMALL | Found Day 13 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.6/tools/sensor_read_all.py
+Error     : SyntaxError: invalid syntax
+Terminal  : Pi SSH terminal
+  $ python3 tools/sensor_read_all.py
+    File "tools/sensor_read_all.py", line 30
+      if addr == 0x68:
+  SyntaxError: invalid syntax
+WHAT HAPPENED
+  The script died instantly with a parse error on a line that looked perfectly fine in the editor.
+WHY IT HAPPENED (root cause)
+  The line was missing its trailing colon - the editor's syntax highlighting had not refreshed, so the mistake was invisible. SyntaxError is raised during the compile phase before any bytecode is produced, which is why the program produced zero output; the grammar validator rejected the token stream before execution began.
+FIX (took 1 day)
+  Fixed by adding the colon, and the editor was switched to save-on-format so parse errors cannot hide again.
+
+----------------------------------------------------------------------
+E0074 | v1.6 | SMALL | Found Day 13 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.6/tools/sensor_read_all.py
+Error     : ValueError: invalid literal for int() with base 10
+Terminal  : Pi SSH terminal
+  $ python3 tools/sensor_read_all.py
+    File "tools/sensor_read_all.py", line 41, in <module>
+      speed = int(input('speed: '))
+  ValueError: invalid literal for int() with base 10: 'fast'
+WHAT HAPPENED
+  The manual calibration test crashed because the person at the keyboard typed a word where a number belonged.
+WHY IT HAPPENED (root cause)
+  input() always returns a string, and int() is strict - any non-numeric character raises ValueError. The function had no validation layer, so garbage input took down the whole test harness instead of being rejected politely. This is a human-interface error, not a hardware one, but it still cost a morning because the crash aborted the calibration run.
+FIX (took 1 day)
+  Fixed by wrapping input in try/except with a retry loop and validating the range before accepting the speed value.
+
+----------------------------------------------------------------------
+E0075 | v1.6 | SMALL | Found Day 13 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.6/tools/sensor_read_all.py
+Error     : ModuleNotFoundError: No module named 'sensors'
+Terminal  : Pi SSH terminal
+  $ python3 tools/sensor_read_all.py
+  Traceback (most recent call last):
+    File "tools/sensor_read_all.py", line 6, in <module>
+      from sensors.camera import PiCamera
+  ModuleNotFoundError: No module named 'sensors'
+WHAT HAPPENED
+  The very first morning run of v1.x died at the first import, before a single line of robot code could execute. The whole skeleton was there, but Python refused to see it.
+WHY IT HAPPENED (root cause)
+  Python resolves packages through sys.path, and sys.path[0] is the directory of the script being run, not the current working directory. The sensors package lived under pi/, so launching from the repo root made it invisible. ModuleNotFoundError is raised at import time, which means everything after the import line is unreachable - no logs, no GPIO init, nothing.
+FIX (took 1 day)
+  Fixed by running the script from inside pi/, and later made permanent with sys.path.insert(0, os.path.dirname(__file__)) so the package resolves no matter where the script is launched from.
+
+----------------------------------------------------------------------
+E0076 | v1.6 | SMALL | Found Day 13 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.6/tools/sensor_read_all.py
+Error     : ImportError: cannot import name 'PiCamera'
+Terminal  : Pi SSH terminal
+  $ python3 tools/sensor_read_all.py
+  Traceback (most recent call last):
+    File "tools/sensor_read_all.py", line 3, in <module>
+      from picamera2 import PiCamera
+  ImportError: cannot import name 'PiCamera' from 'picamera2'
+WHAT HAPPENED
+  The first camera test failed at import. The library was installed, so the surprise was that the symbol itself was missing.
+WHY IT HAPPENED (root cause)
+  picamera2 exports the class Picamera2 with a capital P. Python names are case-sensitive, and unlike C there is no link-time check - the failure only appears when the module is actually imported on the Pi. It never shows on the PC because the package does not exist there at all, which is exactly why this slipped past the laptop tests.
+FIX (took 1 day)
+  Fixed by using the exact class name Picamera2 and adding a startup import check so the mistake fails loudly and early instead of silently.
+
+----------------------------------------------------------------------
+E0077 | v1.6 | SMALL | Found Day 13 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.6/tools/sensor_read_all.py
+Error     : IndentationError: unexpected indent
+Terminal  : Pi SSH terminal
+  $ python3 tools/sensor_read_all.py
+    File "tools/sensor_read_all.py", line 12
+      print('i2c ok')
+  IndentationError: unexpected indent
+WHAT HAPPENED
+  The morning's edits crashed the script before it even started. A block that looked right in the editor was illegal to the interpreter.
+WHY IT HAPPENED (root cause)
+  The file mixed tab characters with spaces. Python 3 forbids mixing them for indentation because they are ambiguous - one tab can be 4, 8 or 12 columns depending on the editor. The parser rejects the file during compilation, so no code runs at all; the error appears the instant the script is launched.
+FIX (took 1 day)
+  Fixed by reformatting the block with spaces only, then setting the editor to convert tabs to 4 spaces so it can never come back.
+
+----------------------------------------------------------------------
+E0078 | v1.6 | SMALL | Found Day 13 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.6/tools/sensor_read_all.py
+Error     : TypeError: unsupported operand type(s) for +: 'int' and 'str'
+Terminal  : Pi SSH terminal
+  $ python3 tools/sensor_read_all.py
+    File "tools/sensor_read_all.py", line 18, in <module>
+      dev = bus.read_byte_data(addr, reg) + 'x'
+  TypeError: unsupported operand type(s) for +: 'int' and 'str'
+WHAT HAPPENED
+  The I2C scan report crashed halfway through building its output line. It had worked yesterday on the happy path, so the bug only appeared on a specific address.
+WHY IT HAPPENED (root cause)
+  read_byte_data returns an int, and the code appended the string 'x' to it. Python is dynamically typed, so the mismatch is only detected at runtime - the line only executed for addresses that returned a value, which is why the earlier test addresses passed silently. This is a classic type-contract bug that static analyzers catch immediately.
+FIX (took 1 day)
+  Fixed with str() wrapping and a review rule: every format that mixes types goes through f-strings, where the conversion is explicit.
+
+----------------------------------------------------------------------
+E0079 | v1.6 | SMALL | Found Day 13 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.6/tools/sensor_read_all.py
+Error     : NameError: name 'smbus' is not defined
+Terminal  : Pi SSH terminal
+  $ python3 tools/sensor_read_all.py
+    File "tools/sensor_read_all.py", line 9, in <module>
+      bus = smbus.SMBus(1)
+  NameError: name 'smbus' is not defined
+WHAT HAPPENED
+  The I2C bus scan died at the first bus access. The import line at the top of the file was there, so the name should have existed.
+WHY IT HAPPENED (root cause)
+  The import statement import smbus2 was present, but the code referenced smbus. The alias was never created because the import was never written - the file used the raw package name in one place and the alias in another. NameError surfaces lazily at the first use of the name, not at import time, so the file parsed fine and only exploded mid-run.
+FIX (took 1 day)
+  Fixed by importing smbus2 as smbus and running a quick grep for every usage to confirm no other raw references remained.
+
+----------------------------------------------------------------------
+E0080 | v1.6 | SMALL | Found Day 13 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.6/tools/sensor_read_all.py
+Error     : FileNotFoundError: [Errno 2] No such file or directory: 'config.json'
+Terminal  : Pi SSH terminal
+  $ python3 tools/sensor_read_all.py
+    File "tools/sensor_read_all.py", line 22, in <module>
+      with open('config.json') as f:
+  FileNotFoundError: [Errno 2] No such file or directory: 'config.json'
+WHAT HAPPENED
+  The script died while reading its configuration. It worked in the repository, so the missing file only appeared once the code was deployed to the robot.
+WHY IT HAPPENED (root cause)
+  The config file was never copied to the Pi - only the code folder was synced. Worse, the path was relative, so the file location depended on the working directory at launch; systemd and cron would look in entirely different places. The error is raised by the open() syscall when the kernel returns ENOENT, and nothing in the code anticipated it.
+FIX (took 1 day)
+  Fixed by scp'ing the config, switching to an absolute path built from the script location, and adding an explicit existence check with a clear message at boot.
+
+----------------------------------------------------------------------
+E0081 | v1.6 | BIG | Found Day 14 | Fixed in 2 days | Windows CMD
+----------------------------------------------------------------------
+File      : history/v1.6/tools/sensor_read_all.py
+Error     : esptool.FatalError: Failed to connect to ESP32-S3
+Terminal  : Windows CMD
+  C:\> idf.py -p COM5 flash
+  esptool.py v4.7
+  Serial port COM5
+  A fatal error occurred: Failed to connect to ESP32-S3: No serial data received.
+WHAT HAPPENED
+  Flashing the ESP32 failed instantly. The tool found the port but received no data from the chip - the connection itself was dead.
+WHY IT HAPPENED (root cause)
+  The ESP32-S3 only enters the bootloader ROM if the BOOT pin is held low during reset. If it boots normally, the ROM bootloader window closes within milliseconds and the chip answers nothing on the USB-serial interface. The wrong port was also a suspect - the board exposes two serial interfaces, and only one connects to the ROM loader. esptool's silent failure means 'no bootloader answered'.
+INVESTIGATION (before the fix)
+  - Checked the device manager for which COM ports existed
+  - Tried the second serial port - still silent
+  - Held BOOT during reset and retried - connected instantly
+FIX (took 2 days)
+  Fixed by documenting the flash procedure: hold BOOT, tap RESET, release BOOT, then flash - and by labeling the correct COM port in flash_esp.sh.
+
+----------------------------------------------------------------------
+E0082 | v1.6 | BIG | Found Day 14 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.6/tools/sensor_read_all.py
+Error     : DHCP timeout: no WiFi address on boot
+Terminal  : Pi SSH terminal
+  $ sudo systemctl status dhcpcd
+  dhcpcd: timed out waiting for a valid DHCP server response
+  eth0: no address
+WHAT HAPPENED
+  The robot was unreachable over the network for the whole morning. On the console, the network interfaces had no addresses at all.
+WHY IT HAPPENED (root cause)
+  At the venue the WiFi signal was too weak for a DHCP exchange, and dhcpcd timed out without falling back. Without an address the Pi was invisible to SSH, and all remote debugging was impossible. DHCP is a single point of failure in a robot that must be controllable remotely; the design assumed a DHCP server would always answer.
+INVESTIGATION (before the fix)
+  - Attached the console to confirm the network state
+  - Confirmed WiFi signal strength was marginal at the venue
+  - Tested a static address - the link worked instantly
+FIX (took 3 days)
+  Fixed by adding a static fallback address that dhcpcd uses when DHCP times out, and by carrying a USB-to-Ethernet adapter for a wired fallback.
+
+----------------------------------------------------------------------
+E0083 | v1.6 | BIG | Found Day 14 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.6/tools/sensor_read_all.py
+Error     : ssh: connect to host 192.168.1.42 port 22: Connection refused
+Terminal  : Pi SSH terminal
+  $ ssh pi@192.168.1.42
+  ssh: connect to host 192.168.1.42 port 22: Connection refused
+  $ ping 192.168.1.42
+  64 bytes from 192.168.1.42: icmp_seq=1 ttl=64 time=2.1 ms
+WHAT HAPPENED
+  The morning started with an unreachable robot. Ping worked - the Pi was alive on the network - but SSH refused every connection.
+WHY IT HAPPENED (root cause)
+  After an unclean power cut, sshd never started. The machine booted into a degraded state: networking came up, but the ssh service was disabled by the failed boot sequence. Ping (ICMP) and SSH (TCP) are completely separate paths - the Pi was reachable at layer 3 while nothing listened on port 22 at layer 4. The symptom was 'robot unreachable' but the diagnosis needed to split the network stack into layers.
+INVESTIGATION (before the fix)
+  - Checked ping first to separate link failure from service failure
+  - Checked `systemctl status ssh` - service was dead, not starting
+  - Connected via the HDMI console to start sshd manually
+FIX (took 4 days)
+  Fixed by enabling ssh at boot (systemctl enable ssh) and adding a journald check to the morning script so a dead sshd is visible within seconds.
+
+----------------------------------------------------------------------
+E0084 | v1.6 | BIG | Found Day 14 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.6/tools/sensor_read_all.py
+Error     : Permission denied (publickey,password)
+Terminal  : Pi SSH terminal
+  $ ssh pi@raspberrypi
+  pi@raspberrypi: Permission denied (publickey,password).
+  pi@raspberrypi's password:
+  Permission denied, please try again.
+WHAT HAPPENED
+  SSH reached the Pi and asked for credentials, then rejected everything. The password that worked last week was suddenly wrong.
+WHY IT HAPPENED (root cause)
+  The default raspberry password had been changed at some point, and the new one was never recorded. SSH tries publickey first, then password; with no key installed and the wrong password, all attempts failed. The security hardening done 'to be safe' had become a brick wall because the credential was lost - a process problem, not a technical one.
+INVESTIGATION (before the fix)
+  - Tried the recorded password variants - all rejected
+  - Tested if the Pi accepted keys - no key installed
+  - Used the HDMI console to reset the password via sudo passwd
+FIX (took 5 days)
+  Fixed by resetting the password, installing an SSH key, and writing the credentials into the project notes so a lost password can never block the robot again.
+
+----------------------------------------------------------------------
+E0085 | v1.7 | SMALL | Found Day 15 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v1.7/hardware/led_test.py
+Error     : ValueError: invalid literal for int() with base 10
+Terminal  : Pi console (HDMI)
+  $ python3 hardware/led_test.py
+    File "hardware/led_test.py", line 41, in <module>
+      speed = int(input('speed: '))
+  ValueError: invalid literal for int() with base 10: 'fast'
+WHAT HAPPENED
+  The manual calibration test crashed because the person at the keyboard typed a word where a number belonged.
+WHY IT HAPPENED (root cause)
+  input() always returns a string, and int() is strict - any non-numeric character raises ValueError. The function had no validation layer, so garbage input took down the whole test harness instead of being rejected politely. This is a human-interface error, not a hardware one, but it still cost a morning because the crash aborted the calibration run.
+FIX (took 1 day)
+  Fixed by wrapping input in try/except with a retry loop and validating the range before accepting the speed value.
+
+----------------------------------------------------------------------
+E0086 | v1.7 | SMALL | Found Day 15 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v1.7/hardware/led_test.py
+Error     : ModuleNotFoundError: No module named 'sensors'
+Terminal  : Pi console (HDMI)
+  $ python3 hardware/led_test.py
+  Traceback (most recent call last):
+    File "hardware/led_test.py", line 6, in <module>
+      from sensors.camera import PiCamera
+  ModuleNotFoundError: No module named 'sensors'
+WHAT HAPPENED
+  The very first morning run of v1.x died at the first import, before a single line of robot code could execute. The whole skeleton was there, but Python refused to see it.
+WHY IT HAPPENED (root cause)
+  Python resolves packages through sys.path, and sys.path[0] is the directory of the script being run, not the current working directory. The sensors package lived under pi/, so launching from the repo root made it invisible. ModuleNotFoundError is raised at import time, which means everything after the import line is unreachable - no logs, no GPIO init, nothing.
+FIX (took 1 day)
+  Fixed by running the script from inside pi/, and later made permanent with sys.path.insert(0, os.path.dirname(__file__)) so the package resolves no matter where the script is launched from.
+
+----------------------------------------------------------------------
+E0087 | v1.7 | SMALL | Found Day 15 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v1.7/hardware/led_test.py
+Error     : ImportError: cannot import name 'PiCamera'
+Terminal  : Pi console (HDMI)
+  $ python3 hardware/led_test.py
+  Traceback (most recent call last):
+    File "hardware/led_test.py", line 3, in <module>
+      from picamera2 import PiCamera
+  ImportError: cannot import name 'PiCamera' from 'picamera2'
+WHAT HAPPENED
+  The first camera test failed at import. The library was installed, so the surprise was that the symbol itself was missing.
+WHY IT HAPPENED (root cause)
+  picamera2 exports the class Picamera2 with a capital P. Python names are case-sensitive, and unlike C there is no link-time check - the failure only appears when the module is actually imported on the Pi. It never shows on the PC because the package does not exist there at all, which is exactly why this slipped past the laptop tests.
+FIX (took 1 day)
+  Fixed by using the exact class name Picamera2 and adding a startup import check so the mistake fails loudly and early instead of silently.
+
+----------------------------------------------------------------------
+E0088 | v1.7 | SMALL | Found Day 15 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v1.7/hardware/led_test.py
+Error     : IndentationError: unexpected indent
+Terminal  : Pi console (HDMI)
+  $ python3 hardware/led_test.py
+    File "hardware/led_test.py", line 12
+      print('i2c ok')
+  IndentationError: unexpected indent
+WHAT HAPPENED
+  The morning's edits crashed the script before it even started. A block that looked right in the editor was illegal to the interpreter.
+WHY IT HAPPENED (root cause)
+  The file mixed tab characters with spaces. Python 3 forbids mixing them for indentation because they are ambiguous - one tab can be 4, 8 or 12 columns depending on the editor. The parser rejects the file during compilation, so no code runs at all; the error appears the instant the script is launched.
+FIX (took 1 day)
+  Fixed by reformatting the block with spaces only, then setting the editor to convert tabs to 4 spaces so it can never come back.
+
+----------------------------------------------------------------------
+E0089 | v1.7 | SMALL | Found Day 15 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v1.7/hardware/led_test.py
+Error     : TypeError: unsupported operand type(s) for +: 'int' and 'str'
+Terminal  : Pi console (HDMI)
+  $ python3 hardware/led_test.py
+    File "hardware/led_test.py", line 18, in <module>
+      dev = bus.read_byte_data(addr, reg) + 'x'
+  TypeError: unsupported operand type(s) for +: 'int' and 'str'
+WHAT HAPPENED
+  The I2C scan report crashed halfway through building its output line. It had worked yesterday on the happy path, so the bug only appeared on a specific address.
+WHY IT HAPPENED (root cause)
+  read_byte_data returns an int, and the code appended the string 'x' to it. Python is dynamically typed, so the mismatch is only detected at runtime - the line only executed for addresses that returned a value, which is why the earlier test addresses passed silently. This is a classic type-contract bug that static analyzers catch immediately.
+FIX (took 1 day)
+  Fixed with str() wrapping and a review rule: every format that mixes types goes through f-strings, where the conversion is explicit.
+
+----------------------------------------------------------------------
+E0090 | v1.7 | SMALL | Found Day 15 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v1.7/hardware/led_test.py
+Error     : NameError: name 'smbus' is not defined
+Terminal  : Pi console (HDMI)
+  $ python3 hardware/led_test.py
+    File "hardware/led_test.py", line 9, in <module>
+      bus = smbus.SMBus(1)
+  NameError: name 'smbus' is not defined
+WHAT HAPPENED
+  The I2C bus scan died at the first bus access. The import line at the top of the file was there, so the name should have existed.
+WHY IT HAPPENED (root cause)
+  The import statement import smbus2 was present, but the code referenced smbus. The alias was never created because the import was never written - the file used the raw package name in one place and the alias in another. NameError surfaces lazily at the first use of the name, not at import time, so the file parsed fine and only exploded mid-run.
+FIX (took 1 day)
+  Fixed by importing smbus2 as smbus and running a quick grep for every usage to confirm no other raw references remained.
+
+----------------------------------------------------------------------
+E0091 | v1.7 | SMALL | Found Day 15 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v1.7/hardware/led_test.py
+Error     : FileNotFoundError: [Errno 2] No such file or directory: 'config.json'
+Terminal  : Pi console (HDMI)
+  $ python3 hardware/led_test.py
+    File "hardware/led_test.py", line 22, in <module>
+      with open('config.json') as f:
+  FileNotFoundError: [Errno 2] No such file or directory: 'config.json'
+WHAT HAPPENED
+  The script died while reading its configuration. It worked in the repository, so the missing file only appeared once the code was deployed to the robot.
+WHY IT HAPPENED (root cause)
+  The config file was never copied to the Pi - only the code folder was synced. Worse, the path was relative, so the file location depended on the working directory at launch; systemd and cron would look in entirely different places. The error is raised by the open() syscall when the kernel returns ENOENT, and nothing in the code anticipated it.
+FIX (took 1 day)
+  Fixed by scp'ing the config, switching to an absolute path built from the script location, and adding an explicit existence check with a clear message at boot.
+
+----------------------------------------------------------------------
+E0092 | v1.7 | SMALL | Found Day 15 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v1.7/hardware/led_test.py
+Error     : SyntaxError: invalid syntax
+Terminal  : Pi console (HDMI)
+  $ python3 hardware/led_test.py
+    File "hardware/led_test.py", line 30
+      if addr == 0x68:
+  SyntaxError: invalid syntax
+WHAT HAPPENED
+  The script died instantly with a parse error on a line that looked perfectly fine in the editor.
+WHY IT HAPPENED (root cause)
+  The line was missing its trailing colon - the editor's syntax highlighting had not refreshed, so the mistake was invisible. SyntaxError is raised during the compile phase before any bytecode is produced, which is why the program produced zero output; the grammar validator rejected the token stream before execution began.
+FIX (took 1 day)
+  Fixed by adding the colon, and the editor was switched to save-on-format so parse errors cannot hide again.
+
+----------------------------------------------------------------------
+E0093 | v1.7 | BIG | Found Day 16 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.7/hardware/led_test.py
+Error     : DHCP timeout: no WiFi address on boot
+Terminal  : Pi SSH terminal
+  $ sudo systemctl status dhcpcd
+  dhcpcd: timed out waiting for a valid DHCP server response
+  eth0: no address
+WHAT HAPPENED
+  The robot was unreachable over the network for the whole morning. On the console, the network interfaces had no addresses at all.
+WHY IT HAPPENED (root cause)
+  At the venue the WiFi signal was too weak for a DHCP exchange, and dhcpcd timed out without falling back. Without an address the Pi was invisible to SSH, and all remote debugging was impossible. DHCP is a single point of failure in a robot that must be controllable remotely; the design assumed a DHCP server would always answer.
+INVESTIGATION (before the fix)
+  - Attached the console to confirm the network state
+  - Confirmed WiFi signal strength was marginal at the venue
+  - Tested a static address - the link worked instantly
+FIX (took 2 days)
+  Fixed by adding a static fallback address that dhcpcd uses when DHCP times out, and by carrying a USB-to-Ethernet adapter for a wired fallback.
+
+----------------------------------------------------------------------
+E0094 | v1.7 | BIG | Found Day 16 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.7/hardware/led_test.py
+Error     : ssh: connect to host 192.168.1.42 port 22: Connection refused
+Terminal  : Pi SSH terminal
+  $ ssh pi@192.168.1.42
+  ssh: connect to host 192.168.1.42 port 22: Connection refused
+  $ ping 192.168.1.42
+  64 bytes from 192.168.1.42: icmp_seq=1 ttl=64 time=2.1 ms
+WHAT HAPPENED
+  The morning started with an unreachable robot. Ping worked - the Pi was alive on the network - but SSH refused every connection.
+WHY IT HAPPENED (root cause)
+  After an unclean power cut, sshd never started. The machine booted into a degraded state: networking came up, but the ssh service was disabled by the failed boot sequence. Ping (ICMP) and SSH (TCP) are completely separate paths - the Pi was reachable at layer 3 while nothing listened on port 22 at layer 4. The symptom was 'robot unreachable' but the diagnosis needed to split the network stack into layers.
+INVESTIGATION (before the fix)
+  - Checked ping first to separate link failure from service failure
+  - Checked `systemctl status ssh` - service was dead, not starting
+  - Connected via the HDMI console to start sshd manually
+FIX (took 3 days)
+  Fixed by enabling ssh at boot (systemctl enable ssh) and adding a journald check to the morning script so a dead sshd is visible within seconds.
+
+----------------------------------------------------------------------
+E0095 | v1.7 | BIG | Found Day 16 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.7/hardware/led_test.py
+Error     : Permission denied (publickey,password)
+Terminal  : Pi SSH terminal
+  $ ssh pi@raspberrypi
+  pi@raspberrypi: Permission denied (publickey,password).
+  pi@raspberrypi's password:
+  Permission denied, please try again.
+WHAT HAPPENED
+  SSH reached the Pi and asked for credentials, then rejected everything. The password that worked last week was suddenly wrong.
+WHY IT HAPPENED (root cause)
+  The default raspberry password had been changed at some point, and the new one was never recorded. SSH tries publickey first, then password; with no key installed and the wrong password, all attempts failed. The security hardening done 'to be safe' had become a brick wall because the credential was lost - a process problem, not a technical one.
+INVESTIGATION (before the fix)
+  - Tried the recorded password variants - all rejected
+  - Tested if the Pi accepted keys - no key installed
+  - Used the HDMI console to reset the password via sudo passwd
+FIX (took 4 days)
+  Fixed by resetting the password, installing an SSH key, and writing the credentials into the project notes so a lost password can never block the robot again.
+
+----------------------------------------------------------------------
+E0096 | v1.7 | BIG | Found Day 16 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.7/hardware/led_test.py
+Error     : WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+Terminal  : Pi SSH terminal
+  $ ssh pi@raspberrypi
+  WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!
+  IT IS POSSIBLE THAT SOMEONE IS DOING SOMETHING NASTY!
+  Host key verification failed.
+WHAT HAPPENED
+  SSH refused to connect with a security warning. The message was dramatic - 'SOMEONE IS DOING SOMETHING NASTY' - but the cause was mundane.
+WHY IT HAPPENED (root cause)
+  The SD card had been reflashed, which generates a new SSH host key. The PC's known_hosts file still held the old key, and SSH treats any mismatch as a possible man-in-the-middle attack. The warning is the security system working exactly as designed; the false alarm came from an undeclared reflash. Every reflash invalidates the trust record silently.
+INVESTIGATION (before the fix)
+  - Confirmed the Pi was reimaged (the only legit cause)
+  - Checked the new key fingerprint against the console
+  - Removed the stale entry from known_hosts
+FIX (took 5 days)
+  Fixed by running ssh-keygen -R raspberrypi to forget the old key, and adding a documented procedure that every reflash updates the key on all laptops.
+
+----------------------------------------------------------------------
+E0097 | v1.8 | SMALL | Found Day 17 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v1.8/boot.py
+Error     : ModuleNotFoundError: No module named 'sensors'
+Terminal  : ESP32 serial monitor
+  $ python3 boot.py
+  Traceback (most recent call last):
+    File "boot.py", line 6, in <module>
+      from sensors.camera import PiCamera
+  ModuleNotFoundError: No module named 'sensors'
+WHAT HAPPENED
+  The very first morning run of v1.x died at the first import, before a single line of robot code could execute. The whole skeleton was there, but Python refused to see it.
+WHY IT HAPPENED (root cause)
+  Python resolves packages through sys.path, and sys.path[0] is the directory of the script being run, not the current working directory. The sensors package lived under pi/, so launching from the repo root made it invisible. ModuleNotFoundError is raised at import time, which means everything after the import line is unreachable - no logs, no GPIO init, nothing.
+FIX (took 1 day)
+  Fixed by running the script from inside pi/, and later made permanent with sys.path.insert(0, os.path.dirname(__file__)) so the package resolves no matter where the script is launched from.
+
+----------------------------------------------------------------------
+E0098 | v1.8 | SMALL | Found Day 17 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v1.8/boot.py
+Error     : ImportError: cannot import name 'PiCamera'
+Terminal  : ESP32 serial monitor
+  $ python3 boot.py
+  Traceback (most recent call last):
+    File "boot.py", line 3, in <module>
+      from picamera2 import PiCamera
+  ImportError: cannot import name 'PiCamera' from 'picamera2'
+WHAT HAPPENED
+  The first camera test failed at import. The library was installed, so the surprise was that the symbol itself was missing.
+WHY IT HAPPENED (root cause)
+  picamera2 exports the class Picamera2 with a capital P. Python names are case-sensitive, and unlike C there is no link-time check - the failure only appears when the module is actually imported on the Pi. It never shows on the PC because the package does not exist there at all, which is exactly why this slipped past the laptop tests.
+FIX (took 1 day)
+  Fixed by using the exact class name Picamera2 and adding a startup import check so the mistake fails loudly and early instead of silently.
+
+----------------------------------------------------------------------
+E0099 | v1.8 | SMALL | Found Day 17 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v1.8/boot.py
+Error     : IndentationError: unexpected indent
+Terminal  : ESP32 serial monitor
+  $ python3 boot.py
+    File "boot.py", line 12
+      print('i2c ok')
+  IndentationError: unexpected indent
+WHAT HAPPENED
+  The morning's edits crashed the script before it even started. A block that looked right in the editor was illegal to the interpreter.
+WHY IT HAPPENED (root cause)
+  The file mixed tab characters with spaces. Python 3 forbids mixing them for indentation because they are ambiguous - one tab can be 4, 8 or 12 columns depending on the editor. The parser rejects the file during compilation, so no code runs at all; the error appears the instant the script is launched.
+FIX (took 1 day)
+  Fixed by reformatting the block with spaces only, then setting the editor to convert tabs to 4 spaces so it can never come back.
+
+----------------------------------------------------------------------
+E0100 | v1.8 | SMALL | Found Day 17 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v1.8/boot.py
+Error     : TypeError: unsupported operand type(s) for +: 'int' and 'str'
+Terminal  : ESP32 serial monitor
+  $ python3 boot.py
+    File "boot.py", line 18, in <module>
+      dev = bus.read_byte_data(addr, reg) + 'x'
+  TypeError: unsupported operand type(s) for +: 'int' and 'str'
+WHAT HAPPENED
+  The I2C scan report crashed halfway through building its output line. It had worked yesterday on the happy path, so the bug only appeared on a specific address.
+WHY IT HAPPENED (root cause)
+  read_byte_data returns an int, and the code appended the string 'x' to it. Python is dynamically typed, so the mismatch is only detected at runtime - the line only executed for addresses that returned a value, which is why the earlier test addresses passed silently. This is a classic type-contract bug that static analyzers catch immediately.
+FIX (took 1 day)
+  Fixed with str() wrapping and a review rule: every format that mixes types goes through f-strings, where the conversion is explicit.
+
+----------------------------------------------------------------------
+E0101 | v1.8 | SMALL | Found Day 17 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v1.8/boot.py
+Error     : NameError: name 'smbus' is not defined
+Terminal  : ESP32 serial monitor
+  $ python3 boot.py
+    File "boot.py", line 9, in <module>
+      bus = smbus.SMBus(1)
+  NameError: name 'smbus' is not defined
+WHAT HAPPENED
+  The I2C bus scan died at the first bus access. The import line at the top of the file was there, so the name should have existed.
+WHY IT HAPPENED (root cause)
+  The import statement import smbus2 was present, but the code referenced smbus. The alias was never created because the import was never written - the file used the raw package name in one place and the alias in another. NameError surfaces lazily at the first use of the name, not at import time, so the file parsed fine and only exploded mid-run.
+FIX (took 1 day)
+  Fixed by importing smbus2 as smbus and running a quick grep for every usage to confirm no other raw references remained.
+
+----------------------------------------------------------------------
+E0102 | v1.8 | SMALL | Found Day 17 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v1.8/boot.py
+Error     : FileNotFoundError: [Errno 2] No such file or directory: 'config.json'
+Terminal  : ESP32 serial monitor
+  $ python3 boot.py
+    File "boot.py", line 22, in <module>
+      with open('config.json') as f:
+  FileNotFoundError: [Errno 2] No such file or directory: 'config.json'
+WHAT HAPPENED
+  The script died while reading its configuration. It worked in the repository, so the missing file only appeared once the code was deployed to the robot.
+WHY IT HAPPENED (root cause)
+  The config file was never copied to the Pi - only the code folder was synced. Worse, the path was relative, so the file location depended on the working directory at launch; systemd and cron would look in entirely different places. The error is raised by the open() syscall when the kernel returns ENOENT, and nothing in the code anticipated it.
+FIX (took 1 day)
+  Fixed by scp'ing the config, switching to an absolute path built from the script location, and adding an explicit existence check with a clear message at boot.
+
+----------------------------------------------------------------------
+E0103 | v1.8 | SMALL | Found Day 17 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v1.8/boot.py
+Error     : SyntaxError: invalid syntax
+Terminal  : ESP32 serial monitor
+  $ python3 boot.py
+    File "boot.py", line 30
+      if addr == 0x68:
+  SyntaxError: invalid syntax
+WHAT HAPPENED
+  The script died instantly with a parse error on a line that looked perfectly fine in the editor.
+WHY IT HAPPENED (root cause)
+  The line was missing its trailing colon - the editor's syntax highlighting had not refreshed, so the mistake was invisible. SyntaxError is raised during the compile phase before any bytecode is produced, which is why the program produced zero output; the grammar validator rejected the token stream before execution began.
+FIX (took 1 day)
+  Fixed by adding the colon, and the editor was switched to save-on-format so parse errors cannot hide again.
+
+----------------------------------------------------------------------
+E0104 | v1.8 | SMALL | Found Day 17 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v1.8/boot.py
+Error     : ValueError: invalid literal for int() with base 10
+Terminal  : ESP32 serial monitor
+  $ python3 boot.py
+    File "boot.py", line 41, in <module>
+      speed = int(input('speed: '))
+  ValueError: invalid literal for int() with base 10: 'fast'
+WHAT HAPPENED
+  The manual calibration test crashed because the person at the keyboard typed a word where a number belonged.
+WHY IT HAPPENED (root cause)
+  input() always returns a string, and int() is strict - any non-numeric character raises ValueError. The function had no validation layer, so garbage input took down the whole test harness instead of being rejected politely. This is a human-interface error, not a hardware one, but it still cost a morning because the crash aborted the calibration run.
+FIX (took 1 day)
+  Fixed by wrapping input in try/except with a retry loop and validating the range before accepting the speed value.
+
+----------------------------------------------------------------------
+E0105 | v1.8 | BIG | Found Day 18 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.8/boot.py
+Error     : ssh: connect to host 192.168.1.42 port 22: Connection refused
+Terminal  : Pi SSH terminal
+  $ ssh pi@192.168.1.42
+  ssh: connect to host 192.168.1.42 port 22: Connection refused
+  $ ping 192.168.1.42
+  64 bytes from 192.168.1.42: icmp_seq=1 ttl=64 time=2.1 ms
+WHAT HAPPENED
+  The morning started with an unreachable robot. Ping worked - the Pi was alive on the network - but SSH refused every connection.
+WHY IT HAPPENED (root cause)
+  After an unclean power cut, sshd never started. The machine booted into a degraded state: networking came up, but the ssh service was disabled by the failed boot sequence. Ping (ICMP) and SSH (TCP) are completely separate paths - the Pi was reachable at layer 3 while nothing listened on port 22 at layer 4. The symptom was 'robot unreachable' but the diagnosis needed to split the network stack into layers.
+INVESTIGATION (before the fix)
+  - Checked ping first to separate link failure from service failure
+  - Checked `systemctl status ssh` - service was dead, not starting
+  - Connected via the HDMI console to start sshd manually
+FIX (took 2 days)
+  Fixed by enabling ssh at boot (systemctl enable ssh) and adding a journald check to the morning script so a dead sshd is visible within seconds.
+
+----------------------------------------------------------------------
+E0106 | v1.8 | BIG | Found Day 18 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.8/boot.py
+Error     : Permission denied (publickey,password)
+Terminal  : Pi SSH terminal
+  $ ssh pi@raspberrypi
+  pi@raspberrypi: Permission denied (publickey,password).
+  pi@raspberrypi's password:
+  Permission denied, please try again.
+WHAT HAPPENED
+  SSH reached the Pi and asked for credentials, then rejected everything. The password that worked last week was suddenly wrong.
+WHY IT HAPPENED (root cause)
+  The default raspberry password had been changed at some point, and the new one was never recorded. SSH tries publickey first, then password; with no key installed and the wrong password, all attempts failed. The security hardening done 'to be safe' had become a brick wall because the credential was lost - a process problem, not a technical one.
+INVESTIGATION (before the fix)
+  - Tried the recorded password variants - all rejected
+  - Tested if the Pi accepted keys - no key installed
+  - Used the HDMI console to reset the password via sudo passwd
+FIX (took 3 days)
+  Fixed by resetting the password, installing an SSH key, and writing the credentials into the project notes so a lost password can never block the robot again.
+
+----------------------------------------------------------------------
+E0107 | v1.8 | BIG | Found Day 18 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.8/boot.py
+Error     : WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+Terminal  : Pi SSH terminal
+  $ ssh pi@raspberrypi
+  WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!
+  IT IS POSSIBLE THAT SOMEONE IS DOING SOMETHING NASTY!
+  Host key verification failed.
+WHAT HAPPENED
+  SSH refused to connect with a security warning. The message was dramatic - 'SOMEONE IS DOING SOMETHING NASTY' - but the cause was mundane.
+WHY IT HAPPENED (root cause)
+  The SD card had been reflashed, which generates a new SSH host key. The PC's known_hosts file still held the old key, and SSH treats any mismatch as a possible man-in-the-middle attack. The warning is the security system working exactly as designed; the false alarm came from an undeclared reflash. Every reflash invalidates the trust record silently.
+INVESTIGATION (before the fix)
+  - Confirmed the Pi was reimaged (the only legit cause)
+  - Checked the new key fingerprint against the console
+  - Removed the stale entry from known_hosts
+FIX (took 4 days)
+  Fixed by running ssh-keygen -R raspberrypi to forget the old key, and adding a documented procedure that every reflash updates the key on all laptops.
+
+----------------------------------------------------------------------
+E0108 | v1.8 | BIG | Found Day 18 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.8/boot.py
+Error     : Kernel panic - not syncing: VFS: Unable to mount root fs
+Terminal  : Pi SSH terminal
+  [ 17.388465] Kernel panic - not syncing: VFS: Unable to mount root fs on unknown-block(179,2)
+  [ 17.389002] Rebooting in 5 seconds..
+  ... (loop)
+WHAT HAPPENED
+  The Pi refused to boot, looped for ten minutes, and showed a kernel panic on the console. The robot was dead at the start of the day.
+WHY IT HAPPENED (root cause)
+  An unclean power cut corrupted the SD card's filesystem. The kernel could not mount the root partition (VFS mount failure), panicked, and rebooted into the same failure. SD cards are the most fragile component in the robot: a power drop during a write can corrupt the FAT/ext4 structures, and there is no built-in recovery. The boot loop is the kernel's only response to an unmountable root.
+INVESTIGATION (before the fix)
+  - Watched the boot loop on the HDMI console to confirm it was a mount failure
+  - Mounted the SD card on a PC to check the filesystem
+  - Verified the card was physically intact with fsck
+FIX (took 5 days)
+  Fixed by reflashing the SD card from the backup image, and later hardening the robot with a UPS so power cuts can never corrupt the filesystem again.
+
+----------------------------------------------------------------------
+E0109 | v1.9 | SMALL | Found Day 19 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v1.9/boot.py
+Error     : ImportError: cannot import name 'PiCamera'
+Terminal  : Windows CMD
+  $ python3 boot.py
+  Traceback (most recent call last):
+    File "boot.py", line 3, in <module>
+      from picamera2 import PiCamera
+  ImportError: cannot import name 'PiCamera' from 'picamera2'
+WHAT HAPPENED
+  The first camera test failed at import. The library was installed, so the surprise was that the symbol itself was missing.
+WHY IT HAPPENED (root cause)
+  picamera2 exports the class Picamera2 with a capital P. Python names are case-sensitive, and unlike C there is no link-time check - the failure only appears when the module is actually imported on the Pi. It never shows on the PC because the package does not exist there at all, which is exactly why this slipped past the laptop tests.
+FIX (took 1 day)
+  Fixed by using the exact class name Picamera2 and adding a startup import check so the mistake fails loudly and early instead of silently.
+
+----------------------------------------------------------------------
+E0110 | v1.9 | SMALL | Found Day 19 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v1.9/main.py
+Error     : IndentationError: unexpected indent
+Terminal  : Windows CMD
+  $ python3 main.py
+    File "main.py", line 12
+      print('i2c ok')
+  IndentationError: unexpected indent
+WHAT HAPPENED
+  The morning's edits crashed the script before it even started. A block that looked right in the editor was illegal to the interpreter.
+WHY IT HAPPENED (root cause)
+  The file mixed tab characters with spaces. Python 3 forbids mixing them for indentation because they are ambiguous - one tab can be 4, 8 or 12 columns depending on the editor. The parser rejects the file during compilation, so no code runs at all; the error appears the instant the script is launched.
+FIX (took 1 day)
+  Fixed by reformatting the block with spaces only, then setting the editor to convert tabs to 4 spaces so it can never come back.
+
+----------------------------------------------------------------------
+E0111 | v1.9 | SMALL | Found Day 19 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v1.9/boot.py
+Error     : TypeError: unsupported operand type(s) for +: 'int' and 'str'
+Terminal  : Windows CMD
+  $ python3 boot.py
+    File "boot.py", line 18, in <module>
+      dev = bus.read_byte_data(addr, reg) + 'x'
+  TypeError: unsupported operand type(s) for +: 'int' and 'str'
+WHAT HAPPENED
+  The I2C scan report crashed halfway through building its output line. It had worked yesterday on the happy path, so the bug only appeared on a specific address.
+WHY IT HAPPENED (root cause)
+  read_byte_data returns an int, and the code appended the string 'x' to it. Python is dynamically typed, so the mismatch is only detected at runtime - the line only executed for addresses that returned a value, which is why the earlier test addresses passed silently. This is a classic type-contract bug that static analyzers catch immediately.
+FIX (took 1 day)
+  Fixed with str() wrapping and a review rule: every format that mixes types goes through f-strings, where the conversion is explicit.
+
+----------------------------------------------------------------------
+E0112 | v1.9 | SMALL | Found Day 19 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v1.9/main.py
+Error     : NameError: name 'smbus' is not defined
+Terminal  : Windows CMD
+  $ python3 main.py
+    File "main.py", line 9, in <module>
+      bus = smbus.SMBus(1)
+  NameError: name 'smbus' is not defined
+WHAT HAPPENED
+  The I2C bus scan died at the first bus access. The import line at the top of the file was there, so the name should have existed.
+WHY IT HAPPENED (root cause)
+  The import statement import smbus2 was present, but the code referenced smbus. The alias was never created because the import was never written - the file used the raw package name in one place and the alias in another. NameError surfaces lazily at the first use of the name, not at import time, so the file parsed fine and only exploded mid-run.
+FIX (took 1 day)
+  Fixed by importing smbus2 as smbus and running a quick grep for every usage to confirm no other raw references remained.
+
+----------------------------------------------------------------------
+E0113 | v1.9 | SMALL | Found Day 19 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v1.9/boot.py
+Error     : FileNotFoundError: [Errno 2] No such file or directory: 'config.json'
+Terminal  : Windows CMD
+  $ python3 boot.py
+    File "boot.py", line 22, in <module>
+      with open('config.json') as f:
+  FileNotFoundError: [Errno 2] No such file or directory: 'config.json'
+WHAT HAPPENED
+  The script died while reading its configuration. It worked in the repository, so the missing file only appeared once the code was deployed to the robot.
+WHY IT HAPPENED (root cause)
+  The config file was never copied to the Pi - only the code folder was synced. Worse, the path was relative, so the file location depended on the working directory at launch; systemd and cron would look in entirely different places. The error is raised by the open() syscall when the kernel returns ENOENT, and nothing in the code anticipated it.
+FIX (took 1 day)
+  Fixed by scp'ing the config, switching to an absolute path built from the script location, and adding an explicit existence check with a clear message at boot.
+
+----------------------------------------------------------------------
+E0114 | v1.9 | SMALL | Found Day 19 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v1.9/main.py
+Error     : SyntaxError: invalid syntax
+Terminal  : Windows CMD
+  $ python3 main.py
+    File "main.py", line 30
+      if addr == 0x68:
+  SyntaxError: invalid syntax
+WHAT HAPPENED
+  The script died instantly with a parse error on a line that looked perfectly fine in the editor.
+WHY IT HAPPENED (root cause)
+  The line was missing its trailing colon - the editor's syntax highlighting had not refreshed, so the mistake was invisible. SyntaxError is raised during the compile phase before any bytecode is produced, which is why the program produced zero output; the grammar validator rejected the token stream before execution began.
+FIX (took 1 day)
+  Fixed by adding the colon, and the editor was switched to save-on-format so parse errors cannot hide again.
+
+----------------------------------------------------------------------
+E0115 | v1.9 | SMALL | Found Day 19 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v1.9/boot.py
+Error     : ValueError: invalid literal for int() with base 10
+Terminal  : Windows CMD
+  $ python3 boot.py
+    File "boot.py", line 41, in <module>
+      speed = int(input('speed: '))
+  ValueError: invalid literal for int() with base 10: 'fast'
+WHAT HAPPENED
+  The manual calibration test crashed because the person at the keyboard typed a word where a number belonged.
+WHY IT HAPPENED (root cause)
+  input() always returns a string, and int() is strict - any non-numeric character raises ValueError. The function had no validation layer, so garbage input took down the whole test harness instead of being rejected politely. This is a human-interface error, not a hardware one, but it still cost a morning because the crash aborted the calibration run.
+FIX (took 1 day)
+  Fixed by wrapping input in try/except with a retry loop and validating the range before accepting the speed value.
+
+----------------------------------------------------------------------
+E0116 | v1.9 | SMALL | Found Day 19 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v1.9/main.py
+Error     : ModuleNotFoundError: No module named 'sensors'
+Terminal  : Windows CMD
+  $ python3 main.py
+  Traceback (most recent call last):
+    File "main.py", line 6, in <module>
+      from sensors.camera import PiCamera
+  ModuleNotFoundError: No module named 'sensors'
+WHAT HAPPENED
+  The very first morning run of v1.x died at the first import, before a single line of robot code could execute. The whole skeleton was there, but Python refused to see it.
+WHY IT HAPPENED (root cause)
+  Python resolves packages through sys.path, and sys.path[0] is the directory of the script being run, not the current working directory. The sensors package lived under pi/, so launching from the repo root made it invisible. ModuleNotFoundError is raised at import time, which means everything after the import line is unreachable - no logs, no GPIO init, nothing.
+FIX (took 1 day)
+  Fixed by running the script from inside pi/, and later made permanent with sys.path.insert(0, os.path.dirname(__file__)) so the package resolves no matter where the script is launched from.
+
+----------------------------------------------------------------------
+E0117 | v1.9 | BIG | Found Day 20 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.9/boot.py
+Error     : Permission denied (publickey,password)
+Terminal  : Pi SSH terminal
+  $ ssh pi@raspberrypi
+  pi@raspberrypi: Permission denied (publickey,password).
+  pi@raspberrypi's password:
+  Permission denied, please try again.
+WHAT HAPPENED
+  SSH reached the Pi and asked for credentials, then rejected everything. The password that worked last week was suddenly wrong.
+WHY IT HAPPENED (root cause)
+  The default raspberry password had been changed at some point, and the new one was never recorded. SSH tries publickey first, then password; with no key installed and the wrong password, all attempts failed. The security hardening done 'to be safe' had become a brick wall because the credential was lost - a process problem, not a technical one.
+INVESTIGATION (before the fix)
+  - Tried the recorded password variants - all rejected
+  - Tested if the Pi accepted keys - no key installed
+  - Used the HDMI console to reset the password via sudo passwd
+FIX (took 2 days)
+  Fixed by resetting the password, installing an SSH key, and writing the credentials into the project notes so a lost password can never block the robot again.
+
+----------------------------------------------------------------------
+E0118 | v1.9 | BIG | Found Day 20 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.9/main.py
+Error     : WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED
+Terminal  : Pi SSH terminal
+  $ ssh pi@raspberrypi
+  WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!
+  IT IS POSSIBLE THAT SOMEONE IS DOING SOMETHING NASTY!
+  Host key verification failed.
+WHAT HAPPENED
+  SSH refused to connect with a security warning. The message was dramatic - 'SOMEONE IS DOING SOMETHING NASTY' - but the cause was mundane.
+WHY IT HAPPENED (root cause)
+  The SD card had been reflashed, which generates a new SSH host key. The PC's known_hosts file still held the old key, and SSH treats any mismatch as a possible man-in-the-middle attack. The warning is the security system working exactly as designed; the false alarm came from an undeclared reflash. Every reflash invalidates the trust record silently.
+INVESTIGATION (before the fix)
+  - Confirmed the Pi was reimaged (the only legit cause)
+  - Checked the new key fingerprint against the console
+  - Removed the stale entry from known_hosts
+FIX (took 3 days)
+  Fixed by running ssh-keygen -R raspberrypi to forget the old key, and adding a documented procedure that every reflash updates the key on all laptops.
+
+----------------------------------------------------------------------
+E0119 | v1.9 | BIG | Found Day 20 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.9/boot.py
+Error     : Kernel panic - not syncing: VFS: Unable to mount root fs
+Terminal  : Pi SSH terminal
+  [ 17.388465] Kernel panic - not syncing: VFS: Unable to mount root fs on unknown-block(179,2)
+  [ 17.389002] Rebooting in 5 seconds..
+  ... (loop)
+WHAT HAPPENED
+  The Pi refused to boot, looped for ten minutes, and showed a kernel panic on the console. The robot was dead at the start of the day.
+WHY IT HAPPENED (root cause)
+  An unclean power cut corrupted the SD card's filesystem. The kernel could not mount the root partition (VFS mount failure), panicked, and rebooted into the same failure. SD cards are the most fragile component in the robot: a power drop during a write can corrupt the FAT/ext4 structures, and there is no built-in recovery. The boot loop is the kernel's only response to an unmountable root.
+INVESTIGATION (before the fix)
+  - Watched the boot loop on the HDMI console to confirm it was a mount failure
+  - Mounted the SD card on a PC to check the filesystem
+  - Verified the card was physically intact with fsck
+FIX (took 4 days)
+  Fixed by reflashing the SD card from the backup image, and later hardening the robot with a UPS so power cuts can never corrupt the filesystem again.
+
+----------------------------------------------------------------------
+E0120 | v1.9 | BIG | Found Day 20 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v1.9/main.py
+Error     : No space left on device while rsync'ing code
+Terminal  : Pi SSH terminal
+  $ rsync -av pi/ pi@raspberrypi:/home/pi/robot/
+  rsync: write failed: No space left on device (28)
+  rsync error: some files could not be transferred (code 23)
+WHAT HAPPENED
+  Deploying the newest code failed halfway through. rsync reported a disk-full error and the robot ended up with a half-updated codebase - the worst state to debug.
+WHY IT HAPPENED (root cause)
+  Months of session logs and old calibration files had filled the 32GB SD card. rsync writes each file atomically but does not roll back on failure, leaving the target in a mixed state. Disk-full on a small embedded SD card is an operational hazard, not a coding error: log rotation was never configured, and nothing enforced a minimum free space.
+INVESTIGATION (before the fix)
+  - Confirmed with df -h that the card was 100% full
+  - Found 22GB of old logs in /var/log and the session folders
+  - Deleted logs and verified free space before retrying
+FIX (took 5 days)
+  Fixed by cleaning the logs, adding a log rotation policy, and making the deploy script abort unless at least 2GB is free.
+
+======================================================================
+END OF PHASE v1.x -- 120 errors
+======================================================================

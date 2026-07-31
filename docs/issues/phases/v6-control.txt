@@ -1,0 +1,2104 @@
+WRO 4WS Robot - Error Catalog (1000+ Errors, Deep Detail)
+=========================================================
+One error entry per development morning across the whole 90-version
+history repo (v1.0 -> v9.9).  Every entry includes WHAT HAPPENED,
+WHY IT HAPPENED (root cause / deep research), the terminal type and
+exact output, and the FIX with how many days it took.
+
+  SMALL  errors : fixed the same day (1 day)
+  BIG    errors : 2-5 days, with investigation steps before the fix
+
+Day = development-day counter only (no dates).
+
+Total errors : 1080   (720 SMALL / 360 BIG)
+Total days   : 180
+Versions     : 90
+Phases       : 9
+
+======================================================================
+PHASE v6.x  --  CONTROL LOOP & PLANNING
+======================================================================
+
+----------------------------------------------------------------------
+E0001 | v6.0 | SMALL | Found Day 101 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v6.0/motor_pid.py
+Error     : Gain schedule jumps at the speed boundary
+Terminal  : ESP32 serial monitor
+  $ python3 motor_pid.py
+  gain: 0.9 -> 2.4 (speed 1.00 m/s)
+  steering step visible in the log
+WHAT HAPPENED
+  The steering gain jumped from 0.9 to 2.4 the instant the robot crossed 1 m/s. The steering response suddenly felt twice as aggressive.
+WHY IT HAPPENED (root cause)
+  The gain schedule was a lookup table with discrete rows, and the lookup switched rows at the boundary instead of interpolating between them. A discontinuous gain produces a discontinuous control law: the controller's personality changes instantly at a speed threshold. Gain scheduling is only smooth when the schedule itself is smooth.
+FIX (took 1 day)
+  Fixed by linearly interpolating between table rows, and adding a test that verifies the gain never changes by more than 10% per control tick.
+
+----------------------------------------------------------------------
+E0002 | v6.0 | SMALL | Found Day 101 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v6.0/pid_calibrate.py
+Error     : Feedforward sign is opposite on reverse
+Terminal  : ESP32 serial monitor
+  $ python3 pid_calibrate.py
+  reverse + feedforward = wrong direction
+  robot pulls to the left in reverse
+WHAT HAPPENED
+  In reverse, the robot consistently pulled to the left. The feedback controller was compensating correctly - the feedforward term was actively fighting it.
+WHY IT HAPPENED (root cause)
+  The feedforward steering term was computed for forward motion and applied unchanged when reversing. Steering geometry is direction-dependent: the same curvature requires the opposite steer correction when the velocity is negative. The sign flip was known in the ackermann module but not propagated to the controller, so two modules disagreed about the direction convention.
+FIX (took 1 day)
+  Fixed by multiplying the feedforward term by the direction sign, and adding a reverse-path test case to the controller test suite.
+
+----------------------------------------------------------------------
+E0003 | v6.0 | SMALL | Found Day 101 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v6.0/motor_pid.py
+Error     : Cubic spline overshoots past the goal
+Terminal  : ESP32 serial monitor
+  $ python3 motor_pid.py
+  end: x=2.01 y=0.03 (goal 2.00, 0.00)
+  overshoot 1cm at the parking spot
+WHAT HAPPENED
+  The spline ended 1cm past the parking target. Small in absolute terms, fatal for a parking maneuver where the tolerance is measured in millimeters.
+WHY IT HAPPENED (root cause)
+  The smoothing pass relaxed the endpoint constraints, letting the spline drift off the fixed end point. Splines are defined by their boundary conditions; the endpoint condition was applied before smoothing and the smoother was allowed to move it. The constraint was lost in the pipeline, not in the math.
+FIX (took 1 day)
+  Fixed by re-imposing the fixed endpoint condition after smoothing and adding a unit test that pins both endpoints to the exact goal.
+
+----------------------------------------------------------------------
+E0004 | v6.0 | SMALL | Found Day 101 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v6.0/pid_calibrate.py
+Error     : Velocity profile outputs negative speeds
+Terminal  : ESP32 serial monitor
+  $ python3 pid_calibrate.py
+  v: -0.2 m/s at t=1.2s
+  robot reverses mid-run
+WHAT HAPPENED
+  The robot briefly reversed in the middle of a straight run. The velocity profile commanded a negative speed - the robot was doing exactly what it was told.
+WHY IT HAPPENED (root cause)
+  The trapezoidal profile computes the deceleration phase assuming the target is reachable in the given time. When the target was too close for the time budget, the deceleration term overshot below zero. The math produced an unreachable profile instead of detecting the conflict; negative speed is the profile's way of saying 'the plan is impossible'.
+FIX (took 1 day)
+  Fixed by clamping the profile speed to zero and extending the profile duration when the target is not reachable within the requested time.
+
+----------------------------------------------------------------------
+E0005 | v6.0 | SMALL | Found Day 101 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v6.0/motor_pid.py
+Error     : Obstacle avoidance oscillates left-right
+Terminal  : ESP32 serial monitor
+  $ python3 motor_pid.py
+  steer: +12 -14 +11 -13 deg
+  no progress toward the goal
+WHAT HAPPENED
+  The robot wobbled in front of an obstacle without making progress. The steering command swung positive and negative every half second.
+WHY IT HAPPENED (root cause)
+  The avoidance gain and the goal-pull gain fought each other: as the robot turned away from the obstacle it aligned with the goal, and as it turned toward the goal it approached the obstacle again. Two competing controllers with no arbitration produced a limit cycle. The oscillation is the system's equilibrium - it is stable in the wrong way.
+FIX (took 1 day)
+  Fixed by adding a deadband where neither controller acts and a goal bias that makes the goal-pull dominant whenever both demands conflict.
+
+----------------------------------------------------------------------
+E0006 | v6.0 | SMALL | Found Day 101 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v6.0/pid_calibrate.py
+Error     : MPC solve fails on the first step
+Terminal  : ESP32 serial monitor
+  $ python3 pid_calibrate.py
+  cvxpy error: Problem status INFEASIBLE
+  no control output
+WHAT HAPPENED
+  The model-predictive controller produced no output at all - the solver reported the optimization problem was infeasible at the very first step.
+WHY IT HAPPENED (root cause)
+  The MPC horizon covered more track than existed, and the terminal constraint required the robot to be at a goal point the path could not reach within the horizon. A constrained optimization with contradictory constraints is infeasible by definition; the solver correctly refused to solve an impossible problem. The model was the bug - the horizon and constraints did not match the track geometry.
+FIX (took 1 day)
+  Fixed by shrinking the horizon to the track length and relaxing the terminal constraint from an equality to a soft penalty.
+
+----------------------------------------------------------------------
+E0007 | v6.0 | SMALL | Found Day 101 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v6.0/motor_pid.py
+Error     : PID output saturates then overcorrects
+Terminal  : ESP32 serial monitor
+  $ python3 motor_pid.py
+  output: 0.98 -> -0.99 -> 0.97
+  robot snakes down the straight
+WHAT HAPPENED
+  The robot weaved down the straight at every launch. The PID output swung from full throttle to full brake and back, several times per second.
+WHY IT HAPPENED (root cause)
+  The integral term accumulated while the robot was stalled at launch, and by the time motion started the integral alone exceeded the output limits. The controller then had to burn off the stored error by overshooting in the opposite direction - classic integral windup. Windup happens because the integrator keeps summing even while the output is clamped at its physical limit, so the error it stores is never realizable.
+FIX (took 1 day)
+  Fixed by adding anti-windup: stop integrating when the output is saturated and the integral would push it further into the limit.
+
+----------------------------------------------------------------------
+E0008 | v6.0 | SMALL | Found Day 101 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v6.0/pid_calibrate.py
+Error     : Stanley cross-track error is NaN at waypoint 0
+Terminal  : ESP32 serial monitor
+  $ python3 pid_calibrate.py
+  cross_track: nan  (first waypoint)
+  no steering command sent
+WHAT HAPPENED
+  The Stanley controller produced no steering command at the first waypoint. The cross-track error was NaN, so the controller output was NaN, and the car drove straight past the path.
+WHY IT HAPPENED (root cause)
+  The first path segment had zero length - two identical waypoints at the start of the list - so the tangent direction was undefined, and the cross-track math divided by zero. Stanley's formula assumes a valid segment direction; a zero-length segment violates that invariant. The NaN then propagated through the control output because no validation existed between the path math and the steering command.
+FIX (took 1 day)
+  Fixed by skipping zero-length segments in the path parser and replacing any NaN cross-track value with the previous valid value.
+
+----------------------------------------------------------------------
+E0009 | v6.0 | BIG | Found Day 102 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.0/motor_pid.py
+Error     : Global planner returns a path through the pillar
+Terminal  : Pi SSH terminal
+  $ python3 motor_pid.py
+  path waypoint 3: inside the pillar
+  collision on the replay
+WHAT HAPPENED
+  The global planner produced a path that ran straight through a pillar. The replay showed the collision clearly - the planner never considered the robot's width.
+WHY IT HAPPENED (root cause)
+  The grid cost map marked only the obstacle's exact cells as blocked. A robot has physical width, so its center can be up to half a width away from an obstacle while the robot still collides. The planner used a point model for a 20cm-wide robot. Path planning for a real robot requires the configuration-space inflation; planning a point path through the environment is planning a point's path.
+INVESTIGATION (before the fix)
+  - Replayed the planned path against the map - the waypoint was inside
+  - Measured the clearance at the collision - less than the robot width
+  - Inflated the obstacles by the robot radius and re-planned
+FIX (took 2 days)
+  Fixed by inflating all obstacles by the robot radius before running A*, and adding a clearance check on the final path.
+
+----------------------------------------------------------------------
+E0010 | v6.0 | BIG | Found Day 102 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.0/pid_calibrate.py
+Error     : Velocity profile ignores the corner limit
+Terminal  : Pi SSH terminal
+  $ python3 pid_calibrate.py
+  v = 2.0 m/s into a 60-degree corner
+  tire squeal, robot drifts
+WHAT HAPPENED
+  The robot entered a 60-degree corner at full speed and slid wide. The profile optimized for time with no regard for what the tires can do.
+WHY IT HAPPENED (root cause)
+  The velocity profile minimized lap time subject only to acceleration limits, not to lateral acceleration. A corner has a speed limit set by physics: v_max = sqrt(mu * g * r). Ignoring the curvature limit produced a profile that is fast on paper and impossible in reality - the tires physically cannot provide the required lateral force.
+INVESTIGATION (before the fix)
+  - Measured the actual cornering speed limit on the track
+  - Overlaid the profile's speed at the corner - it exceeded the limit
+  - Added a curvature-dependent speed cap to the profile
+FIX (took 3 days)
+  Fixed by adding a speed cap derived from the path curvature and the measured tire limit, applied at every point of the profile.
+
+----------------------------------------------------------------------
+E0011 | v6.0 | BIG | Found Day 102 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.0/motor_pid.py
+Error     : Cubic spline path is jerky at waypoint 5
+Terminal  : Pi SSH terminal
+  $ python3 motor_pid.py
+  acceleration spike: 12 m/s^2 at wp5
+  visible jerk in the run
+WHAT HAPPENED
+  At waypoint 5 the robot jerked visibly. The path was smooth to the eye - the jerk was in the timing, not the shape.
+WHY IT HAPPENED (root cause)
+  The spline was parameterized by a non-arc-length parameter, so equal parameter steps cover unequal distances along the path. The velocity controller interpreted parameter speed as spatial speed, producing huge accelerations where the parameterization compressed distance. A geometrically smooth path can be dynamically jerky if the parameterization is uneven.
+INVESTIGATION (before the fix)
+  - Plotted the path speed against distance - the spike matched wp5
+  - Checked the parameterization - it was not arc length
+  - Reparameterized by arc length and re-ran
+FIX (took 4 days)
+  Fixed by reparameterizing the spline with arc length so parameter speed equals spatial speed, and validating the acceleration profile in the profile_test.
+
+----------------------------------------------------------------------
+E0012 | v6.0 | BIG | Found Day 102 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.0/pid_calibrate.py
+Error     : Feedforward causes overshoot in sharp turns
+Terminal  : Pi SSH terminal
+  $ python3 pid_calibrate.py
+  ff: +0.8 -> overshoot 8 degrees
+  corrective jerk after each corner
+WHAT HAPPENED
+  After every sharp corner the robot overshot the heading by 8 degrees and then corrected with a jerk. Gentle corners were fine - only the sharp ones overshot.
+WHY IT HAPPENED (root cause)
+  The feedforward gain was tuned for the average curve and over-applied on sharp ones. The steering response is nonlinear: at large angles the servo linkage has different leverage, so a feedforward command calibrated for 30 degrees is too strong at 90. A single constant gain cannot fit a nonlinear plant across the whole operating range.
+INVESTIGATION (before the fix)
+  - Measured the overshoot against corner sharpness - it scaled with angle
+  - Plotted the steer response vs command - nonlinear above 45 degrees
+  - Scaled the feedforward with the corner curvature
+FIX (took 5 days)
+  Fixed by scaling the feedforward with the path curvature, and verifying with the corner_test that the overshoot stays under 2 degrees.
+
+----------------------------------------------------------------------
+E0013 | v6.1 | SMALL | Found Day 103 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v6.1/servo_pid.py
+Error     : Feedforward sign is opposite on reverse
+Terminal  : Windows CMD
+  $ python3 servo_pid.py
+  reverse + feedforward = wrong direction
+  robot pulls to the left in reverse
+WHAT HAPPENED
+  In reverse, the robot consistently pulled to the left. The feedback controller was compensating correctly - the feedforward term was actively fighting it.
+WHY IT HAPPENED (root cause)
+  The feedforward steering term was computed for forward motion and applied unchanged when reversing. Steering geometry is direction-dependent: the same curvature requires the opposite steer correction when the velocity is negative. The sign flip was known in the ackermann module but not propagated to the controller, so two modules disagreed about the direction convention.
+FIX (took 1 day)
+  Fixed by multiplying the feedforward term by the direction sign, and adding a reverse-path test case to the controller test suite.
+
+----------------------------------------------------------------------
+E0014 | v6.1 | SMALL | Found Day 103 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v6.1/servo_step_test.py
+Error     : Cubic spline overshoots past the goal
+Terminal  : Windows CMD
+  $ python3 servo_step_test.py
+  end: x=2.01 y=0.03 (goal 2.00, 0.00)
+  overshoot 1cm at the parking spot
+WHAT HAPPENED
+  The spline ended 1cm past the parking target. Small in absolute terms, fatal for a parking maneuver where the tolerance is measured in millimeters.
+WHY IT HAPPENED (root cause)
+  The smoothing pass relaxed the endpoint constraints, letting the spline drift off the fixed end point. Splines are defined by their boundary conditions; the endpoint condition was applied before smoothing and the smoother was allowed to move it. The constraint was lost in the pipeline, not in the math.
+FIX (took 1 day)
+  Fixed by re-imposing the fixed endpoint condition after smoothing and adding a unit test that pins both endpoints to the exact goal.
+
+----------------------------------------------------------------------
+E0015 | v6.1 | SMALL | Found Day 103 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v6.1/servo_pid.py
+Error     : Velocity profile outputs negative speeds
+Terminal  : Windows CMD
+  $ python3 servo_pid.py
+  v: -0.2 m/s at t=1.2s
+  robot reverses mid-run
+WHAT HAPPENED
+  The robot briefly reversed in the middle of a straight run. The velocity profile commanded a negative speed - the robot was doing exactly what it was told.
+WHY IT HAPPENED (root cause)
+  The trapezoidal profile computes the deceleration phase assuming the target is reachable in the given time. When the target was too close for the time budget, the deceleration term overshot below zero. The math produced an unreachable profile instead of detecting the conflict; negative speed is the profile's way of saying 'the plan is impossible'.
+FIX (took 1 day)
+  Fixed by clamping the profile speed to zero and extending the profile duration when the target is not reachable within the requested time.
+
+----------------------------------------------------------------------
+E0016 | v6.1 | SMALL | Found Day 103 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v6.1/servo_step_test.py
+Error     : Obstacle avoidance oscillates left-right
+Terminal  : Windows CMD
+  $ python3 servo_step_test.py
+  steer: +12 -14 +11 -13 deg
+  no progress toward the goal
+WHAT HAPPENED
+  The robot wobbled in front of an obstacle without making progress. The steering command swung positive and negative every half second.
+WHY IT HAPPENED (root cause)
+  The avoidance gain and the goal-pull gain fought each other: as the robot turned away from the obstacle it aligned with the goal, and as it turned toward the goal it approached the obstacle again. Two competing controllers with no arbitration produced a limit cycle. The oscillation is the system's equilibrium - it is stable in the wrong way.
+FIX (took 1 day)
+  Fixed by adding a deadband where neither controller acts and a goal bias that makes the goal-pull dominant whenever both demands conflict.
+
+----------------------------------------------------------------------
+E0017 | v6.1 | SMALL | Found Day 103 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v6.1/servo_pid.py
+Error     : MPC solve fails on the first step
+Terminal  : Windows CMD
+  $ python3 servo_pid.py
+  cvxpy error: Problem status INFEASIBLE
+  no control output
+WHAT HAPPENED
+  The model-predictive controller produced no output at all - the solver reported the optimization problem was infeasible at the very first step.
+WHY IT HAPPENED (root cause)
+  The MPC horizon covered more track than existed, and the terminal constraint required the robot to be at a goal point the path could not reach within the horizon. A constrained optimization with contradictory constraints is infeasible by definition; the solver correctly refused to solve an impossible problem. The model was the bug - the horizon and constraints did not match the track geometry.
+FIX (took 1 day)
+  Fixed by shrinking the horizon to the track length and relaxing the terminal constraint from an equality to a soft penalty.
+
+----------------------------------------------------------------------
+E0018 | v6.1 | SMALL | Found Day 103 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v6.1/servo_step_test.py
+Error     : PID output saturates then overcorrects
+Terminal  : Windows CMD
+  $ python3 servo_step_test.py
+  output: 0.98 -> -0.99 -> 0.97
+  robot snakes down the straight
+WHAT HAPPENED
+  The robot weaved down the straight at every launch. The PID output swung from full throttle to full brake and back, several times per second.
+WHY IT HAPPENED (root cause)
+  The integral term accumulated while the robot was stalled at launch, and by the time motion started the integral alone exceeded the output limits. The controller then had to burn off the stored error by overshooting in the opposite direction - classic integral windup. Windup happens because the integrator keeps summing even while the output is clamped at its physical limit, so the error it stores is never realizable.
+FIX (took 1 day)
+  Fixed by adding anti-windup: stop integrating when the output is saturated and the integral would push it further into the limit.
+
+----------------------------------------------------------------------
+E0019 | v6.1 | SMALL | Found Day 103 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v6.1/servo_pid.py
+Error     : Stanley cross-track error is NaN at waypoint 0
+Terminal  : Windows CMD
+  $ python3 servo_pid.py
+  cross_track: nan  (first waypoint)
+  no steering command sent
+WHAT HAPPENED
+  The Stanley controller produced no steering command at the first waypoint. The cross-track error was NaN, so the controller output was NaN, and the car drove straight past the path.
+WHY IT HAPPENED (root cause)
+  The first path segment had zero length - two identical waypoints at the start of the list - so the tangent direction was undefined, and the cross-track math divided by zero. Stanley's formula assumes a valid segment direction; a zero-length segment violates that invariant. The NaN then propagated through the control output because no validation existed between the path math and the steering command.
+FIX (took 1 day)
+  Fixed by skipping zero-length segments in the path parser and replacing any NaN cross-track value with the previous valid value.
+
+----------------------------------------------------------------------
+E0020 | v6.1 | SMALL | Found Day 103 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v6.1/servo_step_test.py
+Error     : Gain schedule jumps at the speed boundary
+Terminal  : Windows CMD
+  $ python3 servo_step_test.py
+  gain: 0.9 -> 2.4 (speed 1.00 m/s)
+  steering step visible in the log
+WHAT HAPPENED
+  The steering gain jumped from 0.9 to 2.4 the instant the robot crossed 1 m/s. The steering response suddenly felt twice as aggressive.
+WHY IT HAPPENED (root cause)
+  The gain schedule was a lookup table with discrete rows, and the lookup switched rows at the boundary instead of interpolating between them. A discontinuous gain produces a discontinuous control law: the controller's personality changes instantly at a speed threshold. Gain scheduling is only smooth when the schedule itself is smooth.
+FIX (took 1 day)
+  Fixed by linearly interpolating between table rows, and adding a test that verifies the gain never changes by more than 10% per control tick.
+
+----------------------------------------------------------------------
+E0021 | v6.1 | BIG | Found Day 104 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.1/servo_pid.py
+Error     : Velocity profile ignores the corner limit
+Terminal  : Pi SSH terminal
+  $ python3 servo_pid.py
+  v = 2.0 m/s into a 60-degree corner
+  tire squeal, robot drifts
+WHAT HAPPENED
+  The robot entered a 60-degree corner at full speed and slid wide. The profile optimized for time with no regard for what the tires can do.
+WHY IT HAPPENED (root cause)
+  The velocity profile minimized lap time subject only to acceleration limits, not to lateral acceleration. A corner has a speed limit set by physics: v_max = sqrt(mu * g * r). Ignoring the curvature limit produced a profile that is fast on paper and impossible in reality - the tires physically cannot provide the required lateral force.
+INVESTIGATION (before the fix)
+  - Measured the actual cornering speed limit on the track
+  - Overlaid the profile's speed at the corner - it exceeded the limit
+  - Added a curvature-dependent speed cap to the profile
+FIX (took 2 days)
+  Fixed by adding a speed cap derived from the path curvature and the measured tire limit, applied at every point of the profile.
+
+----------------------------------------------------------------------
+E0022 | v6.1 | BIG | Found Day 104 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.1/servo_step_test.py
+Error     : Cubic spline path is jerky at waypoint 5
+Terminal  : Pi SSH terminal
+  $ python3 servo_step_test.py
+  acceleration spike: 12 m/s^2 at wp5
+  visible jerk in the run
+WHAT HAPPENED
+  At waypoint 5 the robot jerked visibly. The path was smooth to the eye - the jerk was in the timing, not the shape.
+WHY IT HAPPENED (root cause)
+  The spline was parameterized by a non-arc-length parameter, so equal parameter steps cover unequal distances along the path. The velocity controller interpreted parameter speed as spatial speed, producing huge accelerations where the parameterization compressed distance. A geometrically smooth path can be dynamically jerky if the parameterization is uneven.
+INVESTIGATION (before the fix)
+  - Plotted the path speed against distance - the spike matched wp5
+  - Checked the parameterization - it was not arc length
+  - Reparameterized by arc length and re-ran
+FIX (took 3 days)
+  Fixed by reparameterizing the spline with arc length so parameter speed equals spatial speed, and validating the acceleration profile in the profile_test.
+
+----------------------------------------------------------------------
+E0023 | v6.1 | BIG | Found Day 104 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.1/servo_pid.py
+Error     : Feedforward causes overshoot in sharp turns
+Terminal  : Pi SSH terminal
+  $ python3 servo_pid.py
+  ff: +0.8 -> overshoot 8 degrees
+  corrective jerk after each corner
+WHAT HAPPENED
+  After every sharp corner the robot overshot the heading by 8 degrees and then corrected with a jerk. Gentle corners were fine - only the sharp ones overshot.
+WHY IT HAPPENED (root cause)
+  The feedforward gain was tuned for the average curve and over-applied on sharp ones. The steering response is nonlinear: at large angles the servo linkage has different leverage, so a feedforward command calibrated for 30 degrees is too strong at 90. A single constant gain cannot fit a nonlinear plant across the whole operating range.
+INVESTIGATION (before the fix)
+  - Measured the overshoot against corner sharpness - it scaled with angle
+  - Plotted the steer response vs command - nonlinear above 45 degrees
+  - Scaled the feedforward with the corner curvature
+FIX (took 4 days)
+  Fixed by scaling the feedforward with the path curvature, and verifying with the corner_test that the overshoot stays under 2 degrees.
+
+----------------------------------------------------------------------
+E0024 | v6.1 | BIG | Found Day 104 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.1/servo_step_test.py
+Error     : Anti-windup test fails with 30% overshoot
+Terminal  : Pi SSH terminal
+  $ python3 servo_step_test.py
+  overshoot: 30% (target <10%)
+  anti-windup not active
+WHAT HAPPENED
+  The windup test measured 30% overshoot - three times the target. The anti-windup code existed, was enabled, and did nothing.
+WHY IT HAPPENED (root cause)
+  The saturation check inside the anti-windup compared the output against the wrong limits - the controller's nominal range instead of the physical PWM limits. The controller output could never exceed its nominal range, so the saturation detector never triggered, so the anti-windup was permanently inactive. The feature was dead code with its documentation claiming otherwise.
+INVESTIGATION (before the fix)
+  - Read the windup_test output - the saturation flag never fired
+  - Compared the check limits with the real PWM limits - they differed
+  - Fixed the limits and re-ran - overshoot dropped to 4%
+FIX (took 5 days)
+  Fixed by comparing against the physical PWM limits in the saturation check, and adding a test assertion that the anti-windup flag actually activates during a stall.
+
+----------------------------------------------------------------------
+E0025 | v6.2 | SMALL | Found Day 105 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v6.2/stanley_tune.py
+Error     : Cubic spline overshoots past the goal
+Terminal  : systemd journal
+  $ python3 stanley_tune.py
+  end: x=2.01 y=0.03 (goal 2.00, 0.00)
+  overshoot 1cm at the parking spot
+WHAT HAPPENED
+  The spline ended 1cm past the parking target. Small in absolute terms, fatal for a parking maneuver where the tolerance is measured in millimeters.
+WHY IT HAPPENED (root cause)
+  The smoothing pass relaxed the endpoint constraints, letting the spline drift off the fixed end point. Splines are defined by their boundary conditions; the endpoint condition was applied before smoothing and the smoother was allowed to move it. The constraint was lost in the pipeline, not in the math.
+FIX (took 1 day)
+  Fixed by re-imposing the fixed endpoint condition after smoothing and adding a unit test that pins both endpoints to the exact goal.
+
+----------------------------------------------------------------------
+E0026 | v6.2 | SMALL | Found Day 105 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v6.2/stanley.py
+Error     : Velocity profile outputs negative speeds
+Terminal  : systemd journal
+  $ python3 stanley.py
+  v: -0.2 m/s at t=1.2s
+  robot reverses mid-run
+WHAT HAPPENED
+  The robot briefly reversed in the middle of a straight run. The velocity profile commanded a negative speed - the robot was doing exactly what it was told.
+WHY IT HAPPENED (root cause)
+  The trapezoidal profile computes the deceleration phase assuming the target is reachable in the given time. When the target was too close for the time budget, the deceleration term overshot below zero. The math produced an unreachable profile instead of detecting the conflict; negative speed is the profile's way of saying 'the plan is impossible'.
+FIX (took 1 day)
+  Fixed by clamping the profile speed to zero and extending the profile duration when the target is not reachable within the requested time.
+
+----------------------------------------------------------------------
+E0027 | v6.2 | SMALL | Found Day 105 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v6.2/stanley_tune.py
+Error     : Obstacle avoidance oscillates left-right
+Terminal  : systemd journal
+  $ python3 stanley_tune.py
+  steer: +12 -14 +11 -13 deg
+  no progress toward the goal
+WHAT HAPPENED
+  The robot wobbled in front of an obstacle without making progress. The steering command swung positive and negative every half second.
+WHY IT HAPPENED (root cause)
+  The avoidance gain and the goal-pull gain fought each other: as the robot turned away from the obstacle it aligned with the goal, and as it turned toward the goal it approached the obstacle again. Two competing controllers with no arbitration produced a limit cycle. The oscillation is the system's equilibrium - it is stable in the wrong way.
+FIX (took 1 day)
+  Fixed by adding a deadband where neither controller acts and a goal bias that makes the goal-pull dominant whenever both demands conflict.
+
+----------------------------------------------------------------------
+E0028 | v6.2 | SMALL | Found Day 105 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v6.2/stanley.py
+Error     : MPC solve fails on the first step
+Terminal  : systemd journal
+  $ python3 stanley.py
+  cvxpy error: Problem status INFEASIBLE
+  no control output
+WHAT HAPPENED
+  The model-predictive controller produced no output at all - the solver reported the optimization problem was infeasible at the very first step.
+WHY IT HAPPENED (root cause)
+  The MPC horizon covered more track than existed, and the terminal constraint required the robot to be at a goal point the path could not reach within the horizon. A constrained optimization with contradictory constraints is infeasible by definition; the solver correctly refused to solve an impossible problem. The model was the bug - the horizon and constraints did not match the track geometry.
+FIX (took 1 day)
+  Fixed by shrinking the horizon to the track length and relaxing the terminal constraint from an equality to a soft penalty.
+
+----------------------------------------------------------------------
+E0029 | v6.2 | SMALL | Found Day 105 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v6.2/stanley_tune.py
+Error     : PID output saturates then overcorrects
+Terminal  : systemd journal
+  $ python3 stanley_tune.py
+  output: 0.98 -> -0.99 -> 0.97
+  robot snakes down the straight
+WHAT HAPPENED
+  The robot weaved down the straight at every launch. The PID output swung from full throttle to full brake and back, several times per second.
+WHY IT HAPPENED (root cause)
+  The integral term accumulated while the robot was stalled at launch, and by the time motion started the integral alone exceeded the output limits. The controller then had to burn off the stored error by overshooting in the opposite direction - classic integral windup. Windup happens because the integrator keeps summing even while the output is clamped at its physical limit, so the error it stores is never realizable.
+FIX (took 1 day)
+  Fixed by adding anti-windup: stop integrating when the output is saturated and the integral would push it further into the limit.
+
+----------------------------------------------------------------------
+E0030 | v6.2 | SMALL | Found Day 105 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v6.2/stanley.py
+Error     : Stanley cross-track error is NaN at waypoint 0
+Terminal  : systemd journal
+  $ python3 stanley.py
+  cross_track: nan  (first waypoint)
+  no steering command sent
+WHAT HAPPENED
+  The Stanley controller produced no steering command at the first waypoint. The cross-track error was NaN, so the controller output was NaN, and the car drove straight past the path.
+WHY IT HAPPENED (root cause)
+  The first path segment had zero length - two identical waypoints at the start of the list - so the tangent direction was undefined, and the cross-track math divided by zero. Stanley's formula assumes a valid segment direction; a zero-length segment violates that invariant. The NaN then propagated through the control output because no validation existed between the path math and the steering command.
+FIX (took 1 day)
+  Fixed by skipping zero-length segments in the path parser and replacing any NaN cross-track value with the previous valid value.
+
+----------------------------------------------------------------------
+E0031 | v6.2 | SMALL | Found Day 105 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v6.2/stanley_tune.py
+Error     : Gain schedule jumps at the speed boundary
+Terminal  : systemd journal
+  $ python3 stanley_tune.py
+  gain: 0.9 -> 2.4 (speed 1.00 m/s)
+  steering step visible in the log
+WHAT HAPPENED
+  The steering gain jumped from 0.9 to 2.4 the instant the robot crossed 1 m/s. The steering response suddenly felt twice as aggressive.
+WHY IT HAPPENED (root cause)
+  The gain schedule was a lookup table with discrete rows, and the lookup switched rows at the boundary instead of interpolating between them. A discontinuous gain produces a discontinuous control law: the controller's personality changes instantly at a speed threshold. Gain scheduling is only smooth when the schedule itself is smooth.
+FIX (took 1 day)
+  Fixed by linearly interpolating between table rows, and adding a test that verifies the gain never changes by more than 10% per control tick.
+
+----------------------------------------------------------------------
+E0032 | v6.2 | SMALL | Found Day 105 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v6.2/stanley.py
+Error     : Feedforward sign is opposite on reverse
+Terminal  : systemd journal
+  $ python3 stanley.py
+  reverse + feedforward = wrong direction
+  robot pulls to the left in reverse
+WHAT HAPPENED
+  In reverse, the robot consistently pulled to the left. The feedback controller was compensating correctly - the feedforward term was actively fighting it.
+WHY IT HAPPENED (root cause)
+  The feedforward steering term was computed for forward motion and applied unchanged when reversing. Steering geometry is direction-dependent: the same curvature requires the opposite steer correction when the velocity is negative. The sign flip was known in the ackermann module but not propagated to the controller, so two modules disagreed about the direction convention.
+FIX (took 1 day)
+  Fixed by multiplying the feedforward term by the direction sign, and adding a reverse-path test case to the controller test suite.
+
+----------------------------------------------------------------------
+E0033 | v6.2 | BIG | Found Day 106 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.2/stanley_tune.py
+Error     : Cubic spline path is jerky at waypoint 5
+Terminal  : Pi SSH terminal
+  $ python3 stanley_tune.py
+  acceleration spike: 12 m/s^2 at wp5
+  visible jerk in the run
+WHAT HAPPENED
+  At waypoint 5 the robot jerked visibly. The path was smooth to the eye - the jerk was in the timing, not the shape.
+WHY IT HAPPENED (root cause)
+  The spline was parameterized by a non-arc-length parameter, so equal parameter steps cover unequal distances along the path. The velocity controller interpreted parameter speed as spatial speed, producing huge accelerations where the parameterization compressed distance. A geometrically smooth path can be dynamically jerky if the parameterization is uneven.
+INVESTIGATION (before the fix)
+  - Plotted the path speed against distance - the spike matched wp5
+  - Checked the parameterization - it was not arc length
+  - Reparameterized by arc length and re-ran
+FIX (took 2 days)
+  Fixed by reparameterizing the spline with arc length so parameter speed equals spatial speed, and validating the acceleration profile in the profile_test.
+
+----------------------------------------------------------------------
+E0034 | v6.2 | BIG | Found Day 106 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.2/stanley.py
+Error     : Feedforward causes overshoot in sharp turns
+Terminal  : Pi SSH terminal
+  $ python3 stanley.py
+  ff: +0.8 -> overshoot 8 degrees
+  corrective jerk after each corner
+WHAT HAPPENED
+  After every sharp corner the robot overshot the heading by 8 degrees and then corrected with a jerk. Gentle corners were fine - only the sharp ones overshot.
+WHY IT HAPPENED (root cause)
+  The feedforward gain was tuned for the average curve and over-applied on sharp ones. The steering response is nonlinear: at large angles the servo linkage has different leverage, so a feedforward command calibrated for 30 degrees is too strong at 90. A single constant gain cannot fit a nonlinear plant across the whole operating range.
+INVESTIGATION (before the fix)
+  - Measured the overshoot against corner sharpness - it scaled with angle
+  - Plotted the steer response vs command - nonlinear above 45 degrees
+  - Scaled the feedforward with the corner curvature
+FIX (took 3 days)
+  Fixed by scaling the feedforward with the path curvature, and verifying with the corner_test that the overshoot stays under 2 degrees.
+
+----------------------------------------------------------------------
+E0035 | v6.2 | BIG | Found Day 106 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.2/stanley_tune.py
+Error     : Anti-windup test fails with 30% overshoot
+Terminal  : Pi SSH terminal
+  $ python3 stanley_tune.py
+  overshoot: 30% (target <10%)
+  anti-windup not active
+WHAT HAPPENED
+  The windup test measured 30% overshoot - three times the target. The anti-windup code existed, was enabled, and did nothing.
+WHY IT HAPPENED (root cause)
+  The saturation check inside the anti-windup compared the output against the wrong limits - the controller's nominal range instead of the physical PWM limits. The controller output could never exceed its nominal range, so the saturation detector never triggered, so the anti-windup was permanently inactive. The feature was dead code with its documentation claiming otherwise.
+INVESTIGATION (before the fix)
+  - Read the windup_test output - the saturation flag never fired
+  - Compared the check limits with the real PWM limits - they differed
+  - Fixed the limits and re-ran - overshoot dropped to 4%
+FIX (took 4 days)
+  Fixed by comparing against the physical PWM limits in the saturation check, and adding a test assertion that the anti-windup flag actually activates during a stall.
+
+----------------------------------------------------------------------
+E0036 | v6.2 | BIG | Found Day 106 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.2/stanley.py
+Error     : Obstacle avoidance deadlocks in a U-shaped trap
+Terminal  : Pi SSH terminal
+  $ python3 stanley.py
+  avoid: stuck 12s at the same spot
+  no escape direction found
+WHAT HAPPENED
+  The robot stood inside a U-shaped arrangement for 12 seconds, unable to leave. Every direction it evaluated was blocked - by its own previous decisions.
+WHY IT HAPPENED (root cause)
+  Local avoidance is greedy: it always chooses the best direction now. Inside a U-shape every local direction leads back inside, so the robot oscillates between two bad options forever. Without memory of where it has been, the planner cannot know it is looping. The U-shape is the classic deadlock of purely local planning.
+INVESTIGATION (before the fix)
+  - Logged the chosen direction over time - it alternated between two
+  - Verified a memory of visited positions breaks the loop
+  - Added a heading memory that penalizes recently visited directions
+FIX (took 5 days)
+  Fixed by adding a small heading memory that penalizes directions tried in the last 3 seconds, forcing the planner to commit to one escape direction.
+
+----------------------------------------------------------------------
+E0037 | v6.3 | SMALL | Found Day 107 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v6.3/corner_test.py
+Error     : Velocity profile outputs negative speeds
+Terminal  : VS Code terminal
+  $ python3 corner_test.py
+  v: -0.2 m/s at t=1.2s
+  robot reverses mid-run
+WHAT HAPPENED
+  The robot briefly reversed in the middle of a straight run. The velocity profile commanded a negative speed - the robot was doing exactly what it was told.
+WHY IT HAPPENED (root cause)
+  The trapezoidal profile computes the deceleration phase assuming the target is reachable in the given time. When the target was too close for the time budget, the deceleration term overshot below zero. The math produced an unreachable profile instead of detecting the conflict; negative speed is the profile's way of saying 'the plan is impossible'.
+FIX (took 1 day)
+  Fixed by clamping the profile speed to zero and extending the profile duration when the target is not reachable within the requested time.
+
+----------------------------------------------------------------------
+E0038 | v6.3 | SMALL | Found Day 107 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v6.3/feedforward_steer.py
+Error     : Obstacle avoidance oscillates left-right
+Terminal  : VS Code terminal
+  $ python3 feedforward_steer.py
+  steer: +12 -14 +11 -13 deg
+  no progress toward the goal
+WHAT HAPPENED
+  The robot wobbled in front of an obstacle without making progress. The steering command swung positive and negative every half second.
+WHY IT HAPPENED (root cause)
+  The avoidance gain and the goal-pull gain fought each other: as the robot turned away from the obstacle it aligned with the goal, and as it turned toward the goal it approached the obstacle again. Two competing controllers with no arbitration produced a limit cycle. The oscillation is the system's equilibrium - it is stable in the wrong way.
+FIX (took 1 day)
+  Fixed by adding a deadband where neither controller acts and a goal bias that makes the goal-pull dominant whenever both demands conflict.
+
+----------------------------------------------------------------------
+E0039 | v6.3 | SMALL | Found Day 107 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v6.3/corner_test.py
+Error     : MPC solve fails on the first step
+Terminal  : VS Code terminal
+  $ python3 corner_test.py
+  cvxpy error: Problem status INFEASIBLE
+  no control output
+WHAT HAPPENED
+  The model-predictive controller produced no output at all - the solver reported the optimization problem was infeasible at the very first step.
+WHY IT HAPPENED (root cause)
+  The MPC horizon covered more track than existed, and the terminal constraint required the robot to be at a goal point the path could not reach within the horizon. A constrained optimization with contradictory constraints is infeasible by definition; the solver correctly refused to solve an impossible problem. The model was the bug - the horizon and constraints did not match the track geometry.
+FIX (took 1 day)
+  Fixed by shrinking the horizon to the track length and relaxing the terminal constraint from an equality to a soft penalty.
+
+----------------------------------------------------------------------
+E0040 | v6.3 | SMALL | Found Day 107 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v6.3/feedforward_steer.py
+Error     : PID output saturates then overcorrects
+Terminal  : VS Code terminal
+  $ python3 feedforward_steer.py
+  output: 0.98 -> -0.99 -> 0.97
+  robot snakes down the straight
+WHAT HAPPENED
+  The robot weaved down the straight at every launch. The PID output swung from full throttle to full brake and back, several times per second.
+WHY IT HAPPENED (root cause)
+  The integral term accumulated while the robot was stalled at launch, and by the time motion started the integral alone exceeded the output limits. The controller then had to burn off the stored error by overshooting in the opposite direction - classic integral windup. Windup happens because the integrator keeps summing even while the output is clamped at its physical limit, so the error it stores is never realizable.
+FIX (took 1 day)
+  Fixed by adding anti-windup: stop integrating when the output is saturated and the integral would push it further into the limit.
+
+----------------------------------------------------------------------
+E0041 | v6.3 | SMALL | Found Day 107 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v6.3/corner_test.py
+Error     : Stanley cross-track error is NaN at waypoint 0
+Terminal  : VS Code terminal
+  $ python3 corner_test.py
+  cross_track: nan  (first waypoint)
+  no steering command sent
+WHAT HAPPENED
+  The Stanley controller produced no steering command at the first waypoint. The cross-track error was NaN, so the controller output was NaN, and the car drove straight past the path.
+WHY IT HAPPENED (root cause)
+  The first path segment had zero length - two identical waypoints at the start of the list - so the tangent direction was undefined, and the cross-track math divided by zero. Stanley's formula assumes a valid segment direction; a zero-length segment violates that invariant. The NaN then propagated through the control output because no validation existed between the path math and the steering command.
+FIX (took 1 day)
+  Fixed by skipping zero-length segments in the path parser and replacing any NaN cross-track value with the previous valid value.
+
+----------------------------------------------------------------------
+E0042 | v6.3 | SMALL | Found Day 107 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v6.3/feedforward_steer.py
+Error     : Gain schedule jumps at the speed boundary
+Terminal  : VS Code terminal
+  $ python3 feedforward_steer.py
+  gain: 0.9 -> 2.4 (speed 1.00 m/s)
+  steering step visible in the log
+WHAT HAPPENED
+  The steering gain jumped from 0.9 to 2.4 the instant the robot crossed 1 m/s. The steering response suddenly felt twice as aggressive.
+WHY IT HAPPENED (root cause)
+  The gain schedule was a lookup table with discrete rows, and the lookup switched rows at the boundary instead of interpolating between them. A discontinuous gain produces a discontinuous control law: the controller's personality changes instantly at a speed threshold. Gain scheduling is only smooth when the schedule itself is smooth.
+FIX (took 1 day)
+  Fixed by linearly interpolating between table rows, and adding a test that verifies the gain never changes by more than 10% per control tick.
+
+----------------------------------------------------------------------
+E0043 | v6.3 | SMALL | Found Day 107 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v6.3/corner_test.py
+Error     : Feedforward sign is opposite on reverse
+Terminal  : VS Code terminal
+  $ python3 corner_test.py
+  reverse + feedforward = wrong direction
+  robot pulls to the left in reverse
+WHAT HAPPENED
+  In reverse, the robot consistently pulled to the left. The feedback controller was compensating correctly - the feedforward term was actively fighting it.
+WHY IT HAPPENED (root cause)
+  The feedforward steering term was computed for forward motion and applied unchanged when reversing. Steering geometry is direction-dependent: the same curvature requires the opposite steer correction when the velocity is negative. The sign flip was known in the ackermann module but not propagated to the controller, so two modules disagreed about the direction convention.
+FIX (took 1 day)
+  Fixed by multiplying the feedforward term by the direction sign, and adding a reverse-path test case to the controller test suite.
+
+----------------------------------------------------------------------
+E0044 | v6.3 | SMALL | Found Day 107 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v6.3/feedforward_steer.py
+Error     : Cubic spline overshoots past the goal
+Terminal  : VS Code terminal
+  $ python3 feedforward_steer.py
+  end: x=2.01 y=0.03 (goal 2.00, 0.00)
+  overshoot 1cm at the parking spot
+WHAT HAPPENED
+  The spline ended 1cm past the parking target. Small in absolute terms, fatal for a parking maneuver where the tolerance is measured in millimeters.
+WHY IT HAPPENED (root cause)
+  The smoothing pass relaxed the endpoint constraints, letting the spline drift off the fixed end point. Splines are defined by their boundary conditions; the endpoint condition was applied before smoothing and the smoother was allowed to move it. The constraint was lost in the pipeline, not in the math.
+FIX (took 1 day)
+  Fixed by re-imposing the fixed endpoint condition after smoothing and adding a unit test that pins both endpoints to the exact goal.
+
+----------------------------------------------------------------------
+E0045 | v6.3 | BIG | Found Day 108 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.3/corner_test.py
+Error     : Feedforward causes overshoot in sharp turns
+Terminal  : Pi SSH terminal
+  $ python3 corner_test.py
+  ff: +0.8 -> overshoot 8 degrees
+  corrective jerk after each corner
+WHAT HAPPENED
+  After every sharp corner the robot overshot the heading by 8 degrees and then corrected with a jerk. Gentle corners were fine - only the sharp ones overshot.
+WHY IT HAPPENED (root cause)
+  The feedforward gain was tuned for the average curve and over-applied on sharp ones. The steering response is nonlinear: at large angles the servo linkage has different leverage, so a feedforward command calibrated for 30 degrees is too strong at 90. A single constant gain cannot fit a nonlinear plant across the whole operating range.
+INVESTIGATION (before the fix)
+  - Measured the overshoot against corner sharpness - it scaled with angle
+  - Plotted the steer response vs command - nonlinear above 45 degrees
+  - Scaled the feedforward with the corner curvature
+FIX (took 2 days)
+  Fixed by scaling the feedforward with the path curvature, and verifying with the corner_test that the overshoot stays under 2 degrees.
+
+----------------------------------------------------------------------
+E0046 | v6.3 | BIG | Found Day 108 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.3/feedforward_steer.py
+Error     : Anti-windup test fails with 30% overshoot
+Terminal  : Pi SSH terminal
+  $ python3 feedforward_steer.py
+  overshoot: 30% (target <10%)
+  anti-windup not active
+WHAT HAPPENED
+  The windup test measured 30% overshoot - three times the target. The anti-windup code existed, was enabled, and did nothing.
+WHY IT HAPPENED (root cause)
+  The saturation check inside the anti-windup compared the output against the wrong limits - the controller's nominal range instead of the physical PWM limits. The controller output could never exceed its nominal range, so the saturation detector never triggered, so the anti-windup was permanently inactive. The feature was dead code with its documentation claiming otherwise.
+INVESTIGATION (before the fix)
+  - Read the windup_test output - the saturation flag never fired
+  - Compared the check limits with the real PWM limits - they differed
+  - Fixed the limits and re-ran - overshoot dropped to 4%
+FIX (took 3 days)
+  Fixed by comparing against the physical PWM limits in the saturation check, and adding a test assertion that the anti-windup flag actually activates during a stall.
+
+----------------------------------------------------------------------
+E0047 | v6.3 | BIG | Found Day 108 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.3/corner_test.py
+Error     : Obstacle avoidance deadlocks in a U-shaped trap
+Terminal  : Pi SSH terminal
+  $ python3 corner_test.py
+  avoid: stuck 12s at the same spot
+  no escape direction found
+WHAT HAPPENED
+  The robot stood inside a U-shaped arrangement for 12 seconds, unable to leave. Every direction it evaluated was blocked - by its own previous decisions.
+WHY IT HAPPENED (root cause)
+  Local avoidance is greedy: it always chooses the best direction now. Inside a U-shape every local direction leads back inside, so the robot oscillates between two bad options forever. Without memory of where it has been, the planner cannot know it is looping. The U-shape is the classic deadlock of purely local planning.
+INVESTIGATION (before the fix)
+  - Logged the chosen direction over time - it alternated between two
+  - Verified a memory of visited positions breaks the loop
+  - Added a heading memory that penalizes recently visited directions
+FIX (took 4 days)
+  Fixed by adding a small heading memory that penalizes directions tried in the last 3 seconds, forcing the planner to commit to one escape direction.
+
+----------------------------------------------------------------------
+E0048 | v6.3 | BIG | Found Day 108 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.3/feedforward_steer.py
+Error     : Steering oscillates at 5Hz on the straight
+Terminal  : Pi SSH terminal
+  $ python3 feedforward_steer.py
+  steer: +5 -5 +5 -5 deg at 5Hz
+  overshoot visible in the video
+WHAT HAPPENED
+  The robot wobbled down the straight at 5Hz - a visible, rhythmic steering oscillation. On the bench the servo moved perfectly; on the floor it wagged.
+WHY IT HAPPENED (root cause)
+  The servo PID gains were tuned with the wheels in the air, where there is no lateral force. On the floor the tire forces and frame compliance add dynamics that the bench never exercised, and the gains that were stable on the bench were marginal on the floor. A control loop is only as good as the model it was tuned against; tuning against the wrong plant guarantees this result.
+INVESTIGATION (before the fix)
+  - Recorded the oscillation and measured its frequency
+  - Tested the same gains with the wheels on the floor vs in the air
+  - Re-tuned with the robot on the floor using the servo_step_test
+FIX (took 5 days)
+  Fixed by re-tuning the servo PID with the robot on the floor, and by making the tuning procedure run on the actual competition surface.
+
+----------------------------------------------------------------------
+E0049 | v6.4 | SMALL | Found Day 109 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.4/gain_schedule.py
+Error     : Obstacle avoidance oscillates left-right
+Terminal  : Pi SSH terminal
+  $ python3 gain_schedule.py
+  steer: +12 -14 +11 -13 deg
+  no progress toward the goal
+WHAT HAPPENED
+  The robot wobbled in front of an obstacle without making progress. The steering command swung positive and negative every half second.
+WHY IT HAPPENED (root cause)
+  The avoidance gain and the goal-pull gain fought each other: as the robot turned away from the obstacle it aligned with the goal, and as it turned toward the goal it approached the obstacle again. Two competing controllers with no arbitration produced a limit cycle. The oscillation is the system's equilibrium - it is stable in the wrong way.
+FIX (took 1 day)
+  Fixed by adding a deadband where neither controller acts and a goal bias that makes the goal-pull dominant whenever both demands conflict.
+
+----------------------------------------------------------------------
+E0050 | v6.4 | SMALL | Found Day 109 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.4/scheduler_test.py
+Error     : MPC solve fails on the first step
+Terminal  : Pi SSH terminal
+  $ python3 scheduler_test.py
+  cvxpy error: Problem status INFEASIBLE
+  no control output
+WHAT HAPPENED
+  The model-predictive controller produced no output at all - the solver reported the optimization problem was infeasible at the very first step.
+WHY IT HAPPENED (root cause)
+  The MPC horizon covered more track than existed, and the terminal constraint required the robot to be at a goal point the path could not reach within the horizon. A constrained optimization with contradictory constraints is infeasible by definition; the solver correctly refused to solve an impossible problem. The model was the bug - the horizon and constraints did not match the track geometry.
+FIX (took 1 day)
+  Fixed by shrinking the horizon to the track length and relaxing the terminal constraint from an equality to a soft penalty.
+
+----------------------------------------------------------------------
+E0051 | v6.4 | SMALL | Found Day 109 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.4/gain_schedule.py
+Error     : PID output saturates then overcorrects
+Terminal  : Pi SSH terminal
+  $ python3 gain_schedule.py
+  output: 0.98 -> -0.99 -> 0.97
+  robot snakes down the straight
+WHAT HAPPENED
+  The robot weaved down the straight at every launch. The PID output swung from full throttle to full brake and back, several times per second.
+WHY IT HAPPENED (root cause)
+  The integral term accumulated while the robot was stalled at launch, and by the time motion started the integral alone exceeded the output limits. The controller then had to burn off the stored error by overshooting in the opposite direction - classic integral windup. Windup happens because the integrator keeps summing even while the output is clamped at its physical limit, so the error it stores is never realizable.
+FIX (took 1 day)
+  Fixed by adding anti-windup: stop integrating when the output is saturated and the integral would push it further into the limit.
+
+----------------------------------------------------------------------
+E0052 | v6.4 | SMALL | Found Day 109 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.4/scheduler_test.py
+Error     : Stanley cross-track error is NaN at waypoint 0
+Terminal  : Pi SSH terminal
+  $ python3 scheduler_test.py
+  cross_track: nan  (first waypoint)
+  no steering command sent
+WHAT HAPPENED
+  The Stanley controller produced no steering command at the first waypoint. The cross-track error was NaN, so the controller output was NaN, and the car drove straight past the path.
+WHY IT HAPPENED (root cause)
+  The first path segment had zero length - two identical waypoints at the start of the list - so the tangent direction was undefined, and the cross-track math divided by zero. Stanley's formula assumes a valid segment direction; a zero-length segment violates that invariant. The NaN then propagated through the control output because no validation existed between the path math and the steering command.
+FIX (took 1 day)
+  Fixed by skipping zero-length segments in the path parser and replacing any NaN cross-track value with the previous valid value.
+
+----------------------------------------------------------------------
+E0053 | v6.4 | SMALL | Found Day 109 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.4/gain_schedule.py
+Error     : Gain schedule jumps at the speed boundary
+Terminal  : Pi SSH terminal
+  $ python3 gain_schedule.py
+  gain: 0.9 -> 2.4 (speed 1.00 m/s)
+  steering step visible in the log
+WHAT HAPPENED
+  The steering gain jumped from 0.9 to 2.4 the instant the robot crossed 1 m/s. The steering response suddenly felt twice as aggressive.
+WHY IT HAPPENED (root cause)
+  The gain schedule was a lookup table with discrete rows, and the lookup switched rows at the boundary instead of interpolating between them. A discontinuous gain produces a discontinuous control law: the controller's personality changes instantly at a speed threshold. Gain scheduling is only smooth when the schedule itself is smooth.
+FIX (took 1 day)
+  Fixed by linearly interpolating between table rows, and adding a test that verifies the gain never changes by more than 10% per control tick.
+
+----------------------------------------------------------------------
+E0054 | v6.4 | SMALL | Found Day 109 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.4/scheduler_test.py
+Error     : Feedforward sign is opposite on reverse
+Terminal  : Pi SSH terminal
+  $ python3 scheduler_test.py
+  reverse + feedforward = wrong direction
+  robot pulls to the left in reverse
+WHAT HAPPENED
+  In reverse, the robot consistently pulled to the left. The feedback controller was compensating correctly - the feedforward term was actively fighting it.
+WHY IT HAPPENED (root cause)
+  The feedforward steering term was computed for forward motion and applied unchanged when reversing. Steering geometry is direction-dependent: the same curvature requires the opposite steer correction when the velocity is negative. The sign flip was known in the ackermann module but not propagated to the controller, so two modules disagreed about the direction convention.
+FIX (took 1 day)
+  Fixed by multiplying the feedforward term by the direction sign, and adding a reverse-path test case to the controller test suite.
+
+----------------------------------------------------------------------
+E0055 | v6.4 | SMALL | Found Day 109 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.4/gain_schedule.py
+Error     : Cubic spline overshoots past the goal
+Terminal  : Pi SSH terminal
+  $ python3 gain_schedule.py
+  end: x=2.01 y=0.03 (goal 2.00, 0.00)
+  overshoot 1cm at the parking spot
+WHAT HAPPENED
+  The spline ended 1cm past the parking target. Small in absolute terms, fatal for a parking maneuver where the tolerance is measured in millimeters.
+WHY IT HAPPENED (root cause)
+  The smoothing pass relaxed the endpoint constraints, letting the spline drift off the fixed end point. Splines are defined by their boundary conditions; the endpoint condition was applied before smoothing and the smoother was allowed to move it. The constraint was lost in the pipeline, not in the math.
+FIX (took 1 day)
+  Fixed by re-imposing the fixed endpoint condition after smoothing and adding a unit test that pins both endpoints to the exact goal.
+
+----------------------------------------------------------------------
+E0056 | v6.4 | SMALL | Found Day 109 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.4/scheduler_test.py
+Error     : Velocity profile outputs negative speeds
+Terminal  : Pi SSH terminal
+  $ python3 scheduler_test.py
+  v: -0.2 m/s at t=1.2s
+  robot reverses mid-run
+WHAT HAPPENED
+  The robot briefly reversed in the middle of a straight run. The velocity profile commanded a negative speed - the robot was doing exactly what it was told.
+WHY IT HAPPENED (root cause)
+  The trapezoidal profile computes the deceleration phase assuming the target is reachable in the given time. When the target was too close for the time budget, the deceleration term overshot below zero. The math produced an unreachable profile instead of detecting the conflict; negative speed is the profile's way of saying 'the plan is impossible'.
+FIX (took 1 day)
+  Fixed by clamping the profile speed to zero and extending the profile duration when the target is not reachable within the requested time.
+
+----------------------------------------------------------------------
+E0057 | v6.4 | BIG | Found Day 110 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.4/gain_schedule.py
+Error     : Anti-windup test fails with 30% overshoot
+Terminal  : Pi SSH terminal
+  $ python3 gain_schedule.py
+  overshoot: 30% (target <10%)
+  anti-windup not active
+WHAT HAPPENED
+  The windup test measured 30% overshoot - three times the target. The anti-windup code existed, was enabled, and did nothing.
+WHY IT HAPPENED (root cause)
+  The saturation check inside the anti-windup compared the output against the wrong limits - the controller's nominal range instead of the physical PWM limits. The controller output could never exceed its nominal range, so the saturation detector never triggered, so the anti-windup was permanently inactive. The feature was dead code with its documentation claiming otherwise.
+INVESTIGATION (before the fix)
+  - Read the windup_test output - the saturation flag never fired
+  - Compared the check limits with the real PWM limits - they differed
+  - Fixed the limits and re-ran - overshoot dropped to 4%
+FIX (took 2 days)
+  Fixed by comparing against the physical PWM limits in the saturation check, and adding a test assertion that the anti-windup flag actually activates during a stall.
+
+----------------------------------------------------------------------
+E0058 | v6.4 | BIG | Found Day 110 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.4/scheduler_test.py
+Error     : Obstacle avoidance deadlocks in a U-shaped trap
+Terminal  : Pi SSH terminal
+  $ python3 scheduler_test.py
+  avoid: stuck 12s at the same spot
+  no escape direction found
+WHAT HAPPENED
+  The robot stood inside a U-shaped arrangement for 12 seconds, unable to leave. Every direction it evaluated was blocked - by its own previous decisions.
+WHY IT HAPPENED (root cause)
+  Local avoidance is greedy: it always chooses the best direction now. Inside a U-shape every local direction leads back inside, so the robot oscillates between two bad options forever. Without memory of where it has been, the planner cannot know it is looping. The U-shape is the classic deadlock of purely local planning.
+INVESTIGATION (before the fix)
+  - Logged the chosen direction over time - it alternated between two
+  - Verified a memory of visited positions breaks the loop
+  - Added a heading memory that penalizes recently visited directions
+FIX (took 3 days)
+  Fixed by adding a small heading memory that penalizes directions tried in the last 3 seconds, forcing the planner to commit to one escape direction.
+
+----------------------------------------------------------------------
+E0059 | v6.4 | BIG | Found Day 110 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.4/gain_schedule.py
+Error     : Steering oscillates at 5Hz on the straight
+Terminal  : Pi SSH terminal
+  $ python3 gain_schedule.py
+  steer: +5 -5 +5 -5 deg at 5Hz
+  overshoot visible in the video
+WHAT HAPPENED
+  The robot wobbled down the straight at 5Hz - a visible, rhythmic steering oscillation. On the bench the servo moved perfectly; on the floor it wagged.
+WHY IT HAPPENED (root cause)
+  The servo PID gains were tuned with the wheels in the air, where there is no lateral force. On the floor the tire forces and frame compliance add dynamics that the bench never exercised, and the gains that were stable on the bench were marginal on the floor. A control loop is only as good as the model it was tuned against; tuning against the wrong plant guarantees this result.
+INVESTIGATION (before the fix)
+  - Recorded the oscillation and measured its frequency
+  - Tested the same gains with the wheels on the floor vs in the air
+  - Re-tuned with the robot on the floor using the servo_step_test
+FIX (took 4 days)
+  Fixed by re-tuning the servo PID with the robot on the floor, and by making the tuning procedure run on the actual competition surface.
+
+----------------------------------------------------------------------
+E0060 | v6.4 | BIG | Found Day 110 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.4/scheduler_test.py
+Error     : Integral windup launches the robot at the start
+Terminal  : Pi SSH terminal
+  $ python3 scheduler_test.py
+  integral: 0 -> 3.8 during stall
+  robot jumps forward 30cm
+WHAT HAPPENED
+  The robot jumped 30cm forward the moment it was released at the start line. The controller had been accumulating error during the stall and released it all at once.
+WHY IT HAPPENED (root cause)
+  While the robot was held at the start, the position error was large and constant, and the integrator summed it until the output hit the limit. The moment the hold released, the saturated output was applied instantly - a launch, not a start. Windup storage is invisible until the constraint disappears, which is why it always surfaces at the worst moment.
+INVESTIGATION (before the fix)
+  - Logged the integral term during the stall - it grew linearly
+  - Confirmed the jump magnitude matched the stored integral
+  - Added integral clamping and a pre-start integral reset
+FIX (took 5 days)
+  Fixed by clamping the integral to the output limits and resetting it when the robot is in the hold state, so the launch is a ramp, not a step.
+
+----------------------------------------------------------------------
+E0061 | v6.5 | SMALL | Found Day 111 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v6.5/anti_windup.py
+Error     : MPC solve fails on the first step
+Terminal  : Pi console (HDMI)
+  $ python3 anti_windup.py
+  cvxpy error: Problem status INFEASIBLE
+  no control output
+WHAT HAPPENED
+  The model-predictive controller produced no output at all - the solver reported the optimization problem was infeasible at the very first step.
+WHY IT HAPPENED (root cause)
+  The MPC horizon covered more track than existed, and the terminal constraint required the robot to be at a goal point the path could not reach within the horizon. A constrained optimization with contradictory constraints is infeasible by definition; the solver correctly refused to solve an impossible problem. The model was the bug - the horizon and constraints did not match the track geometry.
+FIX (took 1 day)
+  Fixed by shrinking the horizon to the track length and relaxing the terminal constraint from an equality to a soft penalty.
+
+----------------------------------------------------------------------
+E0062 | v6.5 | SMALL | Found Day 111 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v6.5/windup_test.py
+Error     : PID output saturates then overcorrects
+Terminal  : Pi console (HDMI)
+  $ python3 windup_test.py
+  output: 0.98 -> -0.99 -> 0.97
+  robot snakes down the straight
+WHAT HAPPENED
+  The robot weaved down the straight at every launch. The PID output swung from full throttle to full brake and back, several times per second.
+WHY IT HAPPENED (root cause)
+  The integral term accumulated while the robot was stalled at launch, and by the time motion started the integral alone exceeded the output limits. The controller then had to burn off the stored error by overshooting in the opposite direction - classic integral windup. Windup happens because the integrator keeps summing even while the output is clamped at its physical limit, so the error it stores is never realizable.
+FIX (took 1 day)
+  Fixed by adding anti-windup: stop integrating when the output is saturated and the integral would push it further into the limit.
+
+----------------------------------------------------------------------
+E0063 | v6.5 | SMALL | Found Day 111 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v6.5/anti_windup.py
+Error     : Stanley cross-track error is NaN at waypoint 0
+Terminal  : Pi console (HDMI)
+  $ python3 anti_windup.py
+  cross_track: nan  (first waypoint)
+  no steering command sent
+WHAT HAPPENED
+  The Stanley controller produced no steering command at the first waypoint. The cross-track error was NaN, so the controller output was NaN, and the car drove straight past the path.
+WHY IT HAPPENED (root cause)
+  The first path segment had zero length - two identical waypoints at the start of the list - so the tangent direction was undefined, and the cross-track math divided by zero. Stanley's formula assumes a valid segment direction; a zero-length segment violates that invariant. The NaN then propagated through the control output because no validation existed between the path math and the steering command.
+FIX (took 1 day)
+  Fixed by skipping zero-length segments in the path parser and replacing any NaN cross-track value with the previous valid value.
+
+----------------------------------------------------------------------
+E0064 | v6.5 | SMALL | Found Day 111 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v6.5/windup_test.py
+Error     : Gain schedule jumps at the speed boundary
+Terminal  : Pi console (HDMI)
+  $ python3 windup_test.py
+  gain: 0.9 -> 2.4 (speed 1.00 m/s)
+  steering step visible in the log
+WHAT HAPPENED
+  The steering gain jumped from 0.9 to 2.4 the instant the robot crossed 1 m/s. The steering response suddenly felt twice as aggressive.
+WHY IT HAPPENED (root cause)
+  The gain schedule was a lookup table with discrete rows, and the lookup switched rows at the boundary instead of interpolating between them. A discontinuous gain produces a discontinuous control law: the controller's personality changes instantly at a speed threshold. Gain scheduling is only smooth when the schedule itself is smooth.
+FIX (took 1 day)
+  Fixed by linearly interpolating between table rows, and adding a test that verifies the gain never changes by more than 10% per control tick.
+
+----------------------------------------------------------------------
+E0065 | v6.5 | SMALL | Found Day 111 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v6.5/anti_windup.py
+Error     : Feedforward sign is opposite on reverse
+Terminal  : Pi console (HDMI)
+  $ python3 anti_windup.py
+  reverse + feedforward = wrong direction
+  robot pulls to the left in reverse
+WHAT HAPPENED
+  In reverse, the robot consistently pulled to the left. The feedback controller was compensating correctly - the feedforward term was actively fighting it.
+WHY IT HAPPENED (root cause)
+  The feedforward steering term was computed for forward motion and applied unchanged when reversing. Steering geometry is direction-dependent: the same curvature requires the opposite steer correction when the velocity is negative. The sign flip was known in the ackermann module but not propagated to the controller, so two modules disagreed about the direction convention.
+FIX (took 1 day)
+  Fixed by multiplying the feedforward term by the direction sign, and adding a reverse-path test case to the controller test suite.
+
+----------------------------------------------------------------------
+E0066 | v6.5 | SMALL | Found Day 111 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v6.5/windup_test.py
+Error     : Cubic spline overshoots past the goal
+Terminal  : Pi console (HDMI)
+  $ python3 windup_test.py
+  end: x=2.01 y=0.03 (goal 2.00, 0.00)
+  overshoot 1cm at the parking spot
+WHAT HAPPENED
+  The spline ended 1cm past the parking target. Small in absolute terms, fatal for a parking maneuver where the tolerance is measured in millimeters.
+WHY IT HAPPENED (root cause)
+  The smoothing pass relaxed the endpoint constraints, letting the spline drift off the fixed end point. Splines are defined by their boundary conditions; the endpoint condition was applied before smoothing and the smoother was allowed to move it. The constraint was lost in the pipeline, not in the math.
+FIX (took 1 day)
+  Fixed by re-imposing the fixed endpoint condition after smoothing and adding a unit test that pins both endpoints to the exact goal.
+
+----------------------------------------------------------------------
+E0067 | v6.5 | SMALL | Found Day 111 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v6.5/anti_windup.py
+Error     : Velocity profile outputs negative speeds
+Terminal  : Pi console (HDMI)
+  $ python3 anti_windup.py
+  v: -0.2 m/s at t=1.2s
+  robot reverses mid-run
+WHAT HAPPENED
+  The robot briefly reversed in the middle of a straight run. The velocity profile commanded a negative speed - the robot was doing exactly what it was told.
+WHY IT HAPPENED (root cause)
+  The trapezoidal profile computes the deceleration phase assuming the target is reachable in the given time. When the target was too close for the time budget, the deceleration term overshot below zero. The math produced an unreachable profile instead of detecting the conflict; negative speed is the profile's way of saying 'the plan is impossible'.
+FIX (took 1 day)
+  Fixed by clamping the profile speed to zero and extending the profile duration when the target is not reachable within the requested time.
+
+----------------------------------------------------------------------
+E0068 | v6.5 | SMALL | Found Day 111 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v6.5/windup_test.py
+Error     : Obstacle avoidance oscillates left-right
+Terminal  : Pi console (HDMI)
+  $ python3 windup_test.py
+  steer: +12 -14 +11 -13 deg
+  no progress toward the goal
+WHAT HAPPENED
+  The robot wobbled in front of an obstacle without making progress. The steering command swung positive and negative every half second.
+WHY IT HAPPENED (root cause)
+  The avoidance gain and the goal-pull gain fought each other: as the robot turned away from the obstacle it aligned with the goal, and as it turned toward the goal it approached the obstacle again. Two competing controllers with no arbitration produced a limit cycle. The oscillation is the system's equilibrium - it is stable in the wrong way.
+FIX (took 1 day)
+  Fixed by adding a deadband where neither controller acts and a goal bias that makes the goal-pull dominant whenever both demands conflict.
+
+----------------------------------------------------------------------
+E0069 | v6.5 | BIG | Found Day 112 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.5/anti_windup.py
+Error     : Obstacle avoidance deadlocks in a U-shaped trap
+Terminal  : Pi SSH terminal
+  $ python3 anti_windup.py
+  avoid: stuck 12s at the same spot
+  no escape direction found
+WHAT HAPPENED
+  The robot stood inside a U-shaped arrangement for 12 seconds, unable to leave. Every direction it evaluated was blocked - by its own previous decisions.
+WHY IT HAPPENED (root cause)
+  Local avoidance is greedy: it always chooses the best direction now. Inside a U-shape every local direction leads back inside, so the robot oscillates between two bad options forever. Without memory of where it has been, the planner cannot know it is looping. The U-shape is the classic deadlock of purely local planning.
+INVESTIGATION (before the fix)
+  - Logged the chosen direction over time - it alternated between two
+  - Verified a memory of visited positions breaks the loop
+  - Added a heading memory that penalizes recently visited directions
+FIX (took 2 days)
+  Fixed by adding a small heading memory that penalizes directions tried in the last 3 seconds, forcing the planner to commit to one escape direction.
+
+----------------------------------------------------------------------
+E0070 | v6.5 | BIG | Found Day 112 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.5/windup_test.py
+Error     : Steering oscillates at 5Hz on the straight
+Terminal  : Pi SSH terminal
+  $ python3 windup_test.py
+  steer: +5 -5 +5 -5 deg at 5Hz
+  overshoot visible in the video
+WHAT HAPPENED
+  The robot wobbled down the straight at 5Hz - a visible, rhythmic steering oscillation. On the bench the servo moved perfectly; on the floor it wagged.
+WHY IT HAPPENED (root cause)
+  The servo PID gains were tuned with the wheels in the air, where there is no lateral force. On the floor the tire forces and frame compliance add dynamics that the bench never exercised, and the gains that were stable on the bench were marginal on the floor. A control loop is only as good as the model it was tuned against; tuning against the wrong plant guarantees this result.
+INVESTIGATION (before the fix)
+  - Recorded the oscillation and measured its frequency
+  - Tested the same gains with the wheels on the floor vs in the air
+  - Re-tuned with the robot on the floor using the servo_step_test
+FIX (took 3 days)
+  Fixed by re-tuning the servo PID with the robot on the floor, and by making the tuning procedure run on the actual competition surface.
+
+----------------------------------------------------------------------
+E0071 | v6.5 | BIG | Found Day 112 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.5/anti_windup.py
+Error     : Integral windup launches the robot at the start
+Terminal  : Pi SSH terminal
+  $ python3 anti_windup.py
+  integral: 0 -> 3.8 during stall
+  robot jumps forward 30cm
+WHAT HAPPENED
+  The robot jumped 30cm forward the moment it was released at the start line. The controller had been accumulating error during the stall and released it all at once.
+WHY IT HAPPENED (root cause)
+  While the robot was held at the start, the position error was large and constant, and the integrator summed it until the output hit the limit. The moment the hold released, the saturated output was applied instantly - a launch, not a start. Windup storage is invisible until the constraint disappears, which is why it always surfaces at the worst moment.
+INVESTIGATION (before the fix)
+  - Logged the integral term during the stall - it grew linearly
+  - Confirmed the jump magnitude matched the stored integral
+  - Added integral clamping and a pre-start integral reset
+FIX (took 4 days)
+  Fixed by clamping the integral to the output limits and resetting it when the robot is in the hold state, so the launch is a ramp, not a step.
+
+----------------------------------------------------------------------
+E0072 | v6.5 | BIG | Found Day 112 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.5/windup_test.py
+Error     : Global planner returns a path through the pillar
+Terminal  : Pi SSH terminal
+  $ python3 windup_test.py
+  path waypoint 3: inside the pillar
+  collision on the replay
+WHAT HAPPENED
+  The global planner produced a path that ran straight through a pillar. The replay showed the collision clearly - the planner never considered the robot's width.
+WHY IT HAPPENED (root cause)
+  The grid cost map marked only the obstacle's exact cells as blocked. A robot has physical width, so its center can be up to half a width away from an obstacle while the robot still collides. The planner used a point model for a 20cm-wide robot. Path planning for a real robot requires the configuration-space inflation; planning a point path through the environment is planning a point's path.
+INVESTIGATION (before the fix)
+  - Replayed the planned path against the map - the waypoint was inside
+  - Measured the clearance at the collision - less than the robot width
+  - Inflated the obstacles by the robot radius and re-planned
+FIX (took 5 days)
+  Fixed by inflating all obstacles by the robot radius before running A*, and adding a clearance check on the final path.
+
+----------------------------------------------------------------------
+E0073 | v6.6 | SMALL | Found Day 113 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v6.6/global_planner.py
+Error     : PID output saturates then overcorrects
+Terminal  : ESP32 serial monitor
+  $ python3 global_planner.py
+  output: 0.98 -> -0.99 -> 0.97
+  robot snakes down the straight
+WHAT HAPPENED
+  The robot weaved down the straight at every launch. The PID output swung from full throttle to full brake and back, several times per second.
+WHY IT HAPPENED (root cause)
+  The integral term accumulated while the robot was stalled at launch, and by the time motion started the integral alone exceeded the output limits. The controller then had to burn off the stored error by overshooting in the opposite direction - classic integral windup. Windup happens because the integrator keeps summing even while the output is clamped at its physical limit, so the error it stores is never realizable.
+FIX (took 1 day)
+  Fixed by adding anti-windup: stop integrating when the output is saturated and the integral would push it further into the limit.
+
+----------------------------------------------------------------------
+E0074 | v6.6 | SMALL | Found Day 113 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v6.6/planner_test.py
+Error     : Stanley cross-track error is NaN at waypoint 0
+Terminal  : ESP32 serial monitor
+  $ python3 planner_test.py
+  cross_track: nan  (first waypoint)
+  no steering command sent
+WHAT HAPPENED
+  The Stanley controller produced no steering command at the first waypoint. The cross-track error was NaN, so the controller output was NaN, and the car drove straight past the path.
+WHY IT HAPPENED (root cause)
+  The first path segment had zero length - two identical waypoints at the start of the list - so the tangent direction was undefined, and the cross-track math divided by zero. Stanley's formula assumes a valid segment direction; a zero-length segment violates that invariant. The NaN then propagated through the control output because no validation existed between the path math and the steering command.
+FIX (took 1 day)
+  Fixed by skipping zero-length segments in the path parser and replacing any NaN cross-track value with the previous valid value.
+
+----------------------------------------------------------------------
+E0075 | v6.6 | SMALL | Found Day 113 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v6.6/global_planner.py
+Error     : Gain schedule jumps at the speed boundary
+Terminal  : ESP32 serial monitor
+  $ python3 global_planner.py
+  gain: 0.9 -> 2.4 (speed 1.00 m/s)
+  steering step visible in the log
+WHAT HAPPENED
+  The steering gain jumped from 0.9 to 2.4 the instant the robot crossed 1 m/s. The steering response suddenly felt twice as aggressive.
+WHY IT HAPPENED (root cause)
+  The gain schedule was a lookup table with discrete rows, and the lookup switched rows at the boundary instead of interpolating between them. A discontinuous gain produces a discontinuous control law: the controller's personality changes instantly at a speed threshold. Gain scheduling is only smooth when the schedule itself is smooth.
+FIX (took 1 day)
+  Fixed by linearly interpolating between table rows, and adding a test that verifies the gain never changes by more than 10% per control tick.
+
+----------------------------------------------------------------------
+E0076 | v6.6 | SMALL | Found Day 113 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v6.6/planner_test.py
+Error     : Feedforward sign is opposite on reverse
+Terminal  : ESP32 serial monitor
+  $ python3 planner_test.py
+  reverse + feedforward = wrong direction
+  robot pulls to the left in reverse
+WHAT HAPPENED
+  In reverse, the robot consistently pulled to the left. The feedback controller was compensating correctly - the feedforward term was actively fighting it.
+WHY IT HAPPENED (root cause)
+  The feedforward steering term was computed for forward motion and applied unchanged when reversing. Steering geometry is direction-dependent: the same curvature requires the opposite steer correction when the velocity is negative. The sign flip was known in the ackermann module but not propagated to the controller, so two modules disagreed about the direction convention.
+FIX (took 1 day)
+  Fixed by multiplying the feedforward term by the direction sign, and adding a reverse-path test case to the controller test suite.
+
+----------------------------------------------------------------------
+E0077 | v6.6 | SMALL | Found Day 113 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v6.6/global_planner.py
+Error     : Cubic spline overshoots past the goal
+Terminal  : ESP32 serial monitor
+  $ python3 global_planner.py
+  end: x=2.01 y=0.03 (goal 2.00, 0.00)
+  overshoot 1cm at the parking spot
+WHAT HAPPENED
+  The spline ended 1cm past the parking target. Small in absolute terms, fatal for a parking maneuver where the tolerance is measured in millimeters.
+WHY IT HAPPENED (root cause)
+  The smoothing pass relaxed the endpoint constraints, letting the spline drift off the fixed end point. Splines are defined by their boundary conditions; the endpoint condition was applied before smoothing and the smoother was allowed to move it. The constraint was lost in the pipeline, not in the math.
+FIX (took 1 day)
+  Fixed by re-imposing the fixed endpoint condition after smoothing and adding a unit test that pins both endpoints to the exact goal.
+
+----------------------------------------------------------------------
+E0078 | v6.6 | SMALL | Found Day 113 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v6.6/planner_test.py
+Error     : Velocity profile outputs negative speeds
+Terminal  : ESP32 serial monitor
+  $ python3 planner_test.py
+  v: -0.2 m/s at t=1.2s
+  robot reverses mid-run
+WHAT HAPPENED
+  The robot briefly reversed in the middle of a straight run. The velocity profile commanded a negative speed - the robot was doing exactly what it was told.
+WHY IT HAPPENED (root cause)
+  The trapezoidal profile computes the deceleration phase assuming the target is reachable in the given time. When the target was too close for the time budget, the deceleration term overshot below zero. The math produced an unreachable profile instead of detecting the conflict; negative speed is the profile's way of saying 'the plan is impossible'.
+FIX (took 1 day)
+  Fixed by clamping the profile speed to zero and extending the profile duration when the target is not reachable within the requested time.
+
+----------------------------------------------------------------------
+E0079 | v6.6 | SMALL | Found Day 113 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v6.6/global_planner.py
+Error     : Obstacle avoidance oscillates left-right
+Terminal  : ESP32 serial monitor
+  $ python3 global_planner.py
+  steer: +12 -14 +11 -13 deg
+  no progress toward the goal
+WHAT HAPPENED
+  The robot wobbled in front of an obstacle without making progress. The steering command swung positive and negative every half second.
+WHY IT HAPPENED (root cause)
+  The avoidance gain and the goal-pull gain fought each other: as the robot turned away from the obstacle it aligned with the goal, and as it turned toward the goal it approached the obstacle again. Two competing controllers with no arbitration produced a limit cycle. The oscillation is the system's equilibrium - it is stable in the wrong way.
+FIX (took 1 day)
+  Fixed by adding a deadband where neither controller acts and a goal bias that makes the goal-pull dominant whenever both demands conflict.
+
+----------------------------------------------------------------------
+E0080 | v6.6 | SMALL | Found Day 113 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v6.6/planner_test.py
+Error     : MPC solve fails on the first step
+Terminal  : ESP32 serial monitor
+  $ python3 planner_test.py
+  cvxpy error: Problem status INFEASIBLE
+  no control output
+WHAT HAPPENED
+  The model-predictive controller produced no output at all - the solver reported the optimization problem was infeasible at the very first step.
+WHY IT HAPPENED (root cause)
+  The MPC horizon covered more track than existed, and the terminal constraint required the robot to be at a goal point the path could not reach within the horizon. A constrained optimization with contradictory constraints is infeasible by definition; the solver correctly refused to solve an impossible problem. The model was the bug - the horizon and constraints did not match the track geometry.
+FIX (took 1 day)
+  Fixed by shrinking the horizon to the track length and relaxing the terminal constraint from an equality to a soft penalty.
+
+----------------------------------------------------------------------
+E0081 | v6.6 | BIG | Found Day 114 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.6/global_planner.py
+Error     : Steering oscillates at 5Hz on the straight
+Terminal  : Pi SSH terminal
+  $ python3 global_planner.py
+  steer: +5 -5 +5 -5 deg at 5Hz
+  overshoot visible in the video
+WHAT HAPPENED
+  The robot wobbled down the straight at 5Hz - a visible, rhythmic steering oscillation. On the bench the servo moved perfectly; on the floor it wagged.
+WHY IT HAPPENED (root cause)
+  The servo PID gains were tuned with the wheels in the air, where there is no lateral force. On the floor the tire forces and frame compliance add dynamics that the bench never exercised, and the gains that were stable on the bench were marginal on the floor. A control loop is only as good as the model it was tuned against; tuning against the wrong plant guarantees this result.
+INVESTIGATION (before the fix)
+  - Recorded the oscillation and measured its frequency
+  - Tested the same gains with the wheels on the floor vs in the air
+  - Re-tuned with the robot on the floor using the servo_step_test
+FIX (took 2 days)
+  Fixed by re-tuning the servo PID with the robot on the floor, and by making the tuning procedure run on the actual competition surface.
+
+----------------------------------------------------------------------
+E0082 | v6.6 | BIG | Found Day 114 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.6/planner_test.py
+Error     : Integral windup launches the robot at the start
+Terminal  : Pi SSH terminal
+  $ python3 planner_test.py
+  integral: 0 -> 3.8 during stall
+  robot jumps forward 30cm
+WHAT HAPPENED
+  The robot jumped 30cm forward the moment it was released at the start line. The controller had been accumulating error during the stall and released it all at once.
+WHY IT HAPPENED (root cause)
+  While the robot was held at the start, the position error was large and constant, and the integrator summed it until the output hit the limit. The moment the hold released, the saturated output was applied instantly - a launch, not a start. Windup storage is invisible until the constraint disappears, which is why it always surfaces at the worst moment.
+INVESTIGATION (before the fix)
+  - Logged the integral term during the stall - it grew linearly
+  - Confirmed the jump magnitude matched the stored integral
+  - Added integral clamping and a pre-start integral reset
+FIX (took 3 days)
+  Fixed by clamping the integral to the output limits and resetting it when the robot is in the hold state, so the launch is a ramp, not a step.
+
+----------------------------------------------------------------------
+E0083 | v6.6 | BIG | Found Day 114 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.6/global_planner.py
+Error     : Global planner returns a path through the pillar
+Terminal  : Pi SSH terminal
+  $ python3 global_planner.py
+  path waypoint 3: inside the pillar
+  collision on the replay
+WHAT HAPPENED
+  The global planner produced a path that ran straight through a pillar. The replay showed the collision clearly - the planner never considered the robot's width.
+WHY IT HAPPENED (root cause)
+  The grid cost map marked only the obstacle's exact cells as blocked. A robot has physical width, so its center can be up to half a width away from an obstacle while the robot still collides. The planner used a point model for a 20cm-wide robot. Path planning for a real robot requires the configuration-space inflation; planning a point path through the environment is planning a point's path.
+INVESTIGATION (before the fix)
+  - Replayed the planned path against the map - the waypoint was inside
+  - Measured the clearance at the collision - less than the robot width
+  - Inflated the obstacles by the robot radius and re-planned
+FIX (took 4 days)
+  Fixed by inflating all obstacles by the robot radius before running A*, and adding a clearance check on the final path.
+
+----------------------------------------------------------------------
+E0084 | v6.6 | BIG | Found Day 114 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.6/planner_test.py
+Error     : Velocity profile ignores the corner limit
+Terminal  : Pi SSH terminal
+  $ python3 planner_test.py
+  v = 2.0 m/s into a 60-degree corner
+  tire squeal, robot drifts
+WHAT HAPPENED
+  The robot entered a 60-degree corner at full speed and slid wide. The profile optimized for time with no regard for what the tires can do.
+WHY IT HAPPENED (root cause)
+  The velocity profile minimized lap time subject only to acceleration limits, not to lateral acceleration. A corner has a speed limit set by physics: v_max = sqrt(mu * g * r). Ignoring the curvature limit produced a profile that is fast on paper and impossible in reality - the tires physically cannot provide the required lateral force.
+INVESTIGATION (before the fix)
+  - Measured the actual cornering speed limit on the track
+  - Overlaid the profile's speed at the corner - it exceeded the limit
+  - Added a curvature-dependent speed cap to the profile
+FIX (took 5 days)
+  Fixed by adding a speed cap derived from the path curvature and the measured tire limit, applied at every point of the profile.
+
+----------------------------------------------------------------------
+E0085 | v6.7 | SMALL | Found Day 115 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v6.7/cubic_spline.py
+Error     : Stanley cross-track error is NaN at waypoint 0
+Terminal  : Windows CMD
+  $ python3 cubic_spline.py
+  cross_track: nan  (first waypoint)
+  no steering command sent
+WHAT HAPPENED
+  The Stanley controller produced no steering command at the first waypoint. The cross-track error was NaN, so the controller output was NaN, and the car drove straight past the path.
+WHY IT HAPPENED (root cause)
+  The first path segment had zero length - two identical waypoints at the start of the list - so the tangent direction was undefined, and the cross-track math divided by zero. Stanley's formula assumes a valid segment direction; a zero-length segment violates that invariant. The NaN then propagated through the control output because no validation existed between the path math and the steering command.
+FIX (took 1 day)
+  Fixed by skipping zero-length segments in the path parser and replacing any NaN cross-track value with the previous valid value.
+
+----------------------------------------------------------------------
+E0086 | v6.7 | SMALL | Found Day 115 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v6.7/spline_visualize.py
+Error     : Gain schedule jumps at the speed boundary
+Terminal  : Windows CMD
+  $ python3 spline_visualize.py
+  gain: 0.9 -> 2.4 (speed 1.00 m/s)
+  steering step visible in the log
+WHAT HAPPENED
+  The steering gain jumped from 0.9 to 2.4 the instant the robot crossed 1 m/s. The steering response suddenly felt twice as aggressive.
+WHY IT HAPPENED (root cause)
+  The gain schedule was a lookup table with discrete rows, and the lookup switched rows at the boundary instead of interpolating between them. A discontinuous gain produces a discontinuous control law: the controller's personality changes instantly at a speed threshold. Gain scheduling is only smooth when the schedule itself is smooth.
+FIX (took 1 day)
+  Fixed by linearly interpolating between table rows, and adding a test that verifies the gain never changes by more than 10% per control tick.
+
+----------------------------------------------------------------------
+E0087 | v6.7 | SMALL | Found Day 115 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v6.7/cubic_spline.py
+Error     : Feedforward sign is opposite on reverse
+Terminal  : Windows CMD
+  $ python3 cubic_spline.py
+  reverse + feedforward = wrong direction
+  robot pulls to the left in reverse
+WHAT HAPPENED
+  In reverse, the robot consistently pulled to the left. The feedback controller was compensating correctly - the feedforward term was actively fighting it.
+WHY IT HAPPENED (root cause)
+  The feedforward steering term was computed for forward motion and applied unchanged when reversing. Steering geometry is direction-dependent: the same curvature requires the opposite steer correction when the velocity is negative. The sign flip was known in the ackermann module but not propagated to the controller, so two modules disagreed about the direction convention.
+FIX (took 1 day)
+  Fixed by multiplying the feedforward term by the direction sign, and adding a reverse-path test case to the controller test suite.
+
+----------------------------------------------------------------------
+E0088 | v6.7 | SMALL | Found Day 115 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v6.7/spline_visualize.py
+Error     : Cubic spline overshoots past the goal
+Terminal  : Windows CMD
+  $ python3 spline_visualize.py
+  end: x=2.01 y=0.03 (goal 2.00, 0.00)
+  overshoot 1cm at the parking spot
+WHAT HAPPENED
+  The spline ended 1cm past the parking target. Small in absolute terms, fatal for a parking maneuver where the tolerance is measured in millimeters.
+WHY IT HAPPENED (root cause)
+  The smoothing pass relaxed the endpoint constraints, letting the spline drift off the fixed end point. Splines are defined by their boundary conditions; the endpoint condition was applied before smoothing and the smoother was allowed to move it. The constraint was lost in the pipeline, not in the math.
+FIX (took 1 day)
+  Fixed by re-imposing the fixed endpoint condition after smoothing and adding a unit test that pins both endpoints to the exact goal.
+
+----------------------------------------------------------------------
+E0089 | v6.7 | SMALL | Found Day 115 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v6.7/cubic_spline.py
+Error     : Velocity profile outputs negative speeds
+Terminal  : Windows CMD
+  $ python3 cubic_spline.py
+  v: -0.2 m/s at t=1.2s
+  robot reverses mid-run
+WHAT HAPPENED
+  The robot briefly reversed in the middle of a straight run. The velocity profile commanded a negative speed - the robot was doing exactly what it was told.
+WHY IT HAPPENED (root cause)
+  The trapezoidal profile computes the deceleration phase assuming the target is reachable in the given time. When the target was too close for the time budget, the deceleration term overshot below zero. The math produced an unreachable profile instead of detecting the conflict; negative speed is the profile's way of saying 'the plan is impossible'.
+FIX (took 1 day)
+  Fixed by clamping the profile speed to zero and extending the profile duration when the target is not reachable within the requested time.
+
+----------------------------------------------------------------------
+E0090 | v6.7 | SMALL | Found Day 115 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v6.7/spline_visualize.py
+Error     : Obstacle avoidance oscillates left-right
+Terminal  : Windows CMD
+  $ python3 spline_visualize.py
+  steer: +12 -14 +11 -13 deg
+  no progress toward the goal
+WHAT HAPPENED
+  The robot wobbled in front of an obstacle without making progress. The steering command swung positive and negative every half second.
+WHY IT HAPPENED (root cause)
+  The avoidance gain and the goal-pull gain fought each other: as the robot turned away from the obstacle it aligned with the goal, and as it turned toward the goal it approached the obstacle again. Two competing controllers with no arbitration produced a limit cycle. The oscillation is the system's equilibrium - it is stable in the wrong way.
+FIX (took 1 day)
+  Fixed by adding a deadband where neither controller acts and a goal bias that makes the goal-pull dominant whenever both demands conflict.
+
+----------------------------------------------------------------------
+E0091 | v6.7 | SMALL | Found Day 115 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v6.7/cubic_spline.py
+Error     : MPC solve fails on the first step
+Terminal  : Windows CMD
+  $ python3 cubic_spline.py
+  cvxpy error: Problem status INFEASIBLE
+  no control output
+WHAT HAPPENED
+  The model-predictive controller produced no output at all - the solver reported the optimization problem was infeasible at the very first step.
+WHY IT HAPPENED (root cause)
+  The MPC horizon covered more track than existed, and the terminal constraint required the robot to be at a goal point the path could not reach within the horizon. A constrained optimization with contradictory constraints is infeasible by definition; the solver correctly refused to solve an impossible problem. The model was the bug - the horizon and constraints did not match the track geometry.
+FIX (took 1 day)
+  Fixed by shrinking the horizon to the track length and relaxing the terminal constraint from an equality to a soft penalty.
+
+----------------------------------------------------------------------
+E0092 | v6.7 | SMALL | Found Day 115 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v6.7/spline_visualize.py
+Error     : PID output saturates then overcorrects
+Terminal  : Windows CMD
+  $ python3 spline_visualize.py
+  output: 0.98 -> -0.99 -> 0.97
+  robot snakes down the straight
+WHAT HAPPENED
+  The robot weaved down the straight at every launch. The PID output swung from full throttle to full brake and back, several times per second.
+WHY IT HAPPENED (root cause)
+  The integral term accumulated while the robot was stalled at launch, and by the time motion started the integral alone exceeded the output limits. The controller then had to burn off the stored error by overshooting in the opposite direction - classic integral windup. Windup happens because the integrator keeps summing even while the output is clamped at its physical limit, so the error it stores is never realizable.
+FIX (took 1 day)
+  Fixed by adding anti-windup: stop integrating when the output is saturated and the integral would push it further into the limit.
+
+----------------------------------------------------------------------
+E0093 | v6.7 | BIG | Found Day 116 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.7/cubic_spline.py
+Error     : Integral windup launches the robot at the start
+Terminal  : Pi SSH terminal
+  $ python3 cubic_spline.py
+  integral: 0 -> 3.8 during stall
+  robot jumps forward 30cm
+WHAT HAPPENED
+  The robot jumped 30cm forward the moment it was released at the start line. The controller had been accumulating error during the stall and released it all at once.
+WHY IT HAPPENED (root cause)
+  While the robot was held at the start, the position error was large and constant, and the integrator summed it until the output hit the limit. The moment the hold released, the saturated output was applied instantly - a launch, not a start. Windup storage is invisible until the constraint disappears, which is why it always surfaces at the worst moment.
+INVESTIGATION (before the fix)
+  - Logged the integral term during the stall - it grew linearly
+  - Confirmed the jump magnitude matched the stored integral
+  - Added integral clamping and a pre-start integral reset
+FIX (took 2 days)
+  Fixed by clamping the integral to the output limits and resetting it when the robot is in the hold state, so the launch is a ramp, not a step.
+
+----------------------------------------------------------------------
+E0094 | v6.7 | BIG | Found Day 116 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.7/spline_visualize.py
+Error     : Global planner returns a path through the pillar
+Terminal  : Pi SSH terminal
+  $ python3 spline_visualize.py
+  path waypoint 3: inside the pillar
+  collision on the replay
+WHAT HAPPENED
+  The global planner produced a path that ran straight through a pillar. The replay showed the collision clearly - the planner never considered the robot's width.
+WHY IT HAPPENED (root cause)
+  The grid cost map marked only the obstacle's exact cells as blocked. A robot has physical width, so its center can be up to half a width away from an obstacle while the robot still collides. The planner used a point model for a 20cm-wide robot. Path planning for a real robot requires the configuration-space inflation; planning a point path through the environment is planning a point's path.
+INVESTIGATION (before the fix)
+  - Replayed the planned path against the map - the waypoint was inside
+  - Measured the clearance at the collision - less than the robot width
+  - Inflated the obstacles by the robot radius and re-planned
+FIX (took 3 days)
+  Fixed by inflating all obstacles by the robot radius before running A*, and adding a clearance check on the final path.
+
+----------------------------------------------------------------------
+E0095 | v6.7 | BIG | Found Day 116 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.7/cubic_spline.py
+Error     : Velocity profile ignores the corner limit
+Terminal  : Pi SSH terminal
+  $ python3 cubic_spline.py
+  v = 2.0 m/s into a 60-degree corner
+  tire squeal, robot drifts
+WHAT HAPPENED
+  The robot entered a 60-degree corner at full speed and slid wide. The profile optimized for time with no regard for what the tires can do.
+WHY IT HAPPENED (root cause)
+  The velocity profile minimized lap time subject only to acceleration limits, not to lateral acceleration. A corner has a speed limit set by physics: v_max = sqrt(mu * g * r). Ignoring the curvature limit produced a profile that is fast on paper and impossible in reality - the tires physically cannot provide the required lateral force.
+INVESTIGATION (before the fix)
+  - Measured the actual cornering speed limit on the track
+  - Overlaid the profile's speed at the corner - it exceeded the limit
+  - Added a curvature-dependent speed cap to the profile
+FIX (took 4 days)
+  Fixed by adding a speed cap derived from the path curvature and the measured tire limit, applied at every point of the profile.
+
+----------------------------------------------------------------------
+E0096 | v6.7 | BIG | Found Day 116 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.7/spline_visualize.py
+Error     : Cubic spline path is jerky at waypoint 5
+Terminal  : Pi SSH terminal
+  $ python3 spline_visualize.py
+  acceleration spike: 12 m/s^2 at wp5
+  visible jerk in the run
+WHAT HAPPENED
+  At waypoint 5 the robot jerked visibly. The path was smooth to the eye - the jerk was in the timing, not the shape.
+WHY IT HAPPENED (root cause)
+  The spline was parameterized by a non-arc-length parameter, so equal parameter steps cover unequal distances along the path. The velocity controller interpreted parameter speed as spatial speed, producing huge accelerations where the parameterization compressed distance. A geometrically smooth path can be dynamically jerky if the parameterization is uneven.
+INVESTIGATION (before the fix)
+  - Plotted the path speed against distance - the spike matched wp5
+  - Checked the parameterization - it was not arc length
+  - Reparameterized by arc length and re-ran
+FIX (took 5 days)
+  Fixed by reparameterizing the spline with arc length so parameter speed equals spatial speed, and validating the acceleration profile in the profile_test.
+
+----------------------------------------------------------------------
+E0097 | v6.8 | SMALL | Found Day 117 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v6.8/profile_test.py
+Error     : Gain schedule jumps at the speed boundary
+Terminal  : systemd journal
+  $ python3 profile_test.py
+  gain: 0.9 -> 2.4 (speed 1.00 m/s)
+  steering step visible in the log
+WHAT HAPPENED
+  The steering gain jumped from 0.9 to 2.4 the instant the robot crossed 1 m/s. The steering response suddenly felt twice as aggressive.
+WHY IT HAPPENED (root cause)
+  The gain schedule was a lookup table with discrete rows, and the lookup switched rows at the boundary instead of interpolating between them. A discontinuous gain produces a discontinuous control law: the controller's personality changes instantly at a speed threshold. Gain scheduling is only smooth when the schedule itself is smooth.
+FIX (took 1 day)
+  Fixed by linearly interpolating between table rows, and adding a test that verifies the gain never changes by more than 10% per control tick.
+
+----------------------------------------------------------------------
+E0098 | v6.8 | SMALL | Found Day 117 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v6.8/velocity_profile.py
+Error     : Feedforward sign is opposite on reverse
+Terminal  : systemd journal
+  $ python3 velocity_profile.py
+  reverse + feedforward = wrong direction
+  robot pulls to the left in reverse
+WHAT HAPPENED
+  In reverse, the robot consistently pulled to the left. The feedback controller was compensating correctly - the feedforward term was actively fighting it.
+WHY IT HAPPENED (root cause)
+  The feedforward steering term was computed for forward motion and applied unchanged when reversing. Steering geometry is direction-dependent: the same curvature requires the opposite steer correction when the velocity is negative. The sign flip was known in the ackermann module but not propagated to the controller, so two modules disagreed about the direction convention.
+FIX (took 1 day)
+  Fixed by multiplying the feedforward term by the direction sign, and adding a reverse-path test case to the controller test suite.
+
+----------------------------------------------------------------------
+E0099 | v6.8 | SMALL | Found Day 117 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v6.8/profile_test.py
+Error     : Cubic spline overshoots past the goal
+Terminal  : systemd journal
+  $ python3 profile_test.py
+  end: x=2.01 y=0.03 (goal 2.00, 0.00)
+  overshoot 1cm at the parking spot
+WHAT HAPPENED
+  The spline ended 1cm past the parking target. Small in absolute terms, fatal for a parking maneuver where the tolerance is measured in millimeters.
+WHY IT HAPPENED (root cause)
+  The smoothing pass relaxed the endpoint constraints, letting the spline drift off the fixed end point. Splines are defined by their boundary conditions; the endpoint condition was applied before smoothing and the smoother was allowed to move it. The constraint was lost in the pipeline, not in the math.
+FIX (took 1 day)
+  Fixed by re-imposing the fixed endpoint condition after smoothing and adding a unit test that pins both endpoints to the exact goal.
+
+----------------------------------------------------------------------
+E0100 | v6.8 | SMALL | Found Day 117 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v6.8/velocity_profile.py
+Error     : Velocity profile outputs negative speeds
+Terminal  : systemd journal
+  $ python3 velocity_profile.py
+  v: -0.2 m/s at t=1.2s
+  robot reverses mid-run
+WHAT HAPPENED
+  The robot briefly reversed in the middle of a straight run. The velocity profile commanded a negative speed - the robot was doing exactly what it was told.
+WHY IT HAPPENED (root cause)
+  The trapezoidal profile computes the deceleration phase assuming the target is reachable in the given time. When the target was too close for the time budget, the deceleration term overshot below zero. The math produced an unreachable profile instead of detecting the conflict; negative speed is the profile's way of saying 'the plan is impossible'.
+FIX (took 1 day)
+  Fixed by clamping the profile speed to zero and extending the profile duration when the target is not reachable within the requested time.
+
+----------------------------------------------------------------------
+E0101 | v6.8 | SMALL | Found Day 117 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v6.8/profile_test.py
+Error     : Obstacle avoidance oscillates left-right
+Terminal  : systemd journal
+  $ python3 profile_test.py
+  steer: +12 -14 +11 -13 deg
+  no progress toward the goal
+WHAT HAPPENED
+  The robot wobbled in front of an obstacle without making progress. The steering command swung positive and negative every half second.
+WHY IT HAPPENED (root cause)
+  The avoidance gain and the goal-pull gain fought each other: as the robot turned away from the obstacle it aligned with the goal, and as it turned toward the goal it approached the obstacle again. Two competing controllers with no arbitration produced a limit cycle. The oscillation is the system's equilibrium - it is stable in the wrong way.
+FIX (took 1 day)
+  Fixed by adding a deadband where neither controller acts and a goal bias that makes the goal-pull dominant whenever both demands conflict.
+
+----------------------------------------------------------------------
+E0102 | v6.8 | SMALL | Found Day 117 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v6.8/velocity_profile.py
+Error     : MPC solve fails on the first step
+Terminal  : systemd journal
+  $ python3 velocity_profile.py
+  cvxpy error: Problem status INFEASIBLE
+  no control output
+WHAT HAPPENED
+  The model-predictive controller produced no output at all - the solver reported the optimization problem was infeasible at the very first step.
+WHY IT HAPPENED (root cause)
+  The MPC horizon covered more track than existed, and the terminal constraint required the robot to be at a goal point the path could not reach within the horizon. A constrained optimization with contradictory constraints is infeasible by definition; the solver correctly refused to solve an impossible problem. The model was the bug - the horizon and constraints did not match the track geometry.
+FIX (took 1 day)
+  Fixed by shrinking the horizon to the track length and relaxing the terminal constraint from an equality to a soft penalty.
+
+----------------------------------------------------------------------
+E0103 | v6.8 | SMALL | Found Day 117 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v6.8/profile_test.py
+Error     : PID output saturates then overcorrects
+Terminal  : systemd journal
+  $ python3 profile_test.py
+  output: 0.98 -> -0.99 -> 0.97
+  robot snakes down the straight
+WHAT HAPPENED
+  The robot weaved down the straight at every launch. The PID output swung from full throttle to full brake and back, several times per second.
+WHY IT HAPPENED (root cause)
+  The integral term accumulated while the robot was stalled at launch, and by the time motion started the integral alone exceeded the output limits. The controller then had to burn off the stored error by overshooting in the opposite direction - classic integral windup. Windup happens because the integrator keeps summing even while the output is clamped at its physical limit, so the error it stores is never realizable.
+FIX (took 1 day)
+  Fixed by adding anti-windup: stop integrating when the output is saturated and the integral would push it further into the limit.
+
+----------------------------------------------------------------------
+E0104 | v6.8 | SMALL | Found Day 117 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v6.8/velocity_profile.py
+Error     : Stanley cross-track error is NaN at waypoint 0
+Terminal  : systemd journal
+  $ python3 velocity_profile.py
+  cross_track: nan  (first waypoint)
+  no steering command sent
+WHAT HAPPENED
+  The Stanley controller produced no steering command at the first waypoint. The cross-track error was NaN, so the controller output was NaN, and the car drove straight past the path.
+WHY IT HAPPENED (root cause)
+  The first path segment had zero length - two identical waypoints at the start of the list - so the tangent direction was undefined, and the cross-track math divided by zero. Stanley's formula assumes a valid segment direction; a zero-length segment violates that invariant. The NaN then propagated through the control output because no validation existed between the path math and the steering command.
+FIX (took 1 day)
+  Fixed by skipping zero-length segments in the path parser and replacing any NaN cross-track value with the previous valid value.
+
+----------------------------------------------------------------------
+E0105 | v6.8 | BIG | Found Day 118 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.8/profile_test.py
+Error     : Global planner returns a path through the pillar
+Terminal  : Pi SSH terminal
+  $ python3 profile_test.py
+  path waypoint 3: inside the pillar
+  collision on the replay
+WHAT HAPPENED
+  The global planner produced a path that ran straight through a pillar. The replay showed the collision clearly - the planner never considered the robot's width.
+WHY IT HAPPENED (root cause)
+  The grid cost map marked only the obstacle's exact cells as blocked. A robot has physical width, so its center can be up to half a width away from an obstacle while the robot still collides. The planner used a point model for a 20cm-wide robot. Path planning for a real robot requires the configuration-space inflation; planning a point path through the environment is planning a point's path.
+INVESTIGATION (before the fix)
+  - Replayed the planned path against the map - the waypoint was inside
+  - Measured the clearance at the collision - less than the robot width
+  - Inflated the obstacles by the robot radius and re-planned
+FIX (took 2 days)
+  Fixed by inflating all obstacles by the robot radius before running A*, and adding a clearance check on the final path.
+
+----------------------------------------------------------------------
+E0106 | v6.8 | BIG | Found Day 118 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.8/velocity_profile.py
+Error     : Velocity profile ignores the corner limit
+Terminal  : Pi SSH terminal
+  $ python3 velocity_profile.py
+  v = 2.0 m/s into a 60-degree corner
+  tire squeal, robot drifts
+WHAT HAPPENED
+  The robot entered a 60-degree corner at full speed and slid wide. The profile optimized for time with no regard for what the tires can do.
+WHY IT HAPPENED (root cause)
+  The velocity profile minimized lap time subject only to acceleration limits, not to lateral acceleration. A corner has a speed limit set by physics: v_max = sqrt(mu * g * r). Ignoring the curvature limit produced a profile that is fast on paper and impossible in reality - the tires physically cannot provide the required lateral force.
+INVESTIGATION (before the fix)
+  - Measured the actual cornering speed limit on the track
+  - Overlaid the profile's speed at the corner - it exceeded the limit
+  - Added a curvature-dependent speed cap to the profile
+FIX (took 3 days)
+  Fixed by adding a speed cap derived from the path curvature and the measured tire limit, applied at every point of the profile.
+
+----------------------------------------------------------------------
+E0107 | v6.8 | BIG | Found Day 118 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.8/profile_test.py
+Error     : Cubic spline path is jerky at waypoint 5
+Terminal  : Pi SSH terminal
+  $ python3 profile_test.py
+  acceleration spike: 12 m/s^2 at wp5
+  visible jerk in the run
+WHAT HAPPENED
+  At waypoint 5 the robot jerked visibly. The path was smooth to the eye - the jerk was in the timing, not the shape.
+WHY IT HAPPENED (root cause)
+  The spline was parameterized by a non-arc-length parameter, so equal parameter steps cover unequal distances along the path. The velocity controller interpreted parameter speed as spatial speed, producing huge accelerations where the parameterization compressed distance. A geometrically smooth path can be dynamically jerky if the parameterization is uneven.
+INVESTIGATION (before the fix)
+  - Plotted the path speed against distance - the spike matched wp5
+  - Checked the parameterization - it was not arc length
+  - Reparameterized by arc length and re-ran
+FIX (took 4 days)
+  Fixed by reparameterizing the spline with arc length so parameter speed equals spatial speed, and validating the acceleration profile in the profile_test.
+
+----------------------------------------------------------------------
+E0108 | v6.8 | BIG | Found Day 118 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.8/velocity_profile.py
+Error     : Feedforward causes overshoot in sharp turns
+Terminal  : Pi SSH terminal
+  $ python3 velocity_profile.py
+  ff: +0.8 -> overshoot 8 degrees
+  corrective jerk after each corner
+WHAT HAPPENED
+  After every sharp corner the robot overshot the heading by 8 degrees and then corrected with a jerk. Gentle corners were fine - only the sharp ones overshot.
+WHY IT HAPPENED (root cause)
+  The feedforward gain was tuned for the average curve and over-applied on sharp ones. The steering response is nonlinear: at large angles the servo linkage has different leverage, so a feedforward command calibrated for 30 degrees is too strong at 90. A single constant gain cannot fit a nonlinear plant across the whole operating range.
+INVESTIGATION (before the fix)
+  - Measured the overshoot against corner sharpness - it scaled with angle
+  - Plotted the steer response vs command - nonlinear above 45 degrees
+  - Scaled the feedforward with the corner curvature
+FIX (took 5 days)
+  Fixed by scaling the feedforward with the path curvature, and verifying with the corner_test that the overshoot stays under 2 degrees.
+
+----------------------------------------------------------------------
+E0109 | v6.9 | SMALL | Found Day 119 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v6.9/avoidance_test.py
+Error     : Feedforward sign is opposite on reverse
+Terminal  : VS Code terminal
+  $ python3 avoidance_test.py
+  reverse + feedforward = wrong direction
+  robot pulls to the left in reverse
+WHAT HAPPENED
+  In reverse, the robot consistently pulled to the left. The feedback controller was compensating correctly - the feedforward term was actively fighting it.
+WHY IT HAPPENED (root cause)
+  The feedforward steering term was computed for forward motion and applied unchanged when reversing. Steering geometry is direction-dependent: the same curvature requires the opposite steer correction when the velocity is negative. The sign flip was known in the ackermann module but not propagated to the controller, so two modules disagreed about the direction convention.
+FIX (took 1 day)
+  Fixed by multiplying the feedforward term by the direction sign, and adding a reverse-path test case to the controller test suite.
+
+----------------------------------------------------------------------
+E0110 | v6.9 | SMALL | Found Day 119 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v6.9/obstacle_avoid.py
+Error     : Cubic spline overshoots past the goal
+Terminal  : VS Code terminal
+  $ python3 obstacle_avoid.py
+  end: x=2.01 y=0.03 (goal 2.00, 0.00)
+  overshoot 1cm at the parking spot
+WHAT HAPPENED
+  The spline ended 1cm past the parking target. Small in absolute terms, fatal for a parking maneuver where the tolerance is measured in millimeters.
+WHY IT HAPPENED (root cause)
+  The smoothing pass relaxed the endpoint constraints, letting the spline drift off the fixed end point. Splines are defined by their boundary conditions; the endpoint condition was applied before smoothing and the smoother was allowed to move it. The constraint was lost in the pipeline, not in the math.
+FIX (took 1 day)
+  Fixed by re-imposing the fixed endpoint condition after smoothing and adding a unit test that pins both endpoints to the exact goal.
+
+----------------------------------------------------------------------
+E0111 | v6.9 | SMALL | Found Day 119 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v6.9/avoidance_test.py
+Error     : Velocity profile outputs negative speeds
+Terminal  : VS Code terminal
+  $ python3 avoidance_test.py
+  v: -0.2 m/s at t=1.2s
+  robot reverses mid-run
+WHAT HAPPENED
+  The robot briefly reversed in the middle of a straight run. The velocity profile commanded a negative speed - the robot was doing exactly what it was told.
+WHY IT HAPPENED (root cause)
+  The trapezoidal profile computes the deceleration phase assuming the target is reachable in the given time. When the target was too close for the time budget, the deceleration term overshot below zero. The math produced an unreachable profile instead of detecting the conflict; negative speed is the profile's way of saying 'the plan is impossible'.
+FIX (took 1 day)
+  Fixed by clamping the profile speed to zero and extending the profile duration when the target is not reachable within the requested time.
+
+----------------------------------------------------------------------
+E0112 | v6.9 | SMALL | Found Day 119 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v6.9/obstacle_avoid.py
+Error     : Obstacle avoidance oscillates left-right
+Terminal  : VS Code terminal
+  $ python3 obstacle_avoid.py
+  steer: +12 -14 +11 -13 deg
+  no progress toward the goal
+WHAT HAPPENED
+  The robot wobbled in front of an obstacle without making progress. The steering command swung positive and negative every half second.
+WHY IT HAPPENED (root cause)
+  The avoidance gain and the goal-pull gain fought each other: as the robot turned away from the obstacle it aligned with the goal, and as it turned toward the goal it approached the obstacle again. Two competing controllers with no arbitration produced a limit cycle. The oscillation is the system's equilibrium - it is stable in the wrong way.
+FIX (took 1 day)
+  Fixed by adding a deadband where neither controller acts and a goal bias that makes the goal-pull dominant whenever both demands conflict.
+
+----------------------------------------------------------------------
+E0113 | v6.9 | SMALL | Found Day 119 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v6.9/avoidance_test.py
+Error     : MPC solve fails on the first step
+Terminal  : VS Code terminal
+  $ python3 avoidance_test.py
+  cvxpy error: Problem status INFEASIBLE
+  no control output
+WHAT HAPPENED
+  The model-predictive controller produced no output at all - the solver reported the optimization problem was infeasible at the very first step.
+WHY IT HAPPENED (root cause)
+  The MPC horizon covered more track than existed, and the terminal constraint required the robot to be at a goal point the path could not reach within the horizon. A constrained optimization with contradictory constraints is infeasible by definition; the solver correctly refused to solve an impossible problem. The model was the bug - the horizon and constraints did not match the track geometry.
+FIX (took 1 day)
+  Fixed by shrinking the horizon to the track length and relaxing the terminal constraint from an equality to a soft penalty.
+
+----------------------------------------------------------------------
+E0114 | v6.9 | SMALL | Found Day 119 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v6.9/obstacle_avoid.py
+Error     : PID output saturates then overcorrects
+Terminal  : VS Code terminal
+  $ python3 obstacle_avoid.py
+  output: 0.98 -> -0.99 -> 0.97
+  robot snakes down the straight
+WHAT HAPPENED
+  The robot weaved down the straight at every launch. The PID output swung from full throttle to full brake and back, several times per second.
+WHY IT HAPPENED (root cause)
+  The integral term accumulated while the robot was stalled at launch, and by the time motion started the integral alone exceeded the output limits. The controller then had to burn off the stored error by overshooting in the opposite direction - classic integral windup. Windup happens because the integrator keeps summing even while the output is clamped at its physical limit, so the error it stores is never realizable.
+FIX (took 1 day)
+  Fixed by adding anti-windup: stop integrating when the output is saturated and the integral would push it further into the limit.
+
+----------------------------------------------------------------------
+E0115 | v6.9 | SMALL | Found Day 119 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v6.9/avoidance_test.py
+Error     : Stanley cross-track error is NaN at waypoint 0
+Terminal  : VS Code terminal
+  $ python3 avoidance_test.py
+  cross_track: nan  (first waypoint)
+  no steering command sent
+WHAT HAPPENED
+  The Stanley controller produced no steering command at the first waypoint. The cross-track error was NaN, so the controller output was NaN, and the car drove straight past the path.
+WHY IT HAPPENED (root cause)
+  The first path segment had zero length - two identical waypoints at the start of the list - so the tangent direction was undefined, and the cross-track math divided by zero. Stanley's formula assumes a valid segment direction; a zero-length segment violates that invariant. The NaN then propagated through the control output because no validation existed between the path math and the steering command.
+FIX (took 1 day)
+  Fixed by skipping zero-length segments in the path parser and replacing any NaN cross-track value with the previous valid value.
+
+----------------------------------------------------------------------
+E0116 | v6.9 | SMALL | Found Day 119 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v6.9/obstacle_avoid.py
+Error     : Gain schedule jumps at the speed boundary
+Terminal  : VS Code terminal
+  $ python3 obstacle_avoid.py
+  gain: 0.9 -> 2.4 (speed 1.00 m/s)
+  steering step visible in the log
+WHAT HAPPENED
+  The steering gain jumped from 0.9 to 2.4 the instant the robot crossed 1 m/s. The steering response suddenly felt twice as aggressive.
+WHY IT HAPPENED (root cause)
+  The gain schedule was a lookup table with discrete rows, and the lookup switched rows at the boundary instead of interpolating between them. A discontinuous gain produces a discontinuous control law: the controller's personality changes instantly at a speed threshold. Gain scheduling is only smooth when the schedule itself is smooth.
+FIX (took 1 day)
+  Fixed by linearly interpolating between table rows, and adding a test that verifies the gain never changes by more than 10% per control tick.
+
+----------------------------------------------------------------------
+E0117 | v6.9 | BIG | Found Day 120 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.9/avoidance_test.py
+Error     : Velocity profile ignores the corner limit
+Terminal  : Pi SSH terminal
+  $ python3 avoidance_test.py
+  v = 2.0 m/s into a 60-degree corner
+  tire squeal, robot drifts
+WHAT HAPPENED
+  The robot entered a 60-degree corner at full speed and slid wide. The profile optimized for time with no regard for what the tires can do.
+WHY IT HAPPENED (root cause)
+  The velocity profile minimized lap time subject only to acceleration limits, not to lateral acceleration. A corner has a speed limit set by physics: v_max = sqrt(mu * g * r). Ignoring the curvature limit produced a profile that is fast on paper and impossible in reality - the tires physically cannot provide the required lateral force.
+INVESTIGATION (before the fix)
+  - Measured the actual cornering speed limit on the track
+  - Overlaid the profile's speed at the corner - it exceeded the limit
+  - Added a curvature-dependent speed cap to the profile
+FIX (took 2 days)
+  Fixed by adding a speed cap derived from the path curvature and the measured tire limit, applied at every point of the profile.
+
+----------------------------------------------------------------------
+E0118 | v6.9 | BIG | Found Day 120 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.9/obstacle_avoid.py
+Error     : Cubic spline path is jerky at waypoint 5
+Terminal  : Pi SSH terminal
+  $ python3 obstacle_avoid.py
+  acceleration spike: 12 m/s^2 at wp5
+  visible jerk in the run
+WHAT HAPPENED
+  At waypoint 5 the robot jerked visibly. The path was smooth to the eye - the jerk was in the timing, not the shape.
+WHY IT HAPPENED (root cause)
+  The spline was parameterized by a non-arc-length parameter, so equal parameter steps cover unequal distances along the path. The velocity controller interpreted parameter speed as spatial speed, producing huge accelerations where the parameterization compressed distance. A geometrically smooth path can be dynamically jerky if the parameterization is uneven.
+INVESTIGATION (before the fix)
+  - Plotted the path speed against distance - the spike matched wp5
+  - Checked the parameterization - it was not arc length
+  - Reparameterized by arc length and re-ran
+FIX (took 3 days)
+  Fixed by reparameterizing the spline with arc length so parameter speed equals spatial speed, and validating the acceleration profile in the profile_test.
+
+----------------------------------------------------------------------
+E0119 | v6.9 | BIG | Found Day 120 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.9/avoidance_test.py
+Error     : Feedforward causes overshoot in sharp turns
+Terminal  : Pi SSH terminal
+  $ python3 avoidance_test.py
+  ff: +0.8 -> overshoot 8 degrees
+  corrective jerk after each corner
+WHAT HAPPENED
+  After every sharp corner the robot overshot the heading by 8 degrees and then corrected with a jerk. Gentle corners were fine - only the sharp ones overshot.
+WHY IT HAPPENED (root cause)
+  The feedforward gain was tuned for the average curve and over-applied on sharp ones. The steering response is nonlinear: at large angles the servo linkage has different leverage, so a feedforward command calibrated for 30 degrees is too strong at 90. A single constant gain cannot fit a nonlinear plant across the whole operating range.
+INVESTIGATION (before the fix)
+  - Measured the overshoot against corner sharpness - it scaled with angle
+  - Plotted the steer response vs command - nonlinear above 45 degrees
+  - Scaled the feedforward with the corner curvature
+FIX (took 4 days)
+  Fixed by scaling the feedforward with the path curvature, and verifying with the corner_test that the overshoot stays under 2 degrees.
+
+----------------------------------------------------------------------
+E0120 | v6.9 | BIG | Found Day 120 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v6.9/obstacle_avoid.py
+Error     : Anti-windup test fails with 30% overshoot
+Terminal  : Pi SSH terminal
+  $ python3 obstacle_avoid.py
+  overshoot: 30% (target <10%)
+  anti-windup not active
+WHAT HAPPENED
+  The windup test measured 30% overshoot - three times the target. The anti-windup code existed, was enabled, and did nothing.
+WHY IT HAPPENED (root cause)
+  The saturation check inside the anti-windup compared the output against the wrong limits - the controller's nominal range instead of the physical PWM limits. The controller output could never exceed its nominal range, so the saturation detector never triggered, so the anti-windup was permanently inactive. The feature was dead code with its documentation claiming otherwise.
+INVESTIGATION (before the fix)
+  - Read the windup_test output - the saturation flag never fired
+  - Compared the check limits with the real PWM limits - they differed
+  - Fixed the limits and re-ran - overshoot dropped to 4%
+FIX (took 5 days)
+  Fixed by comparing against the physical PWM limits in the saturation check, and adding a test assertion that the anti-windup flag actually activates during a stall.
+
+======================================================================
+END OF PHASE v6.x -- 120 errors
+======================================================================

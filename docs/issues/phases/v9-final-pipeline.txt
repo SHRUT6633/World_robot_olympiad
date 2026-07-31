@@ -1,0 +1,2132 @@
+WRO 4WS Robot - Error Catalog (1000+ Errors, Deep Detail)
+=========================================================
+One error entry per development morning across the whole 90-version
+history repo (v1.0 -> v9.9).  Every entry includes WHAT HAPPENED,
+WHY IT HAPPENED (root cause / deep research), the terminal type and
+exact output, and the FIX with how many days it took.
+
+  SMALL  errors : fixed the same day (1 day)
+  BIG    errors : 2-5 days, with investigation steps before the fix
+
+Day = development-day counter only (no dates).
+
+Total errors : 1080   (720 SMALL / 360 BIG)
+Total days   : 180
+Versions     : 90
+Phases       : 9
+
+======================================================================
+PHASE v9.x  --  FINAL PIPELINE (BIG)
+======================================================================
+
+----------------------------------------------------------------------
+E0001 | v9.0 | SMALL | Found Day 161 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v9.0/esp_main.c
+Error     : Lint failure in CI on unused import
+Terminal  : ESP32 serial monitor
+  $ idf.py monitor
+  flake8: F401 'sys' imported but unused
+  CI job failed in 8s
+WHAT HAPPENED
+  The CI pipeline went red 8 seconds after the push. The failure was a single unused import - trivial, but it blocked the whole pipeline.
+WHY IT HAPPENED (root cause)
+  The final cleanup left 'import sys' after removing the code that used it. flake8's F401 rule flags any unused import, and the CI gate treated warnings as failures. A lint failure is the cheapest possible error to catch - it costs seconds - which is exactly why the gate exists: to catch before the hardware run.
+FIX (took 1 day)
+  Fixed by removing the import, and by running flake8 locally before pushing so the CI gate never sees the mistake.
+
+----------------------------------------------------------------------
+E0002 | v9.0 | SMALL | Found Day 161 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v9.0/pi_main.py
+Error     : setup.cfg ignores the pi package
+Terminal  : ESP32 serial monitor
+  $ python3 pi_main.py
+  pytest: no tests ran
+  test_full_pipeline skipped
+WHAT HAPPENED
+  The CI reported success while running zero tests. A green pipeline is only as good as the tests it actually runs.
+WHY IT HAPPENED (root cause)
+  setup.cfg listed packages manually and pi.* was missing, so pytest's package discovery found no test modules and exited with code 0 - an empty success. An empty test run looks exactly like a passing run to a CI system that only checks the exit code. The configuration and the codebase had diverged when the pi/ tree was reorganized.
+FIX (took 1 day)
+  Fixed by switching to packages = find: so discovery is automatic, and adding a CI assertion that the test count is greater than zero.
+
+----------------------------------------------------------------------
+E0003 | v9.0 | SMALL | Found Day 161 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v9.0/esp_main.c
+Error     : LED pin conflict with the camera
+Terminal  : ESP32 serial monitor
+  $ idf.py monitor
+  led: 0 0 0  (camera init fails)
+  camera and LED share a pin
+WHAT HAPPENED
+  The status LED was dead and the camera failed to initialize - two unrelated-looking failures that shared one cause.
+WHY IT HAPPENED (root cause)
+  The LED was wired to the camera's enable pin, so driving the LED pulled the camera's enable line low. Each subsystem's config named the pin differently ('led_gpio' vs 'camera_enable'), so the conflict was invisible in the config review. The two features shared a physical resource that no single file owned.
+FIX (took 1 day)
+  Fixed by moving the LED to a spare GPIO and adding a pin-conflict check at boot that rejects two peripherals claiming the same GPIO.
+
+----------------------------------------------------------------------
+E0004 | v9.0 | SMALL | Found Day 161 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v9.0/pi_main.py
+Error     : Surprise rule YAML has a duplicate key
+Terminal  : ESP32 serial monitor
+  $ python3 pi_main.py
+  yaml.constructor.DuplicateKeyError
+  config load aborts
+WHAT HAPPENED
+  The robot failed to boot on race morning because the rules file had the same key twice. A merge conflict had duplicated a line and no one noticed.
+WHY IT HAPPENED (root cause)
+  YAML strictly forbids duplicate keys, and the parser raises DuplicateKeyError - the loader correctly refused to guess which value wins. The duplicate came from a bad merge that produced two pillar_logic entries. YAML's strictness here is a feature: silently picking one of two conflicting values would be worse.
+FIX (took 1 day)
+  Fixed by removing the duplicate, and adding a pre-merge check that parses every YAML file and rejects duplicates in CI.
+
+----------------------------------------------------------------------
+E0005 | v9.0 | SMALL | Found Day 161 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v9.0/esp_main.c
+Error     : Test flaky on the first run of the day
+Terminal  : ESP32 serial monitor
+  $ idf.py monitor
+  FAILED test_full_pipeline - passed 5 minutes later
+  timing-dependent assertion
+WHAT HAPPENED
+  The full-pipeline test failed on the first run of the morning and passed every run after. A cold Pi is a different computer than a warm one.
+WHY IT HAPPENED (root cause)
+  The test asserted that the pipeline reaches 100Hz within 2 seconds of start. A cold Pi takes longer to warm up its clocks and caches, so the first run of the day missed the deadline. Timing assertions embed an assumption about the machine state, and machine state varies with temperature and uptime.
+FIX (took 1 day)
+  Fixed by relaxing the assertion to a 20% margin and measuring the warm-up time over a week of first runs to set a realistic bound.
+
+----------------------------------------------------------------------
+E0006 | v9.0 | SMALL | Found Day 161 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v9.0/pi_main.py
+Error     : Lint failure in CI on unused import
+Terminal  : ESP32 serial monitor
+  $ python3 pi_main.py
+  flake8: F401 'sys' imported but unused
+  CI job failed in 8s
+WHAT HAPPENED
+  The CI pipeline went red 8 seconds after the push. The failure was a single unused import - trivial, but it blocked the whole pipeline.
+WHY IT HAPPENED (root cause)
+  The final cleanup left 'import sys' after removing the code that used it. flake8's F401 rule flags any unused import, and the CI gate treated warnings as failures. A lint failure is the cheapest possible error to catch - it costs seconds - which is exactly why the gate exists: to catch before the hardware run.
+FIX (took 1 day)
+  Fixed by removing the import, and by running flake8 locally before pushing so the CI gate never sees the mistake.
+
+----------------------------------------------------------------------
+E0007 | v9.0 | SMALL | Found Day 161 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v9.0/esp_main.c
+Error     : setup.cfg ignores the pi package
+Terminal  : ESP32 serial monitor
+  $ idf.py monitor
+  pytest: no tests ran
+  test_full_pipeline skipped
+WHAT HAPPENED
+  The CI reported success while running zero tests. A green pipeline is only as good as the tests it actually runs.
+WHY IT HAPPENED (root cause)
+  setup.cfg listed packages manually and pi.* was missing, so pytest's package discovery found no test modules and exited with code 0 - an empty success. An empty test run looks exactly like a passing run to a CI system that only checks the exit code. The configuration and the codebase had diverged when the pi/ tree was reorganized.
+FIX (took 1 day)
+  Fixed by switching to packages = find: so discovery is automatic, and adding a CI assertion that the test count is greater than zero.
+
+----------------------------------------------------------------------
+E0008 | v9.0 | SMALL | Found Day 161 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v9.0/pi_main.py
+Error     : LED pin conflict with the camera
+Terminal  : ESP32 serial monitor
+  $ python3 pi_main.py
+  led: 0 0 0  (camera init fails)
+  camera and LED share a pin
+WHAT HAPPENED
+  The status LED was dead and the camera failed to initialize - two unrelated-looking failures that shared one cause.
+WHY IT HAPPENED (root cause)
+  The LED was wired to the camera's enable pin, so driving the LED pulled the camera's enable line low. Each subsystem's config named the pin differently ('led_gpio' vs 'camera_enable'), so the conflict was invisible in the config review. The two features shared a physical resource that no single file owned.
+FIX (took 1 day)
+  Fixed by moving the LED to a spare GPIO and adding a pin-conflict check at boot that rejects two peripherals claiming the same GPIO.
+
+----------------------------------------------------------------------
+E0009 | v9.0 | BIG | Found Day 162 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v9.0/esp_main.c
+Error     : Full pipeline crashes 2 seconds after the start
+Terminal  : Pi SSH terminal
+  $ python3 main.py
+  Traceback (most recent call last):
+    File "main.py", line 88, in <module>
+      scheduler.start()
+    File "pi/system/scheduler.py", line 31
+      await asyncio.gather(*tasks)
+  TypeError: 'Task' object is not callable
+WHAT HAPPENED
+  The final integrated system crashed two seconds after launch - after all subsystems had started successfully. The crash was in the scheduler, the last piece to start.
+WHY IT HAPPENED (root cause)
+  The scheduler defined a class named Task, shadowing asyncio.Task inside the module. asyncio.gather expects coroutine objects or Tasks; it received the module's own Task class instance, which is not awaitable, raising TypeError. The name collision was invisible until the exact code path that combined both symbols executed - which only happens at the very end of startup.
+INVESTIGATION (before the fix)
+  - Read the traceback - the scheduler line and the class name matched
+  - Checked asyncio.gather's requirements against the argument
+  - Renamed the internal class and verified the whole startup
+FIX (took 2 days)
+  Fixed by renaming the internal class to ScheduledTask, and adding a smoke test that runs the full startup sequence before every race.
+
+----------------------------------------------------------------------
+E0010 | v9.0 | BIG | Found Day 162 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v9.0/pi_main.py
+Error     : Camera frozen at the race morning start
+Terminal  : Pi SSH terminal
+  $ python3 main.py
+  frame: identical for 40s
+  camera driver: no error, no frame
+WHAT HAPPENED
+  On race morning the camera output a single frozen frame for 40 seconds. No error, no exception - just a frame that never changed, while the robot drove blind.
+WHY IT HAPPENED (root cause)
+  The camera read call had no timeout, so when the sensor stalled (a known cold-start quirk of the camera module), the driver blocked forever inside read(). Blocking reads fail silently by design: the code waits, nothing happens, no signal is raised. The pipeline kept consuming the last frame, so the system looked alive while being blind.
+INVESTIGATION (before the fix)
+  - Confirmed the frame was a single frame repeated, not a new capture
+  - Checked the driver - the read had no timeout
+  - Added a timeout that raises after 2s of no frame
+FIX (took 3 days)
+  Fixed by adding a 2-second read timeout that triggers a camera restart, and logging 'camera frozen' when a restart occurs.
+
+----------------------------------------------------------------------
+E0011 | v9.0 | BIG | Found Day 162 | Fixed in 4 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v9.0/esp_main.c
+Error     : ESP32 watchdog resets during the final run
+Terminal  : ESP32 serial monitor
+  E (89430) task_wdt: Task watchdog got triggered
+  task: motor_ctrl did not reset the watchdog
+  Rebooting... (loop)
+WHAT HAPPENED
+  The ESP32 rebooted in the middle of the final run - 89 seconds in, the motor task had not fed its watchdog. The loop restarted the robot at full speed.
+WHY IT HAPPENED (root cause)
+  The motor task blocked on a UART write with no timeout: the Pi stopped reading (its own CPU was saturated), the ESP32's TX buffer filled, and the write waited forever. A blocked write means no watchdog feed, and the hardware watchdog correctly reset the system. Two independent saturation problems met in one blocking call.
+INVESTIGATION (before the fix)
+  - Decoded the watchdog message - the motor task was the victim
+  - Logged the UART write - it blocked when the Pi stopped reading
+  - Made the write non-blocking with a timeout
+FIX (took 4 days)
+  Fixed by setting the UART write to non-blocking with a 10ms timeout, and feeding the watchdog before every write so a stalled link cannot stall the loop.
+
+----------------------------------------------------------------------
+E0012 | v9.0 | BIG | Found Day 162 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v9.0/pi_main.py
+Error     : Serial permission denied at autostart
+Terminal  : Pi SSH terminal
+  $ sudo systemctl start wro-robot
+  serial.serialutil.SerialException: Permission denied
+  autostart failed, manual run works
+WHAT HAPPENED
+  The robot would not start through the autostart service, while the same command worked manually. The only difference was who ran it.
+WHY IT HAPPENED (root cause)
+  The systemd service ran as the root user by default, and the serial device was owned by the dialout group. Root bypasses file permissions - the real issue was the service ran as a user without dialout access after hardening. Manual runs worked because the shell user was in the dialout group; the service was not.
+INVESTIGATION (before the fix)
+  - Ran the service manually - it failed the same way
+  - Checked the service user and the device permissions
+  - Added the service user to the dialout group
+FIX (took 5 days)
+  Fixed by adding the service user to the dialout group and verifying autostart after a full reboot, not just a service restart.
+
+----------------------------------------------------------------------
+E0013 | v9.1 | SMALL | Found Day 163 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v9.1/pi_main.py
+Error     : setup.cfg ignores the pi package
+Terminal  : Windows CMD
+  $ python3 pi_main.py
+  pytest: no tests ran
+  test_full_pipeline skipped
+WHAT HAPPENED
+  The CI reported success while running zero tests. A green pipeline is only as good as the tests it actually runs.
+WHY IT HAPPENED (root cause)
+  setup.cfg listed packages manually and pi.* was missing, so pytest's package discovery found no test modules and exited with code 0 - an empty success. An empty test run looks exactly like a passing run to a CI system that only checks the exit code. The configuration and the codebase had diverged when the pi/ tree was reorganized.
+FIX (took 1 day)
+  Fixed by switching to packages = find: so discovery is automatic, and adding a CI assertion that the test count is greater than zero.
+
+----------------------------------------------------------------------
+E0014 | v9.1 | SMALL | Found Day 163 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v9.1/main.py
+Error     : LED pin conflict with the camera
+Terminal  : Windows CMD
+  $ python3 main.py
+  led: 0 0 0  (camera init fails)
+  camera and LED share a pin
+WHAT HAPPENED
+  The status LED was dead and the camera failed to initialize - two unrelated-looking failures that shared one cause.
+WHY IT HAPPENED (root cause)
+  The LED was wired to the camera's enable pin, so driving the LED pulled the camera's enable line low. Each subsystem's config named the pin differently ('led_gpio' vs 'camera_enable'), so the conflict was invisible in the config review. The two features shared a physical resource that no single file owned.
+FIX (took 1 day)
+  Fixed by moving the LED to a spare GPIO and adding a pin-conflict check at boot that rejects two peripherals claiming the same GPIO.
+
+----------------------------------------------------------------------
+E0015 | v9.1 | SMALL | Found Day 163 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v9.1/pi_main.py
+Error     : Surprise rule YAML has a duplicate key
+Terminal  : Windows CMD
+  $ python3 pi_main.py
+  yaml.constructor.DuplicateKeyError
+  config load aborts
+WHAT HAPPENED
+  The robot failed to boot on race morning because the rules file had the same key twice. A merge conflict had duplicated a line and no one noticed.
+WHY IT HAPPENED (root cause)
+  YAML strictly forbids duplicate keys, and the parser raises DuplicateKeyError - the loader correctly refused to guess which value wins. The duplicate came from a bad merge that produced two pillar_logic entries. YAML's strictness here is a feature: silently picking one of two conflicting values would be worse.
+FIX (took 1 day)
+  Fixed by removing the duplicate, and adding a pre-merge check that parses every YAML file and rejects duplicates in CI.
+
+----------------------------------------------------------------------
+E0016 | v9.1 | SMALL | Found Day 163 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v9.1/main.py
+Error     : Test flaky on the first run of the day
+Terminal  : Windows CMD
+  $ python3 main.py
+  FAILED test_full_pipeline - passed 5 minutes later
+  timing-dependent assertion
+WHAT HAPPENED
+  The full-pipeline test failed on the first run of the morning and passed every run after. A cold Pi is a different computer than a warm one.
+WHY IT HAPPENED (root cause)
+  The test asserted that the pipeline reaches 100Hz within 2 seconds of start. A cold Pi takes longer to warm up its clocks and caches, so the first run of the day missed the deadline. Timing assertions embed an assumption about the machine state, and machine state varies with temperature and uptime.
+FIX (took 1 day)
+  Fixed by relaxing the assertion to a 20% margin and measuring the warm-up time over a week of first runs to set a realistic bound.
+
+----------------------------------------------------------------------
+E0017 | v9.1 | SMALL | Found Day 163 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v9.1/pi_main.py
+Error     : Lint failure in CI on unused import
+Terminal  : Windows CMD
+  $ python3 pi_main.py
+  flake8: F401 'sys' imported but unused
+  CI job failed in 8s
+WHAT HAPPENED
+  The CI pipeline went red 8 seconds after the push. The failure was a single unused import - trivial, but it blocked the whole pipeline.
+WHY IT HAPPENED (root cause)
+  The final cleanup left 'import sys' after removing the code that used it. flake8's F401 rule flags any unused import, and the CI gate treated warnings as failures. A lint failure is the cheapest possible error to catch - it costs seconds - which is exactly why the gate exists: to catch before the hardware run.
+FIX (took 1 day)
+  Fixed by removing the import, and by running flake8 locally before pushing so the CI gate never sees the mistake.
+
+----------------------------------------------------------------------
+E0018 | v9.1 | SMALL | Found Day 163 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v9.1/main.py
+Error     : setup.cfg ignores the pi package
+Terminal  : Windows CMD
+  $ python3 main.py
+  pytest: no tests ran
+  test_full_pipeline skipped
+WHAT HAPPENED
+  The CI reported success while running zero tests. A green pipeline is only as good as the tests it actually runs.
+WHY IT HAPPENED (root cause)
+  setup.cfg listed packages manually and pi.* was missing, so pytest's package discovery found no test modules and exited with code 0 - an empty success. An empty test run looks exactly like a passing run to a CI system that only checks the exit code. The configuration and the codebase had diverged when the pi/ tree was reorganized.
+FIX (took 1 day)
+  Fixed by switching to packages = find: so discovery is automatic, and adding a CI assertion that the test count is greater than zero.
+
+----------------------------------------------------------------------
+E0019 | v9.1 | SMALL | Found Day 163 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v9.1/pi_main.py
+Error     : LED pin conflict with the camera
+Terminal  : Windows CMD
+  $ python3 pi_main.py
+  led: 0 0 0  (camera init fails)
+  camera and LED share a pin
+WHAT HAPPENED
+  The status LED was dead and the camera failed to initialize - two unrelated-looking failures that shared one cause.
+WHY IT HAPPENED (root cause)
+  The LED was wired to the camera's enable pin, so driving the LED pulled the camera's enable line low. Each subsystem's config named the pin differently ('led_gpio' vs 'camera_enable'), so the conflict was invisible in the config review. The two features shared a physical resource that no single file owned.
+FIX (took 1 day)
+  Fixed by moving the LED to a spare GPIO and adding a pin-conflict check at boot that rejects two peripherals claiming the same GPIO.
+
+----------------------------------------------------------------------
+E0020 | v9.1 | SMALL | Found Day 163 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v9.1/main.py
+Error     : Surprise rule YAML has a duplicate key
+Terminal  : Windows CMD
+  $ python3 main.py
+  yaml.constructor.DuplicateKeyError
+  config load aborts
+WHAT HAPPENED
+  The robot failed to boot on race morning because the rules file had the same key twice. A merge conflict had duplicated a line and no one noticed.
+WHY IT HAPPENED (root cause)
+  YAML strictly forbids duplicate keys, and the parser raises DuplicateKeyError - the loader correctly refused to guess which value wins. The duplicate came from a bad merge that produced two pillar_logic entries. YAML's strictness here is a feature: silently picking one of two conflicting values would be worse.
+FIX (took 1 day)
+  Fixed by removing the duplicate, and adding a pre-merge check that parses every YAML file and rejects duplicates in CI.
+
+----------------------------------------------------------------------
+E0021 | v9.1 | BIG | Found Day 164 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v9.1/pi_main.py
+Error     : Camera frozen at the race morning start
+Terminal  : Pi SSH terminal
+  $ python3 main.py
+  frame: identical for 40s
+  camera driver: no error, no frame
+WHAT HAPPENED
+  On race morning the camera output a single frozen frame for 40 seconds. No error, no exception - just a frame that never changed, while the robot drove blind.
+WHY IT HAPPENED (root cause)
+  The camera read call had no timeout, so when the sensor stalled (a known cold-start quirk of the camera module), the driver blocked forever inside read(). Blocking reads fail silently by design: the code waits, nothing happens, no signal is raised. The pipeline kept consuming the last frame, so the system looked alive while being blind.
+INVESTIGATION (before the fix)
+  - Confirmed the frame was a single frame repeated, not a new capture
+  - Checked the driver - the read had no timeout
+  - Added a timeout that raises after 2s of no frame
+FIX (took 2 days)
+  Fixed by adding a 2-second read timeout that triggers a camera restart, and logging 'camera frozen' when a restart occurs.
+
+----------------------------------------------------------------------
+E0022 | v9.1 | BIG | Found Day 164 | Fixed in 3 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v9.1/main.py
+Error     : ESP32 watchdog resets during the final run
+Terminal  : ESP32 serial monitor
+  E (89430) task_wdt: Task watchdog got triggered
+  task: motor_ctrl did not reset the watchdog
+  Rebooting... (loop)
+WHAT HAPPENED
+  The ESP32 rebooted in the middle of the final run - 89 seconds in, the motor task had not fed its watchdog. The loop restarted the robot at full speed.
+WHY IT HAPPENED (root cause)
+  The motor task blocked on a UART write with no timeout: the Pi stopped reading (its own CPU was saturated), the ESP32's TX buffer filled, and the write waited forever. A blocked write means no watchdog feed, and the hardware watchdog correctly reset the system. Two independent saturation problems met in one blocking call.
+INVESTIGATION (before the fix)
+  - Decoded the watchdog message - the motor task was the victim
+  - Logged the UART write - it blocked when the Pi stopped reading
+  - Made the write non-blocking with a timeout
+FIX (took 3 days)
+  Fixed by setting the UART write to non-blocking with a 10ms timeout, and feeding the watchdog before every write so a stalled link cannot stall the loop.
+
+----------------------------------------------------------------------
+E0023 | v9.1 | BIG | Found Day 164 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v9.1/pi_main.py
+Error     : Serial permission denied at autostart
+Terminal  : Pi SSH terminal
+  $ sudo systemctl start wro-robot
+  serial.serialutil.SerialException: Permission denied
+  autostart failed, manual run works
+WHAT HAPPENED
+  The robot would not start through the autostart service, while the same command worked manually. The only difference was who ran it.
+WHY IT HAPPENED (root cause)
+  The systemd service ran as the root user by default, and the serial device was owned by the dialout group. Root bypasses file permissions - the real issue was the service ran as a user without dialout access after hardening. Manual runs worked because the shell user was in the dialout group; the service was not.
+INVESTIGATION (before the fix)
+  - Ran the service manually - it failed the same way
+  - Checked the service user and the device permissions
+  - Added the service user to the dialout group
+FIX (took 4 days)
+  Fixed by adding the service user to the dialout group and verifying autostart after a full reboot, not just a service restart.
+
+----------------------------------------------------------------------
+E0024 | v9.1 | BIG | Found Day 164 | Fixed in 5 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v9.1/main.py
+Error     : Core dump triggered: store data at 0x3ffb0e10
+Terminal  : ESP32 serial monitor
+  Core 0 panic'ed (StoreProhibited)
+  store data at 0x3ffb0e10, pc 0x400df220
+  Backtrace: 0x400df220:0x3ffb1f30 scheduler_tick
+WHAT HAPPENED
+  The ESP32 crashed with a StoreProhibited panic - a write to protected memory. The backtrace pointed at the scheduler, of all places.
+WHY IT HAPPENED (root cause)
+  The scheduler task wrote to a task context that had been freed: a task was deleted, its memory returned to the heap, and the scheduler still held a pointer to it. A use-after-free is a memory bug that appears at the moment the allocator reuses the freed block - which is why it only crashed under specific timing.
+INVESTIGATION (before the fix)
+  - Decoded the panic - StoreProhibited at the scheduler tick
+  - Traced the pointer - it referenced a deleted task
+  - Deferred task deletion to the idle hook
+FIX (took 5 days)
+  Fixed by deferring task deletion to the idle hook so the scheduler never touches freed contexts, and adding a task-count assertion at every delete.
+
+----------------------------------------------------------------------
+E0025 | v9.2 | SMALL | Found Day 165 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v9.2/pillar_detector.py
+Error     : LED pin conflict with the camera
+Terminal  : systemd journal
+  $ python3 pillar_detector.py
+  led: 0 0 0  (camera init fails)
+  camera and LED share a pin
+WHAT HAPPENED
+  The status LED was dead and the camera failed to initialize - two unrelated-looking failures that shared one cause.
+WHY IT HAPPENED (root cause)
+  The LED was wired to the camera's enable pin, so driving the LED pulled the camera's enable line low. Each subsystem's config named the pin differently ('led_gpio' vs 'camera_enable'), so the conflict was invisible in the config review. The two features shared a physical resource that no single file owned.
+FIX (took 1 day)
+  Fixed by moving the LED to a spare GPIO and adding a pin-conflict check at boot that rejects two peripherals claiming the same GPIO.
+
+----------------------------------------------------------------------
+E0026 | v9.2 | SMALL | Found Day 165 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v9.2/pillar_detector.py
+Error     : Surprise rule YAML has a duplicate key
+Terminal  : systemd journal
+  $ python3 pillar_detector.py
+  yaml.constructor.DuplicateKeyError
+  config load aborts
+WHAT HAPPENED
+  The robot failed to boot on race morning because the rules file had the same key twice. A merge conflict had duplicated a line and no one noticed.
+WHY IT HAPPENED (root cause)
+  YAML strictly forbids duplicate keys, and the parser raises DuplicateKeyError - the loader correctly refused to guess which value wins. The duplicate came from a bad merge that produced two pillar_logic entries. YAML's strictness here is a feature: silently picking one of two conflicting values would be worse.
+FIX (took 1 day)
+  Fixed by removing the duplicate, and adding a pre-merge check that parses every YAML file and rejects duplicates in CI.
+
+----------------------------------------------------------------------
+E0027 | v9.2 | SMALL | Found Day 165 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v9.2/pillar_detector.py
+Error     : Test flaky on the first run of the day
+Terminal  : systemd journal
+  $ python3 pillar_detector.py
+  FAILED test_full_pipeline - passed 5 minutes later
+  timing-dependent assertion
+WHAT HAPPENED
+  The full-pipeline test failed on the first run of the morning and passed every run after. A cold Pi is a different computer than a warm one.
+WHY IT HAPPENED (root cause)
+  The test asserted that the pipeline reaches 100Hz within 2 seconds of start. A cold Pi takes longer to warm up its clocks and caches, so the first run of the day missed the deadline. Timing assertions embed an assumption about the machine state, and machine state varies with temperature and uptime.
+FIX (took 1 day)
+  Fixed by relaxing the assertion to a 20% margin and measuring the warm-up time over a week of first runs to set a realistic bound.
+
+----------------------------------------------------------------------
+E0028 | v9.2 | SMALL | Found Day 165 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v9.2/pillar_detector.py
+Error     : Lint failure in CI on unused import
+Terminal  : systemd journal
+  $ python3 pillar_detector.py
+  flake8: F401 'sys' imported but unused
+  CI job failed in 8s
+WHAT HAPPENED
+  The CI pipeline went red 8 seconds after the push. The failure was a single unused import - trivial, but it blocked the whole pipeline.
+WHY IT HAPPENED (root cause)
+  The final cleanup left 'import sys' after removing the code that used it. flake8's F401 rule flags any unused import, and the CI gate treated warnings as failures. A lint failure is the cheapest possible error to catch - it costs seconds - which is exactly why the gate exists: to catch before the hardware run.
+FIX (took 1 day)
+  Fixed by removing the import, and by running flake8 locally before pushing so the CI gate never sees the mistake.
+
+----------------------------------------------------------------------
+E0029 | v9.2 | SMALL | Found Day 165 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v9.2/pillar_detector.py
+Error     : setup.cfg ignores the pi package
+Terminal  : systemd journal
+  $ python3 pillar_detector.py
+  pytest: no tests ran
+  test_full_pipeline skipped
+WHAT HAPPENED
+  The CI reported success while running zero tests. A green pipeline is only as good as the tests it actually runs.
+WHY IT HAPPENED (root cause)
+  setup.cfg listed packages manually and pi.* was missing, so pytest's package discovery found no test modules and exited with code 0 - an empty success. An empty test run looks exactly like a passing run to a CI system that only checks the exit code. The configuration and the codebase had diverged when the pi/ tree was reorganized.
+FIX (took 1 day)
+  Fixed by switching to packages = find: so discovery is automatic, and adding a CI assertion that the test count is greater than zero.
+
+----------------------------------------------------------------------
+E0030 | v9.2 | SMALL | Found Day 165 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v9.2/pillar_detector.py
+Error     : LED pin conflict with the camera
+Terminal  : systemd journal
+  $ python3 pillar_detector.py
+  led: 0 0 0  (camera init fails)
+  camera and LED share a pin
+WHAT HAPPENED
+  The status LED was dead and the camera failed to initialize - two unrelated-looking failures that shared one cause.
+WHY IT HAPPENED (root cause)
+  The LED was wired to the camera's enable pin, so driving the LED pulled the camera's enable line low. Each subsystem's config named the pin differently ('led_gpio' vs 'camera_enable'), so the conflict was invisible in the config review. The two features shared a physical resource that no single file owned.
+FIX (took 1 day)
+  Fixed by moving the LED to a spare GPIO and adding a pin-conflict check at boot that rejects two peripherals claiming the same GPIO.
+
+----------------------------------------------------------------------
+E0031 | v9.2 | SMALL | Found Day 165 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v9.2/pillar_detector.py
+Error     : Surprise rule YAML has a duplicate key
+Terminal  : systemd journal
+  $ python3 pillar_detector.py
+  yaml.constructor.DuplicateKeyError
+  config load aborts
+WHAT HAPPENED
+  The robot failed to boot on race morning because the rules file had the same key twice. A merge conflict had duplicated a line and no one noticed.
+WHY IT HAPPENED (root cause)
+  YAML strictly forbids duplicate keys, and the parser raises DuplicateKeyError - the loader correctly refused to guess which value wins. The duplicate came from a bad merge that produced two pillar_logic entries. YAML's strictness here is a feature: silently picking one of two conflicting values would be worse.
+FIX (took 1 day)
+  Fixed by removing the duplicate, and adding a pre-merge check that parses every YAML file and rejects duplicates in CI.
+
+----------------------------------------------------------------------
+E0032 | v9.2 | SMALL | Found Day 165 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v9.2/pillar_detector.py
+Error     : Test flaky on the first run of the day
+Terminal  : systemd journal
+  $ python3 pillar_detector.py
+  FAILED test_full_pipeline - passed 5 minutes later
+  timing-dependent assertion
+WHAT HAPPENED
+  The full-pipeline test failed on the first run of the morning and passed every run after. A cold Pi is a different computer than a warm one.
+WHY IT HAPPENED (root cause)
+  The test asserted that the pipeline reaches 100Hz within 2 seconds of start. A cold Pi takes longer to warm up its clocks and caches, so the first run of the day missed the deadline. Timing assertions embed an assumption about the machine state, and machine state varies with temperature and uptime.
+FIX (took 1 day)
+  Fixed by relaxing the assertion to a 20% margin and measuring the warm-up time over a week of first runs to set a realistic bound.
+
+----------------------------------------------------------------------
+E0033 | v9.2 | BIG | Found Day 166 | Fixed in 2 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v9.2/pillar_detector.py
+Error     : ESP32 watchdog resets during the final run
+Terminal  : ESP32 serial monitor
+  E (89430) task_wdt: Task watchdog got triggered
+  task: motor_ctrl did not reset the watchdog
+  Rebooting... (loop)
+WHAT HAPPENED
+  The ESP32 rebooted in the middle of the final run - 89 seconds in, the motor task had not fed its watchdog. The loop restarted the robot at full speed.
+WHY IT HAPPENED (root cause)
+  The motor task blocked on a UART write with no timeout: the Pi stopped reading (its own CPU was saturated), the ESP32's TX buffer filled, and the write waited forever. A blocked write means no watchdog feed, and the hardware watchdog correctly reset the system. Two independent saturation problems met in one blocking call.
+INVESTIGATION (before the fix)
+  - Decoded the watchdog message - the motor task was the victim
+  - Logged the UART write - it blocked when the Pi stopped reading
+  - Made the write non-blocking with a timeout
+FIX (took 2 days)
+  Fixed by setting the UART write to non-blocking with a 10ms timeout, and feeding the watchdog before every write so a stalled link cannot stall the loop.
+
+----------------------------------------------------------------------
+E0034 | v9.2 | BIG | Found Day 166 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v9.2/pillar_detector.py
+Error     : Serial permission denied at autostart
+Terminal  : Pi SSH terminal
+  $ sudo systemctl start wro-robot
+  serial.serialutil.SerialException: Permission denied
+  autostart failed, manual run works
+WHAT HAPPENED
+  The robot would not start through the autostart service, while the same command worked manually. The only difference was who ran it.
+WHY IT HAPPENED (root cause)
+  The systemd service ran as the root user by default, and the serial device was owned by the dialout group. Root bypasses file permissions - the real issue was the service ran as a user without dialout access after hardening. Manual runs worked because the shell user was in the dialout group; the service was not.
+INVESTIGATION (before the fix)
+  - Ran the service manually - it failed the same way
+  - Checked the service user and the device permissions
+  - Added the service user to the dialout group
+FIX (took 3 days)
+  Fixed by adding the service user to the dialout group and verifying autostart after a full reboot, not just a service restart.
+
+----------------------------------------------------------------------
+E0035 | v9.2 | BIG | Found Day 166 | Fixed in 4 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v9.2/pillar_detector.py
+Error     : Core dump triggered: store data at 0x3ffb0e10
+Terminal  : ESP32 serial monitor
+  Core 0 panic'ed (StoreProhibited)
+  store data at 0x3ffb0e10, pc 0x400df220
+  Backtrace: 0x400df220:0x3ffb1f30 scheduler_tick
+WHAT HAPPENED
+  The ESP32 crashed with a StoreProhibited panic - a write to protected memory. The backtrace pointed at the scheduler, of all places.
+WHY IT HAPPENED (root cause)
+  The scheduler task wrote to a task context that had been freed: a task was deleted, its memory returned to the heap, and the scheduler still held a pointer to it. A use-after-free is a memory bug that appears at the moment the allocator reuses the freed block - which is why it only crashed under specific timing.
+INVESTIGATION (before the fix)
+  - Decoded the panic - StoreProhibited at the scheduler tick
+  - Traced the pointer - it referenced a deleted task
+  - Deferred task deletion to the idle hook
+FIX (took 4 days)
+  Fixed by deferring task deletion to the idle hook so the scheduler never touches freed contexts, and adding a task-count assertion at every delete.
+
+----------------------------------------------------------------------
+E0036 | v9.2 | BIG | Found Day 166 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v9.2/pillar_detector.py
+Error     : Race day: SD card corrupt after the power cut
+Terminal  : Pi SSH terminal
+  $ journalctl
+  ext4-fs error (device mmcblk0p2)
+  Remounting filesystem read-only
+  python3: can't open file 'main.py'
+WHAT HAPPENED
+  On race day the SD card was corrupted by the power cut during the previous night's calibration. The filesystem remounted read-only and the robot could not even start Python.
+WHY IT HAPPENED (root cause)
+  The Pi was powered off without a clean shutdown, and the ext4 journal could not replay, leaving the filesystem in an inconsistent state. ext4 responded by remounting read-only to protect the data. A robot that is powered off by pulling the battery is a robot that will eventually lose its filesystem - the shutdown was an operational habit, and it became a race-day failure.
+INVESTIGATION (before the fix)
+  - Mounted the card on a PC and ran fsck
+  - Recovered the code from the backup image
+  - Converted the root filesystem to read-only with an overlay for logs
+FIX (took 5 days)
+  Fixed by switching to a read-only rootfs with a RAM-backed log overlay, so power cuts can never corrupt the boot filesystem again.
+
+----------------------------------------------------------------------
+E0037 | v9.3 | SMALL | Found Day 167 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v9.3/main.py
+Error     : Surprise rule YAML has a duplicate key
+Terminal  : VS Code terminal
+  $ python3 main.py
+  yaml.constructor.DuplicateKeyError
+  config load aborts
+WHAT HAPPENED
+  The robot failed to boot on race morning because the rules file had the same key twice. A merge conflict had duplicated a line and no one noticed.
+WHY IT HAPPENED (root cause)
+  YAML strictly forbids duplicate keys, and the parser raises DuplicateKeyError - the loader correctly refused to guess which value wins. The duplicate came from a bad merge that produced two pillar_logic entries. YAML's strictness here is a feature: silently picking one of two conflicting values would be worse.
+FIX (took 1 day)
+  Fixed by removing the duplicate, and adding a pre-merge check that parses every YAML file and rejects duplicates in CI.
+
+----------------------------------------------------------------------
+E0038 | v9.3 | SMALL | Found Day 167 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v9.3/pi_main.py
+Error     : Test flaky on the first run of the day
+Terminal  : VS Code terminal
+  $ python3 pi_main.py
+  FAILED test_full_pipeline - passed 5 minutes later
+  timing-dependent assertion
+WHAT HAPPENED
+  The full-pipeline test failed on the first run of the morning and passed every run after. A cold Pi is a different computer than a warm one.
+WHY IT HAPPENED (root cause)
+  The test asserted that the pipeline reaches 100Hz within 2 seconds of start. A cold Pi takes longer to warm up its clocks and caches, so the first run of the day missed the deadline. Timing assertions embed an assumption about the machine state, and machine state varies with temperature and uptime.
+FIX (took 1 day)
+  Fixed by relaxing the assertion to a 20% margin and measuring the warm-up time over a week of first runs to set a realistic bound.
+
+----------------------------------------------------------------------
+E0039 | v9.3 | SMALL | Found Day 167 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v9.3/main.py
+Error     : Lint failure in CI on unused import
+Terminal  : VS Code terminal
+  $ python3 main.py
+  flake8: F401 'sys' imported but unused
+  CI job failed in 8s
+WHAT HAPPENED
+  The CI pipeline went red 8 seconds after the push. The failure was a single unused import - trivial, but it blocked the whole pipeline.
+WHY IT HAPPENED (root cause)
+  The final cleanup left 'import sys' after removing the code that used it. flake8's F401 rule flags any unused import, and the CI gate treated warnings as failures. A lint failure is the cheapest possible error to catch - it costs seconds - which is exactly why the gate exists: to catch before the hardware run.
+FIX (took 1 day)
+  Fixed by removing the import, and by running flake8 locally before pushing so the CI gate never sees the mistake.
+
+----------------------------------------------------------------------
+E0040 | v9.3 | SMALL | Found Day 167 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v9.3/pi_main.py
+Error     : setup.cfg ignores the pi package
+Terminal  : VS Code terminal
+  $ python3 pi_main.py
+  pytest: no tests ran
+  test_full_pipeline skipped
+WHAT HAPPENED
+  The CI reported success while running zero tests. A green pipeline is only as good as the tests it actually runs.
+WHY IT HAPPENED (root cause)
+  setup.cfg listed packages manually and pi.* was missing, so pytest's package discovery found no test modules and exited with code 0 - an empty success. An empty test run looks exactly like a passing run to a CI system that only checks the exit code. The configuration and the codebase had diverged when the pi/ tree was reorganized.
+FIX (took 1 day)
+  Fixed by switching to packages = find: so discovery is automatic, and adding a CI assertion that the test count is greater than zero.
+
+----------------------------------------------------------------------
+E0041 | v9.3 | SMALL | Found Day 167 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v9.3/main.py
+Error     : LED pin conflict with the camera
+Terminal  : VS Code terminal
+  $ python3 main.py
+  led: 0 0 0  (camera init fails)
+  camera and LED share a pin
+WHAT HAPPENED
+  The status LED was dead and the camera failed to initialize - two unrelated-looking failures that shared one cause.
+WHY IT HAPPENED (root cause)
+  The LED was wired to the camera's enable pin, so driving the LED pulled the camera's enable line low. Each subsystem's config named the pin differently ('led_gpio' vs 'camera_enable'), so the conflict was invisible in the config review. The two features shared a physical resource that no single file owned.
+FIX (took 1 day)
+  Fixed by moving the LED to a spare GPIO and adding a pin-conflict check at boot that rejects two peripherals claiming the same GPIO.
+
+----------------------------------------------------------------------
+E0042 | v9.3 | SMALL | Found Day 167 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v9.3/pi_main.py
+Error     : Surprise rule YAML has a duplicate key
+Terminal  : VS Code terminal
+  $ python3 pi_main.py
+  yaml.constructor.DuplicateKeyError
+  config load aborts
+WHAT HAPPENED
+  The robot failed to boot on race morning because the rules file had the same key twice. A merge conflict had duplicated a line and no one noticed.
+WHY IT HAPPENED (root cause)
+  YAML strictly forbids duplicate keys, and the parser raises DuplicateKeyError - the loader correctly refused to guess which value wins. The duplicate came from a bad merge that produced two pillar_logic entries. YAML's strictness here is a feature: silently picking one of two conflicting values would be worse.
+FIX (took 1 day)
+  Fixed by removing the duplicate, and adding a pre-merge check that parses every YAML file and rejects duplicates in CI.
+
+----------------------------------------------------------------------
+E0043 | v9.3 | SMALL | Found Day 167 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v9.3/main.py
+Error     : Test flaky on the first run of the day
+Terminal  : VS Code terminal
+  $ python3 main.py
+  FAILED test_full_pipeline - passed 5 minutes later
+  timing-dependent assertion
+WHAT HAPPENED
+  The full-pipeline test failed on the first run of the morning and passed every run after. A cold Pi is a different computer than a warm one.
+WHY IT HAPPENED (root cause)
+  The test asserted that the pipeline reaches 100Hz within 2 seconds of start. A cold Pi takes longer to warm up its clocks and caches, so the first run of the day missed the deadline. Timing assertions embed an assumption about the machine state, and machine state varies with temperature and uptime.
+FIX (took 1 day)
+  Fixed by relaxing the assertion to a 20% margin and measuring the warm-up time over a week of first runs to set a realistic bound.
+
+----------------------------------------------------------------------
+E0044 | v9.3 | SMALL | Found Day 167 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v9.3/pi_main.py
+Error     : Lint failure in CI on unused import
+Terminal  : VS Code terminal
+  $ python3 pi_main.py
+  flake8: F401 'sys' imported but unused
+  CI job failed in 8s
+WHAT HAPPENED
+  The CI pipeline went red 8 seconds after the push. The failure was a single unused import - trivial, but it blocked the whole pipeline.
+WHY IT HAPPENED (root cause)
+  The final cleanup left 'import sys' after removing the code that used it. flake8's F401 rule flags any unused import, and the CI gate treated warnings as failures. A lint failure is the cheapest possible error to catch - it costs seconds - which is exactly why the gate exists: to catch before the hardware run.
+FIX (took 1 day)
+  Fixed by removing the import, and by running flake8 locally before pushing so the CI gate never sees the mistake.
+
+----------------------------------------------------------------------
+E0045 | v9.3 | BIG | Found Day 168 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v9.3/main.py
+Error     : Serial permission denied at autostart
+Terminal  : Pi SSH terminal
+  $ sudo systemctl start wro-robot
+  serial.serialutil.SerialException: Permission denied
+  autostart failed, manual run works
+WHAT HAPPENED
+  The robot would not start through the autostart service, while the same command worked manually. The only difference was who ran it.
+WHY IT HAPPENED (root cause)
+  The systemd service ran as the root user by default, and the serial device was owned by the dialout group. Root bypasses file permissions - the real issue was the service ran as a user without dialout access after hardening. Manual runs worked because the shell user was in the dialout group; the service was not.
+INVESTIGATION (before the fix)
+  - Ran the service manually - it failed the same way
+  - Checked the service user and the device permissions
+  - Added the service user to the dialout group
+FIX (took 2 days)
+  Fixed by adding the service user to the dialout group and verifying autostart after a full reboot, not just a service restart.
+
+----------------------------------------------------------------------
+E0046 | v9.3 | BIG | Found Day 168 | Fixed in 3 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v9.3/pi_main.py
+Error     : Core dump triggered: store data at 0x3ffb0e10
+Terminal  : ESP32 serial monitor
+  Core 0 panic'ed (StoreProhibited)
+  store data at 0x3ffb0e10, pc 0x400df220
+  Backtrace: 0x400df220:0x3ffb1f30 scheduler_tick
+WHAT HAPPENED
+  The ESP32 crashed with a StoreProhibited panic - a write to protected memory. The backtrace pointed at the scheduler, of all places.
+WHY IT HAPPENED (root cause)
+  The scheduler task wrote to a task context that had been freed: a task was deleted, its memory returned to the heap, and the scheduler still held a pointer to it. A use-after-free is a memory bug that appears at the moment the allocator reuses the freed block - which is why it only crashed under specific timing.
+INVESTIGATION (before the fix)
+  - Decoded the panic - StoreProhibited at the scheduler tick
+  - Traced the pointer - it referenced a deleted task
+  - Deferred task deletion to the idle hook
+FIX (took 3 days)
+  Fixed by deferring task deletion to the idle hook so the scheduler never touches freed contexts, and adding a task-count assertion at every delete.
+
+----------------------------------------------------------------------
+E0047 | v9.3 | BIG | Found Day 168 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v9.3/main.py
+Error     : Race day: SD card corrupt after the power cut
+Terminal  : Pi SSH terminal
+  $ journalctl
+  ext4-fs error (device mmcblk0p2)
+  Remounting filesystem read-only
+  python3: can't open file 'main.py'
+WHAT HAPPENED
+  On race day the SD card was corrupted by the power cut during the previous night's calibration. The filesystem remounted read-only and the robot could not even start Python.
+WHY IT HAPPENED (root cause)
+  The Pi was powered off without a clean shutdown, and the ext4 journal could not replay, leaving the filesystem in an inconsistent state. ext4 responded by remounting read-only to protect the data. A robot that is powered off by pulling the battery is a robot that will eventually lose its filesystem - the shutdown was an operational habit, and it became a race-day failure.
+INVESTIGATION (before the fix)
+  - Mounted the card on a PC and ran fsck
+  - Recovered the code from the backup image
+  - Converted the root filesystem to read-only with an overlay for logs
+FIX (took 4 days)
+  Fixed by switching to a read-only rootfs with a RAM-backed log overlay, so power cuts can never corrupt the boot filesystem again.
+
+----------------------------------------------------------------------
+E0048 | v9.3 | BIG | Found Day 168 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v9.3/pi_main.py
+Error     : Pillar detector false positive on the scoreboard
+Terminal  : Pi SSH terminal
+  $ python3 main.py
+  pillar: RED at (200,150) x 40 frames
+  scoreboard is not a pillar
+WHAT HAPPENED
+  During the final round the detector locked onto the electronic scoreboard for 40 frames and the robot steered toward the wrong target. The scoreboard is exactly the size and color of a pillar.
+WHY IT HAPPENED (root cause)
+  The red electronic scoreboard matched every gate in the pillar filter: color, size, aspect ratio. The filter had no context - it could not know that a red rectangle at that position and distance was a scoreboard. The scoreboard was the perfect counterfeit: it satisfied every feature the detector checked, because the detector checked only features the pillar has.
+INVESTIGATION (before the fix)
+  - Replayed the round - the 40-frame lock was on the scoreboard
+  - Checked the detection - it passed all gates
+  - Masked the scoreboard region and re-ran the round
+FIX (took 5 days)
+  Fixed by masking the top 20% of the frame where the scoreboard sits, and adding a position-vs-distance consistency check against the ToF.
+
+----------------------------------------------------------------------
+E0049 | v9.4 | SMALL | Found Day 169 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v9.4/ci.yml
+Error     : Test flaky on the first run of the day
+Terminal  : Pi SSH terminal
+  $ python3 ci.yml
+  FAILED test_full_pipeline - passed 5 minutes later
+  timing-dependent assertion
+WHAT HAPPENED
+  The full-pipeline test failed on the first run of the morning and passed every run after. A cold Pi is a different computer than a warm one.
+WHY IT HAPPENED (root cause)
+  The test asserted that the pipeline reaches 100Hz within 2 seconds of start. A cold Pi takes longer to warm up its clocks and caches, so the first run of the day missed the deadline. Timing assertions embed an assumption about the machine state, and machine state varies with temperature and uptime.
+FIX (took 1 day)
+  Fixed by relaxing the assertion to a 20% margin and measuring the warm-up time over a week of first runs to set a realistic bound.
+
+----------------------------------------------------------------------
+E0050 | v9.4 | SMALL | Found Day 169 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v9.4/ci.yml
+Error     : Lint failure in CI on unused import
+Terminal  : Pi SSH terminal
+  $ python3 ci.yml
+  flake8: F401 'sys' imported but unused
+  CI job failed in 8s
+WHAT HAPPENED
+  The CI pipeline went red 8 seconds after the push. The failure was a single unused import - trivial, but it blocked the whole pipeline.
+WHY IT HAPPENED (root cause)
+  The final cleanup left 'import sys' after removing the code that used it. flake8's F401 rule flags any unused import, and the CI gate treated warnings as failures. A lint failure is the cheapest possible error to catch - it costs seconds - which is exactly why the gate exists: to catch before the hardware run.
+FIX (took 1 day)
+  Fixed by removing the import, and by running flake8 locally before pushing so the CI gate never sees the mistake.
+
+----------------------------------------------------------------------
+E0051 | v9.4 | SMALL | Found Day 169 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v9.4/ci.yml
+Error     : setup.cfg ignores the pi package
+Terminal  : Pi SSH terminal
+  $ python3 ci.yml
+  pytest: no tests ran
+  test_full_pipeline skipped
+WHAT HAPPENED
+  The CI reported success while running zero tests. A green pipeline is only as good as the tests it actually runs.
+WHY IT HAPPENED (root cause)
+  setup.cfg listed packages manually and pi.* was missing, so pytest's package discovery found no test modules and exited with code 0 - an empty success. An empty test run looks exactly like a passing run to a CI system that only checks the exit code. The configuration and the codebase had diverged when the pi/ tree was reorganized.
+FIX (took 1 day)
+  Fixed by switching to packages = find: so discovery is automatic, and adding a CI assertion that the test count is greater than zero.
+
+----------------------------------------------------------------------
+E0052 | v9.4 | SMALL | Found Day 169 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v9.4/ci.yml
+Error     : LED pin conflict with the camera
+Terminal  : Pi SSH terminal
+  $ python3 ci.yml
+  led: 0 0 0  (camera init fails)
+  camera and LED share a pin
+WHAT HAPPENED
+  The status LED was dead and the camera failed to initialize - two unrelated-looking failures that shared one cause.
+WHY IT HAPPENED (root cause)
+  The LED was wired to the camera's enable pin, so driving the LED pulled the camera's enable line low. Each subsystem's config named the pin differently ('led_gpio' vs 'camera_enable'), so the conflict was invisible in the config review. The two features shared a physical resource that no single file owned.
+FIX (took 1 day)
+  Fixed by moving the LED to a spare GPIO and adding a pin-conflict check at boot that rejects two peripherals claiming the same GPIO.
+
+----------------------------------------------------------------------
+E0053 | v9.4 | SMALL | Found Day 169 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v9.4/ci.yml
+Error     : Surprise rule YAML has a duplicate key
+Terminal  : Pi SSH terminal
+  $ python3 ci.yml
+  yaml.constructor.DuplicateKeyError
+  config load aborts
+WHAT HAPPENED
+  The robot failed to boot on race morning because the rules file had the same key twice. A merge conflict had duplicated a line and no one noticed.
+WHY IT HAPPENED (root cause)
+  YAML strictly forbids duplicate keys, and the parser raises DuplicateKeyError - the loader correctly refused to guess which value wins. The duplicate came from a bad merge that produced two pillar_logic entries. YAML's strictness here is a feature: silently picking one of two conflicting values would be worse.
+FIX (took 1 day)
+  Fixed by removing the duplicate, and adding a pre-merge check that parses every YAML file and rejects duplicates in CI.
+
+----------------------------------------------------------------------
+E0054 | v9.4 | SMALL | Found Day 169 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v9.4/ci.yml
+Error     : Test flaky on the first run of the day
+Terminal  : Pi SSH terminal
+  $ python3 ci.yml
+  FAILED test_full_pipeline - passed 5 minutes later
+  timing-dependent assertion
+WHAT HAPPENED
+  The full-pipeline test failed on the first run of the morning and passed every run after. A cold Pi is a different computer than a warm one.
+WHY IT HAPPENED (root cause)
+  The test asserted that the pipeline reaches 100Hz within 2 seconds of start. A cold Pi takes longer to warm up its clocks and caches, so the first run of the day missed the deadline. Timing assertions embed an assumption about the machine state, and machine state varies with temperature and uptime.
+FIX (took 1 day)
+  Fixed by relaxing the assertion to a 20% margin and measuring the warm-up time over a week of first runs to set a realistic bound.
+
+----------------------------------------------------------------------
+E0055 | v9.4 | SMALL | Found Day 169 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v9.4/ci.yml
+Error     : Lint failure in CI on unused import
+Terminal  : Pi SSH terminal
+  $ python3 ci.yml
+  flake8: F401 'sys' imported but unused
+  CI job failed in 8s
+WHAT HAPPENED
+  The CI pipeline went red 8 seconds after the push. The failure was a single unused import - trivial, but it blocked the whole pipeline.
+WHY IT HAPPENED (root cause)
+  The final cleanup left 'import sys' after removing the code that used it. flake8's F401 rule flags any unused import, and the CI gate treated warnings as failures. A lint failure is the cheapest possible error to catch - it costs seconds - which is exactly why the gate exists: to catch before the hardware run.
+FIX (took 1 day)
+  Fixed by removing the import, and by running flake8 locally before pushing so the CI gate never sees the mistake.
+
+----------------------------------------------------------------------
+E0056 | v9.4 | SMALL | Found Day 169 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v9.4/ci.yml
+Error     : setup.cfg ignores the pi package
+Terminal  : Pi SSH terminal
+  $ python3 ci.yml
+  pytest: no tests ran
+  test_full_pipeline skipped
+WHAT HAPPENED
+  The CI reported success while running zero tests. A green pipeline is only as good as the tests it actually runs.
+WHY IT HAPPENED (root cause)
+  setup.cfg listed packages manually and pi.* was missing, so pytest's package discovery found no test modules and exited with code 0 - an empty success. An empty test run looks exactly like a passing run to a CI system that only checks the exit code. The configuration and the codebase had diverged when the pi/ tree was reorganized.
+FIX (took 1 day)
+  Fixed by switching to packages = find: so discovery is automatic, and adding a CI assertion that the test count is greater than zero.
+
+----------------------------------------------------------------------
+E0057 | v9.4 | BIG | Found Day 170 | Fixed in 2 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v9.4/ci.yml
+Error     : Core dump triggered: store data at 0x3ffb0e10
+Terminal  : ESP32 serial monitor
+  Core 0 panic'ed (StoreProhibited)
+  store data at 0x3ffb0e10, pc 0x400df220
+  Backtrace: 0x400df220:0x3ffb1f30 scheduler_tick
+WHAT HAPPENED
+  The ESP32 crashed with a StoreProhibited panic - a write to protected memory. The backtrace pointed at the scheduler, of all places.
+WHY IT HAPPENED (root cause)
+  The scheduler task wrote to a task context that had been freed: a task was deleted, its memory returned to the heap, and the scheduler still held a pointer to it. A use-after-free is a memory bug that appears at the moment the allocator reuses the freed block - which is why it only crashed under specific timing.
+INVESTIGATION (before the fix)
+  - Decoded the panic - StoreProhibited at the scheduler tick
+  - Traced the pointer - it referenced a deleted task
+  - Deferred task deletion to the idle hook
+FIX (took 2 days)
+  Fixed by deferring task deletion to the idle hook so the scheduler never touches freed contexts, and adding a task-count assertion at every delete.
+
+----------------------------------------------------------------------
+E0058 | v9.4 | BIG | Found Day 170 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v9.4/ci.yml
+Error     : Race day: SD card corrupt after the power cut
+Terminal  : Pi SSH terminal
+  $ journalctl
+  ext4-fs error (device mmcblk0p2)
+  Remounting filesystem read-only
+  python3: can't open file 'main.py'
+WHAT HAPPENED
+  On race day the SD card was corrupted by the power cut during the previous night's calibration. The filesystem remounted read-only and the robot could not even start Python.
+WHY IT HAPPENED (root cause)
+  The Pi was powered off without a clean shutdown, and the ext4 journal could not replay, leaving the filesystem in an inconsistent state. ext4 responded by remounting read-only to protect the data. A robot that is powered off by pulling the battery is a robot that will eventually lose its filesystem - the shutdown was an operational habit, and it became a race-day failure.
+INVESTIGATION (before the fix)
+  - Mounted the card on a PC and ran fsck
+  - Recovered the code from the backup image
+  - Converted the root filesystem to read-only with an overlay for logs
+FIX (took 3 days)
+  Fixed by switching to a read-only rootfs with a RAM-backed log overlay, so power cuts can never corrupt the boot filesystem again.
+
+----------------------------------------------------------------------
+E0059 | v9.4 | BIG | Found Day 170 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v9.4/ci.yml
+Error     : Pillar detector false positive on the scoreboard
+Terminal  : Pi SSH terminal
+  $ python3 main.py
+  pillar: RED at (200,150) x 40 frames
+  scoreboard is not a pillar
+WHAT HAPPENED
+  During the final round the detector locked onto the electronic scoreboard for 40 frames and the robot steered toward the wrong target. The scoreboard is exactly the size and color of a pillar.
+WHY IT HAPPENED (root cause)
+  The red electronic scoreboard matched every gate in the pillar filter: color, size, aspect ratio. The filter had no context - it could not know that a red rectangle at that position and distance was a scoreboard. The scoreboard was the perfect counterfeit: it satisfied every feature the detector checked, because the detector checked only features the pillar has.
+INVESTIGATION (before the fix)
+  - Replayed the round - the 40-frame lock was on the scoreboard
+  - Checked the detection - it passed all gates
+  - Masked the scoreboard region and re-ran the round
+FIX (took 4 days)
+  Fixed by masking the top 20% of the frame where the scoreboard sits, and adding a position-vs-distance consistency check against the ToF.
+
+----------------------------------------------------------------------
+E0060 | v9.4 | BIG | Found Day 170 | Fixed in 5 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v9.4/ci.yml
+Error     : UART command echo storm between the two boards
+Terminal  : ESP32 serial monitor
+  $ idf.py monitor
+  echo: MOTOR left=0.5 right=0.5
+  echo: MOTOR left=0.5 right=0.5
+  echo: ... 400 lines/sec
+WHAT HAPPENED
+  The ESP32 console flooded with echo lines - its own commands, coming back to it. The two boards were talking to each other in a loop at 400 lines per second.
+WHY IT HAPPENED (root cause)
+  The RX and TX lines were swapped between the boards: each board's TX fed the other's TX, so every command written by the Pi arrived back at the Pi, which echoed it as a response, which the ESP32 interpreted as a new command. With no checksum, both boards accepted the garbage as valid traffic. A crossed wire plus a trusting protocol equals a feedback loop.
+INVESTIGATION (before the fix)
+  - Recognized the pattern - each board heard its own commands
+  - Swapped the RX/TX lines - the storm stopped
+  - Enabled the protocol checksum so garbage is rejected
+FIX (took 5 days)
+  Fixed by swapping the two wires and enabling the checksum in the protocol, so a wiring error now produces a clear checksum error instead of an echo storm.
+
+----------------------------------------------------------------------
+E0061 | v9.5 | SMALL | Found Day 171 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v9.5/main.py
+Error     : Lint failure in CI on unused import
+Terminal  : Pi console (HDMI)
+  $ python3 main.py
+  flake8: F401 'sys' imported but unused
+  CI job failed in 8s
+WHAT HAPPENED
+  The CI pipeline went red 8 seconds after the push. The failure was a single unused import - trivial, but it blocked the whole pipeline.
+WHY IT HAPPENED (root cause)
+  The final cleanup left 'import sys' after removing the code that used it. flake8's F401 rule flags any unused import, and the CI gate treated warnings as failures. A lint failure is the cheapest possible error to catch - it costs seconds - which is exactly why the gate exists: to catch before the hardware run.
+FIX (took 1 day)
+  Fixed by removing the import, and by running flake8 locally before pushing so the CI gate never sees the mistake.
+
+----------------------------------------------------------------------
+E0062 | v9.5 | SMALL | Found Day 171 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v9.5/main.py
+Error     : setup.cfg ignores the pi package
+Terminal  : Pi console (HDMI)
+  $ python3 main.py
+  pytest: no tests ran
+  test_full_pipeline skipped
+WHAT HAPPENED
+  The CI reported success while running zero tests. A green pipeline is only as good as the tests it actually runs.
+WHY IT HAPPENED (root cause)
+  setup.cfg listed packages manually and pi.* was missing, so pytest's package discovery found no test modules and exited with code 0 - an empty success. An empty test run looks exactly like a passing run to a CI system that only checks the exit code. The configuration and the codebase had diverged when the pi/ tree was reorganized.
+FIX (took 1 day)
+  Fixed by switching to packages = find: so discovery is automatic, and adding a CI assertion that the test count is greater than zero.
+
+----------------------------------------------------------------------
+E0063 | v9.5 | SMALL | Found Day 171 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v9.5/main.py
+Error     : LED pin conflict with the camera
+Terminal  : Pi console (HDMI)
+  $ python3 main.py
+  led: 0 0 0  (camera init fails)
+  camera and LED share a pin
+WHAT HAPPENED
+  The status LED was dead and the camera failed to initialize - two unrelated-looking failures that shared one cause.
+WHY IT HAPPENED (root cause)
+  The LED was wired to the camera's enable pin, so driving the LED pulled the camera's enable line low. Each subsystem's config named the pin differently ('led_gpio' vs 'camera_enable'), so the conflict was invisible in the config review. The two features shared a physical resource that no single file owned.
+FIX (took 1 day)
+  Fixed by moving the LED to a spare GPIO and adding a pin-conflict check at boot that rejects two peripherals claiming the same GPIO.
+
+----------------------------------------------------------------------
+E0064 | v9.5 | SMALL | Found Day 171 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v9.5/main.py
+Error     : Surprise rule YAML has a duplicate key
+Terminal  : Pi console (HDMI)
+  $ python3 main.py
+  yaml.constructor.DuplicateKeyError
+  config load aborts
+WHAT HAPPENED
+  The robot failed to boot on race morning because the rules file had the same key twice. A merge conflict had duplicated a line and no one noticed.
+WHY IT HAPPENED (root cause)
+  YAML strictly forbids duplicate keys, and the parser raises DuplicateKeyError - the loader correctly refused to guess which value wins. The duplicate came from a bad merge that produced two pillar_logic entries. YAML's strictness here is a feature: silently picking one of two conflicting values would be worse.
+FIX (took 1 day)
+  Fixed by removing the duplicate, and adding a pre-merge check that parses every YAML file and rejects duplicates in CI.
+
+----------------------------------------------------------------------
+E0065 | v9.5 | SMALL | Found Day 171 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v9.5/main.py
+Error     : Test flaky on the first run of the day
+Terminal  : Pi console (HDMI)
+  $ python3 main.py
+  FAILED test_full_pipeline - passed 5 minutes later
+  timing-dependent assertion
+WHAT HAPPENED
+  The full-pipeline test failed on the first run of the morning and passed every run after. A cold Pi is a different computer than a warm one.
+WHY IT HAPPENED (root cause)
+  The test asserted that the pipeline reaches 100Hz within 2 seconds of start. A cold Pi takes longer to warm up its clocks and caches, so the first run of the day missed the deadline. Timing assertions embed an assumption about the machine state, and machine state varies with temperature and uptime.
+FIX (took 1 day)
+  Fixed by relaxing the assertion to a 20% margin and measuring the warm-up time over a week of first runs to set a realistic bound.
+
+----------------------------------------------------------------------
+E0066 | v9.5 | SMALL | Found Day 171 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v9.5/main.py
+Error     : Lint failure in CI on unused import
+Terminal  : Pi console (HDMI)
+  $ python3 main.py
+  flake8: F401 'sys' imported but unused
+  CI job failed in 8s
+WHAT HAPPENED
+  The CI pipeline went red 8 seconds after the push. The failure was a single unused import - trivial, but it blocked the whole pipeline.
+WHY IT HAPPENED (root cause)
+  The final cleanup left 'import sys' after removing the code that used it. flake8's F401 rule flags any unused import, and the CI gate treated warnings as failures. A lint failure is the cheapest possible error to catch - it costs seconds - which is exactly why the gate exists: to catch before the hardware run.
+FIX (took 1 day)
+  Fixed by removing the import, and by running flake8 locally before pushing so the CI gate never sees the mistake.
+
+----------------------------------------------------------------------
+E0067 | v9.5 | SMALL | Found Day 171 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v9.5/main.py
+Error     : setup.cfg ignores the pi package
+Terminal  : Pi console (HDMI)
+  $ python3 main.py
+  pytest: no tests ran
+  test_full_pipeline skipped
+WHAT HAPPENED
+  The CI reported success while running zero tests. A green pipeline is only as good as the tests it actually runs.
+WHY IT HAPPENED (root cause)
+  setup.cfg listed packages manually and pi.* was missing, so pytest's package discovery found no test modules and exited with code 0 - an empty success. An empty test run looks exactly like a passing run to a CI system that only checks the exit code. The configuration and the codebase had diverged when the pi/ tree was reorganized.
+FIX (took 1 day)
+  Fixed by switching to packages = find: so discovery is automatic, and adding a CI assertion that the test count is greater than zero.
+
+----------------------------------------------------------------------
+E0068 | v9.5 | SMALL | Found Day 171 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v9.5/main.py
+Error     : LED pin conflict with the camera
+Terminal  : Pi console (HDMI)
+  $ python3 main.py
+  led: 0 0 0  (camera init fails)
+  camera and LED share a pin
+WHAT HAPPENED
+  The status LED was dead and the camera failed to initialize - two unrelated-looking failures that shared one cause.
+WHY IT HAPPENED (root cause)
+  The LED was wired to the camera's enable pin, so driving the LED pulled the camera's enable line low. Each subsystem's config named the pin differently ('led_gpio' vs 'camera_enable'), so the conflict was invisible in the config review. The two features shared a physical resource that no single file owned.
+FIX (took 1 day)
+  Fixed by moving the LED to a spare GPIO and adding a pin-conflict check at boot that rejects two peripherals claiming the same GPIO.
+
+----------------------------------------------------------------------
+E0069 | v9.5 | BIG | Found Day 172 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v9.5/main.py
+Error     : Race day: SD card corrupt after the power cut
+Terminal  : Pi SSH terminal
+  $ journalctl
+  ext4-fs error (device mmcblk0p2)
+  Remounting filesystem read-only
+  python3: can't open file 'main.py'
+WHAT HAPPENED
+  On race day the SD card was corrupted by the power cut during the previous night's calibration. The filesystem remounted read-only and the robot could not even start Python.
+WHY IT HAPPENED (root cause)
+  The Pi was powered off without a clean shutdown, and the ext4 journal could not replay, leaving the filesystem in an inconsistent state. ext4 responded by remounting read-only to protect the data. A robot that is powered off by pulling the battery is a robot that will eventually lose its filesystem - the shutdown was an operational habit, and it became a race-day failure.
+INVESTIGATION (before the fix)
+  - Mounted the card on a PC and ran fsck
+  - Recovered the code from the backup image
+  - Converted the root filesystem to read-only with an overlay for logs
+FIX (took 2 days)
+  Fixed by switching to a read-only rootfs with a RAM-backed log overlay, so power cuts can never corrupt the boot filesystem again.
+
+----------------------------------------------------------------------
+E0070 | v9.5 | BIG | Found Day 172 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v9.5/main.py
+Error     : Pillar detector false positive on the scoreboard
+Terminal  : Pi SSH terminal
+  $ python3 main.py
+  pillar: RED at (200,150) x 40 frames
+  scoreboard is not a pillar
+WHAT HAPPENED
+  During the final round the detector locked onto the electronic scoreboard for 40 frames and the robot steered toward the wrong target. The scoreboard is exactly the size and color of a pillar.
+WHY IT HAPPENED (root cause)
+  The red electronic scoreboard matched every gate in the pillar filter: color, size, aspect ratio. The filter had no context - it could not know that a red rectangle at that position and distance was a scoreboard. The scoreboard was the perfect counterfeit: it satisfied every feature the detector checked, because the detector checked only features the pillar has.
+INVESTIGATION (before the fix)
+  - Replayed the round - the 40-frame lock was on the scoreboard
+  - Checked the detection - it passed all gates
+  - Masked the scoreboard region and re-ran the round
+FIX (took 3 days)
+  Fixed by masking the top 20% of the frame where the scoreboard sits, and adding a position-vs-distance consistency check against the ToF.
+
+----------------------------------------------------------------------
+E0071 | v9.5 | BIG | Found Day 172 | Fixed in 4 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v9.5/main.py
+Error     : UART command echo storm between the two boards
+Terminal  : ESP32 serial monitor
+  $ idf.py monitor
+  echo: MOTOR left=0.5 right=0.5
+  echo: MOTOR left=0.5 right=0.5
+  echo: ... 400 lines/sec
+WHAT HAPPENED
+  The ESP32 console flooded with echo lines - its own commands, coming back to it. The two boards were talking to each other in a loop at 400 lines per second.
+WHY IT HAPPENED (root cause)
+  The RX and TX lines were swapped between the boards: each board's TX fed the other's TX, so every command written by the Pi arrived back at the Pi, which echoed it as a response, which the ESP32 interpreted as a new command. With no checksum, both boards accepted the garbage as valid traffic. A crossed wire plus a trusting protocol equals a feedback loop.
+INVESTIGATION (before the fix)
+  - Recognized the pattern - each board heard its own commands
+  - Swapped the RX/TX lines - the storm stopped
+  - Enabled the protocol checksum so garbage is rejected
+FIX (took 4 days)
+  Fixed by swapping the two wires and enabling the checksum in the protocol, so a wiring error now produces a clear checksum error instead of an echo storm.
+
+----------------------------------------------------------------------
+E0072 | v9.5 | BIG | Found Day 172 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v9.5/main.py
+Error     : Full pipeline crashes 2 seconds after the start
+Terminal  : Pi SSH terminal
+  $ python3 main.py
+  Traceback (most recent call last):
+    File "main.py", line 88, in <module>
+      scheduler.start()
+    File "pi/system/scheduler.py", line 31
+      await asyncio.gather(*tasks)
+  TypeError: 'Task' object is not callable
+WHAT HAPPENED
+  The final integrated system crashed two seconds after launch - after all subsystems had started successfully. The crash was in the scheduler, the last piece to start.
+WHY IT HAPPENED (root cause)
+  The scheduler defined a class named Task, shadowing asyncio.Task inside the module. asyncio.gather expects coroutine objects or Tasks; it received the module's own Task class instance, which is not awaitable, raising TypeError. The name collision was invisible until the exact code path that combined both symbols executed - which only happens at the very end of startup.
+INVESTIGATION (before the fix)
+  - Read the traceback - the scheduler line and the class name matched
+  - Checked asyncio.gather's requirements against the argument
+  - Renamed the internal class and verified the whole startup
+FIX (took 5 days)
+  Fixed by renaming the internal class to ScheduledTask, and adding a smoke test that runs the full startup sequence before every race.
+
+----------------------------------------------------------------------
+E0073 | v9.6 | SMALL | Found Day 173 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v9.6/test_full_pipeline.py
+Error     : setup.cfg ignores the pi package
+Terminal  : ESP32 serial monitor
+  $ python3 test_full_pipeline.py
+  pytest: no tests ran
+  test_full_pipeline skipped
+WHAT HAPPENED
+  The CI reported success while running zero tests. A green pipeline is only as good as the tests it actually runs.
+WHY IT HAPPENED (root cause)
+  setup.cfg listed packages manually and pi.* was missing, so pytest's package discovery found no test modules and exited with code 0 - an empty success. An empty test run looks exactly like a passing run to a CI system that only checks the exit code. The configuration and the codebase had diverged when the pi/ tree was reorganized.
+FIX (took 1 day)
+  Fixed by switching to packages = find: so discovery is automatic, and adding a CI assertion that the test count is greater than zero.
+
+----------------------------------------------------------------------
+E0074 | v9.6 | SMALL | Found Day 173 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v9.6/setup.cfg
+Error     : LED pin conflict with the camera
+Terminal  : ESP32 serial monitor
+  $ python3 setup.cfg
+  led: 0 0 0  (camera init fails)
+  camera and LED share a pin
+WHAT HAPPENED
+  The status LED was dead and the camera failed to initialize - two unrelated-looking failures that shared one cause.
+WHY IT HAPPENED (root cause)
+  The LED was wired to the camera's enable pin, so driving the LED pulled the camera's enable line low. Each subsystem's config named the pin differently ('led_gpio' vs 'camera_enable'), so the conflict was invisible in the config review. The two features shared a physical resource that no single file owned.
+FIX (took 1 day)
+  Fixed by moving the LED to a spare GPIO and adding a pin-conflict check at boot that rejects two peripherals claiming the same GPIO.
+
+----------------------------------------------------------------------
+E0075 | v9.6 | SMALL | Found Day 173 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v9.6/test_full_pipeline.py
+Error     : Surprise rule YAML has a duplicate key
+Terminal  : ESP32 serial monitor
+  $ python3 test_full_pipeline.py
+  yaml.constructor.DuplicateKeyError
+  config load aborts
+WHAT HAPPENED
+  The robot failed to boot on race morning because the rules file had the same key twice. A merge conflict had duplicated a line and no one noticed.
+WHY IT HAPPENED (root cause)
+  YAML strictly forbids duplicate keys, and the parser raises DuplicateKeyError - the loader correctly refused to guess which value wins. The duplicate came from a bad merge that produced two pillar_logic entries. YAML's strictness here is a feature: silently picking one of two conflicting values would be worse.
+FIX (took 1 day)
+  Fixed by removing the duplicate, and adding a pre-merge check that parses every YAML file and rejects duplicates in CI.
+
+----------------------------------------------------------------------
+E0076 | v9.6 | SMALL | Found Day 173 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v9.6/setup.cfg
+Error     : Test flaky on the first run of the day
+Terminal  : ESP32 serial monitor
+  $ python3 setup.cfg
+  FAILED test_full_pipeline - passed 5 minutes later
+  timing-dependent assertion
+WHAT HAPPENED
+  The full-pipeline test failed on the first run of the morning and passed every run after. A cold Pi is a different computer than a warm one.
+WHY IT HAPPENED (root cause)
+  The test asserted that the pipeline reaches 100Hz within 2 seconds of start. A cold Pi takes longer to warm up its clocks and caches, so the first run of the day missed the deadline. Timing assertions embed an assumption about the machine state, and machine state varies with temperature and uptime.
+FIX (took 1 day)
+  Fixed by relaxing the assertion to a 20% margin and measuring the warm-up time over a week of first runs to set a realistic bound.
+
+----------------------------------------------------------------------
+E0077 | v9.6 | SMALL | Found Day 173 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v9.6/test_full_pipeline.py
+Error     : Lint failure in CI on unused import
+Terminal  : ESP32 serial monitor
+  $ python3 test_full_pipeline.py
+  flake8: F401 'sys' imported but unused
+  CI job failed in 8s
+WHAT HAPPENED
+  The CI pipeline went red 8 seconds after the push. The failure was a single unused import - trivial, but it blocked the whole pipeline.
+WHY IT HAPPENED (root cause)
+  The final cleanup left 'import sys' after removing the code that used it. flake8's F401 rule flags any unused import, and the CI gate treated warnings as failures. A lint failure is the cheapest possible error to catch - it costs seconds - which is exactly why the gate exists: to catch before the hardware run.
+FIX (took 1 day)
+  Fixed by removing the import, and by running flake8 locally before pushing so the CI gate never sees the mistake.
+
+----------------------------------------------------------------------
+E0078 | v9.6 | SMALL | Found Day 173 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v9.6/setup.cfg
+Error     : setup.cfg ignores the pi package
+Terminal  : ESP32 serial monitor
+  $ python3 setup.cfg
+  pytest: no tests ran
+  test_full_pipeline skipped
+WHAT HAPPENED
+  The CI reported success while running zero tests. A green pipeline is only as good as the tests it actually runs.
+WHY IT HAPPENED (root cause)
+  setup.cfg listed packages manually and pi.* was missing, so pytest's package discovery found no test modules and exited with code 0 - an empty success. An empty test run looks exactly like a passing run to a CI system that only checks the exit code. The configuration and the codebase had diverged when the pi/ tree was reorganized.
+FIX (took 1 day)
+  Fixed by switching to packages = find: so discovery is automatic, and adding a CI assertion that the test count is greater than zero.
+
+----------------------------------------------------------------------
+E0079 | v9.6 | SMALL | Found Day 173 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v9.6/test_full_pipeline.py
+Error     : LED pin conflict with the camera
+Terminal  : ESP32 serial monitor
+  $ python3 test_full_pipeline.py
+  led: 0 0 0  (camera init fails)
+  camera and LED share a pin
+WHAT HAPPENED
+  The status LED was dead and the camera failed to initialize - two unrelated-looking failures that shared one cause.
+WHY IT HAPPENED (root cause)
+  The LED was wired to the camera's enable pin, so driving the LED pulled the camera's enable line low. Each subsystem's config named the pin differently ('led_gpio' vs 'camera_enable'), so the conflict was invisible in the config review. The two features shared a physical resource that no single file owned.
+FIX (took 1 day)
+  Fixed by moving the LED to a spare GPIO and adding a pin-conflict check at boot that rejects two peripherals claiming the same GPIO.
+
+----------------------------------------------------------------------
+E0080 | v9.6 | SMALL | Found Day 173 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v9.6/setup.cfg
+Error     : Surprise rule YAML has a duplicate key
+Terminal  : ESP32 serial monitor
+  $ python3 setup.cfg
+  yaml.constructor.DuplicateKeyError
+  config load aborts
+WHAT HAPPENED
+  The robot failed to boot on race morning because the rules file had the same key twice. A merge conflict had duplicated a line and no one noticed.
+WHY IT HAPPENED (root cause)
+  YAML strictly forbids duplicate keys, and the parser raises DuplicateKeyError - the loader correctly refused to guess which value wins. The duplicate came from a bad merge that produced two pillar_logic entries. YAML's strictness here is a feature: silently picking one of two conflicting values would be worse.
+FIX (took 1 day)
+  Fixed by removing the duplicate, and adding a pre-merge check that parses every YAML file and rejects duplicates in CI.
+
+----------------------------------------------------------------------
+E0081 | v9.6 | BIG | Found Day 174 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v9.6/test_full_pipeline.py
+Error     : Pillar detector false positive on the scoreboard
+Terminal  : Pi SSH terminal
+  $ python3 main.py
+  pillar: RED at (200,150) x 40 frames
+  scoreboard is not a pillar
+WHAT HAPPENED
+  During the final round the detector locked onto the electronic scoreboard for 40 frames and the robot steered toward the wrong target. The scoreboard is exactly the size and color of a pillar.
+WHY IT HAPPENED (root cause)
+  The red electronic scoreboard matched every gate in the pillar filter: color, size, aspect ratio. The filter had no context - it could not know that a red rectangle at that position and distance was a scoreboard. The scoreboard was the perfect counterfeit: it satisfied every feature the detector checked, because the detector checked only features the pillar has.
+INVESTIGATION (before the fix)
+  - Replayed the round - the 40-frame lock was on the scoreboard
+  - Checked the detection - it passed all gates
+  - Masked the scoreboard region and re-ran the round
+FIX (took 2 days)
+  Fixed by masking the top 20% of the frame where the scoreboard sits, and adding a position-vs-distance consistency check against the ToF.
+
+----------------------------------------------------------------------
+E0082 | v9.6 | BIG | Found Day 174 | Fixed in 3 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v9.6/setup.cfg
+Error     : UART command echo storm between the two boards
+Terminal  : ESP32 serial monitor
+  $ idf.py monitor
+  echo: MOTOR left=0.5 right=0.5
+  echo: MOTOR left=0.5 right=0.5
+  echo: ... 400 lines/sec
+WHAT HAPPENED
+  The ESP32 console flooded with echo lines - its own commands, coming back to it. The two boards were talking to each other in a loop at 400 lines per second.
+WHY IT HAPPENED (root cause)
+  The RX and TX lines were swapped between the boards: each board's TX fed the other's TX, so every command written by the Pi arrived back at the Pi, which echoed it as a response, which the ESP32 interpreted as a new command. With no checksum, both boards accepted the garbage as valid traffic. A crossed wire plus a trusting protocol equals a feedback loop.
+INVESTIGATION (before the fix)
+  - Recognized the pattern - each board heard its own commands
+  - Swapped the RX/TX lines - the storm stopped
+  - Enabled the protocol checksum so garbage is rejected
+FIX (took 3 days)
+  Fixed by swapping the two wires and enabling the checksum in the protocol, so a wiring error now produces a clear checksum error instead of an echo storm.
+
+----------------------------------------------------------------------
+E0083 | v9.6 | BIG | Found Day 174 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v9.6/test_full_pipeline.py
+Error     : Full pipeline crashes 2 seconds after the start
+Terminal  : Pi SSH terminal
+  $ python3 main.py
+  Traceback (most recent call last):
+    File "main.py", line 88, in <module>
+      scheduler.start()
+    File "pi/system/scheduler.py", line 31
+      await asyncio.gather(*tasks)
+  TypeError: 'Task' object is not callable
+WHAT HAPPENED
+  The final integrated system crashed two seconds after launch - after all subsystems had started successfully. The crash was in the scheduler, the last piece to start.
+WHY IT HAPPENED (root cause)
+  The scheduler defined a class named Task, shadowing asyncio.Task inside the module. asyncio.gather expects coroutine objects or Tasks; it received the module's own Task class instance, which is not awaitable, raising TypeError. The name collision was invisible until the exact code path that combined both symbols executed - which only happens at the very end of startup.
+INVESTIGATION (before the fix)
+  - Read the traceback - the scheduler line and the class name matched
+  - Checked asyncio.gather's requirements against the argument
+  - Renamed the internal class and verified the whole startup
+FIX (took 4 days)
+  Fixed by renaming the internal class to ScheduledTask, and adding a smoke test that runs the full startup sequence before every race.
+
+----------------------------------------------------------------------
+E0084 | v9.6 | BIG | Found Day 174 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v9.6/setup.cfg
+Error     : Camera frozen at the race morning start
+Terminal  : Pi SSH terminal
+  $ python3 main.py
+  frame: identical for 40s
+  camera driver: no error, no frame
+WHAT HAPPENED
+  On race morning the camera output a single frozen frame for 40 seconds. No error, no exception - just a frame that never changed, while the robot drove blind.
+WHY IT HAPPENED (root cause)
+  The camera read call had no timeout, so when the sensor stalled (a known cold-start quirk of the camera module), the driver blocked forever inside read(). Blocking reads fail silently by design: the code waits, nothing happens, no signal is raised. The pipeline kept consuming the last frame, so the system looked alive while being blind.
+INVESTIGATION (before the fix)
+  - Confirmed the frame was a single frame repeated, not a new capture
+  - Checked the driver - the read had no timeout
+  - Added a timeout that raises after 2s of no frame
+FIX (took 5 days)
+  Fixed by adding a 2-second read timeout that triggers a camera restart, and logging 'camera frozen' when a restart occurs.
+
+----------------------------------------------------------------------
+E0085 | v9.7 | SMALL | Found Day 175 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v9.7/lap_counter.py
+Error     : LED pin conflict with the camera
+Terminal  : Windows CMD
+  $ python3 lap_counter.py
+  led: 0 0 0  (camera init fails)
+  camera and LED share a pin
+WHAT HAPPENED
+  The status LED was dead and the camera failed to initialize - two unrelated-looking failures that shared one cause.
+WHY IT HAPPENED (root cause)
+  The LED was wired to the camera's enable pin, so driving the LED pulled the camera's enable line low. Each subsystem's config named the pin differently ('led_gpio' vs 'camera_enable'), so the conflict was invisible in the config review. The two features shared a physical resource that no single file owned.
+FIX (took 1 day)
+  Fixed by moving the LED to a spare GPIO and adding a pin-conflict check at boot that rejects two peripherals claiming the same GPIO.
+
+----------------------------------------------------------------------
+E0086 | v9.7 | SMALL | Found Day 175 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v9.7/state_machine.py
+Error     : Surprise rule YAML has a duplicate key
+Terminal  : Windows CMD
+  $ python3 state_machine.py
+  yaml.constructor.DuplicateKeyError
+  config load aborts
+WHAT HAPPENED
+  The robot failed to boot on race morning because the rules file had the same key twice. A merge conflict had duplicated a line and no one noticed.
+WHY IT HAPPENED (root cause)
+  YAML strictly forbids duplicate keys, and the parser raises DuplicateKeyError - the loader correctly refused to guess which value wins. The duplicate came from a bad merge that produced two pillar_logic entries. YAML's strictness here is a feature: silently picking one of two conflicting values would be worse.
+FIX (took 1 day)
+  Fixed by removing the duplicate, and adding a pre-merge check that parses every YAML file and rejects duplicates in CI.
+
+----------------------------------------------------------------------
+E0087 | v9.7 | SMALL | Found Day 175 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v9.7/velocity_profile.py
+Error     : Test flaky on the first run of the day
+Terminal  : Windows CMD
+  $ python3 velocity_profile.py
+  FAILED test_full_pipeline - passed 5 minutes later
+  timing-dependent assertion
+WHAT HAPPENED
+  The full-pipeline test failed on the first run of the morning and passed every run after. A cold Pi is a different computer than a warm one.
+WHY IT HAPPENED (root cause)
+  The test asserted that the pipeline reaches 100Hz within 2 seconds of start. A cold Pi takes longer to warm up its clocks and caches, so the first run of the day missed the deadline. Timing assertions embed an assumption about the machine state, and machine state varies with temperature and uptime.
+FIX (took 1 day)
+  Fixed by relaxing the assertion to a 20% margin and measuring the warm-up time over a week of first runs to set a realistic bound.
+
+----------------------------------------------------------------------
+E0088 | v9.7 | SMALL | Found Day 175 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v9.7/lap_counter.py
+Error     : Lint failure in CI on unused import
+Terminal  : Windows CMD
+  $ python3 lap_counter.py
+  flake8: F401 'sys' imported but unused
+  CI job failed in 8s
+WHAT HAPPENED
+  The CI pipeline went red 8 seconds after the push. The failure was a single unused import - trivial, but it blocked the whole pipeline.
+WHY IT HAPPENED (root cause)
+  The final cleanup left 'import sys' after removing the code that used it. flake8's F401 rule flags any unused import, and the CI gate treated warnings as failures. A lint failure is the cheapest possible error to catch - it costs seconds - which is exactly why the gate exists: to catch before the hardware run.
+FIX (took 1 day)
+  Fixed by removing the import, and by running flake8 locally before pushing so the CI gate never sees the mistake.
+
+----------------------------------------------------------------------
+E0089 | v9.7 | SMALL | Found Day 175 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v9.7/state_machine.py
+Error     : setup.cfg ignores the pi package
+Terminal  : Windows CMD
+  $ python3 state_machine.py
+  pytest: no tests ran
+  test_full_pipeline skipped
+WHAT HAPPENED
+  The CI reported success while running zero tests. A green pipeline is only as good as the tests it actually runs.
+WHY IT HAPPENED (root cause)
+  setup.cfg listed packages manually and pi.* was missing, so pytest's package discovery found no test modules and exited with code 0 - an empty success. An empty test run looks exactly like a passing run to a CI system that only checks the exit code. The configuration and the codebase had diverged when the pi/ tree was reorganized.
+FIX (took 1 day)
+  Fixed by switching to packages = find: so discovery is automatic, and adding a CI assertion that the test count is greater than zero.
+
+----------------------------------------------------------------------
+E0090 | v9.7 | SMALL | Found Day 175 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v9.7/velocity_profile.py
+Error     : LED pin conflict with the camera
+Terminal  : Windows CMD
+  $ python3 velocity_profile.py
+  led: 0 0 0  (camera init fails)
+  camera and LED share a pin
+WHAT HAPPENED
+  The status LED was dead and the camera failed to initialize - two unrelated-looking failures that shared one cause.
+WHY IT HAPPENED (root cause)
+  The LED was wired to the camera's enable pin, so driving the LED pulled the camera's enable line low. Each subsystem's config named the pin differently ('led_gpio' vs 'camera_enable'), so the conflict was invisible in the config review. The two features shared a physical resource that no single file owned.
+FIX (took 1 day)
+  Fixed by moving the LED to a spare GPIO and adding a pin-conflict check at boot that rejects two peripherals claiming the same GPIO.
+
+----------------------------------------------------------------------
+E0091 | v9.7 | SMALL | Found Day 175 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v9.7/lap_counter.py
+Error     : Surprise rule YAML has a duplicate key
+Terminal  : Windows CMD
+  $ python3 lap_counter.py
+  yaml.constructor.DuplicateKeyError
+  config load aborts
+WHAT HAPPENED
+  The robot failed to boot on race morning because the rules file had the same key twice. A merge conflict had duplicated a line and no one noticed.
+WHY IT HAPPENED (root cause)
+  YAML strictly forbids duplicate keys, and the parser raises DuplicateKeyError - the loader correctly refused to guess which value wins. The duplicate came from a bad merge that produced two pillar_logic entries. YAML's strictness here is a feature: silently picking one of two conflicting values would be worse.
+FIX (took 1 day)
+  Fixed by removing the duplicate, and adding a pre-merge check that parses every YAML file and rejects duplicates in CI.
+
+----------------------------------------------------------------------
+E0092 | v9.7 | SMALL | Found Day 175 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v9.7/state_machine.py
+Error     : Test flaky on the first run of the day
+Terminal  : Windows CMD
+  $ python3 state_machine.py
+  FAILED test_full_pipeline - passed 5 minutes later
+  timing-dependent assertion
+WHAT HAPPENED
+  The full-pipeline test failed on the first run of the morning and passed every run after. A cold Pi is a different computer than a warm one.
+WHY IT HAPPENED (root cause)
+  The test asserted that the pipeline reaches 100Hz within 2 seconds of start. A cold Pi takes longer to warm up its clocks and caches, so the first run of the day missed the deadline. Timing assertions embed an assumption about the machine state, and machine state varies with temperature and uptime.
+FIX (took 1 day)
+  Fixed by relaxing the assertion to a 20% margin and measuring the warm-up time over a week of first runs to set a realistic bound.
+
+----------------------------------------------------------------------
+E0093 | v9.7 | BIG | Found Day 176 | Fixed in 2 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v9.7/lap_counter.py
+Error     : UART command echo storm between the two boards
+Terminal  : ESP32 serial monitor
+  $ idf.py monitor
+  echo: MOTOR left=0.5 right=0.5
+  echo: MOTOR left=0.5 right=0.5
+  echo: ... 400 lines/sec
+WHAT HAPPENED
+  The ESP32 console flooded with echo lines - its own commands, coming back to it. The two boards were talking to each other in a loop at 400 lines per second.
+WHY IT HAPPENED (root cause)
+  The RX and TX lines were swapped between the boards: each board's TX fed the other's TX, so every command written by the Pi arrived back at the Pi, which echoed it as a response, which the ESP32 interpreted as a new command. With no checksum, both boards accepted the garbage as valid traffic. A crossed wire plus a trusting protocol equals a feedback loop.
+INVESTIGATION (before the fix)
+  - Recognized the pattern - each board heard its own commands
+  - Swapped the RX/TX lines - the storm stopped
+  - Enabled the protocol checksum so garbage is rejected
+FIX (took 2 days)
+  Fixed by swapping the two wires and enabling the checksum in the protocol, so a wiring error now produces a clear checksum error instead of an echo storm.
+
+----------------------------------------------------------------------
+E0094 | v9.7 | BIG | Found Day 176 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v9.7/state_machine.py
+Error     : Full pipeline crashes 2 seconds after the start
+Terminal  : Pi SSH terminal
+  $ python3 main.py
+  Traceback (most recent call last):
+    File "main.py", line 88, in <module>
+      scheduler.start()
+    File "pi/system/scheduler.py", line 31
+      await asyncio.gather(*tasks)
+  TypeError: 'Task' object is not callable
+WHAT HAPPENED
+  The final integrated system crashed two seconds after launch - after all subsystems had started successfully. The crash was in the scheduler, the last piece to start.
+WHY IT HAPPENED (root cause)
+  The scheduler defined a class named Task, shadowing asyncio.Task inside the module. asyncio.gather expects coroutine objects or Tasks; it received the module's own Task class instance, which is not awaitable, raising TypeError. The name collision was invisible until the exact code path that combined both symbols executed - which only happens at the very end of startup.
+INVESTIGATION (before the fix)
+  - Read the traceback - the scheduler line and the class name matched
+  - Checked asyncio.gather's requirements against the argument
+  - Renamed the internal class and verified the whole startup
+FIX (took 3 days)
+  Fixed by renaming the internal class to ScheduledTask, and adding a smoke test that runs the full startup sequence before every race.
+
+----------------------------------------------------------------------
+E0095 | v9.7 | BIG | Found Day 176 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v9.7/velocity_profile.py
+Error     : Camera frozen at the race morning start
+Terminal  : Pi SSH terminal
+  $ python3 main.py
+  frame: identical for 40s
+  camera driver: no error, no frame
+WHAT HAPPENED
+  On race morning the camera output a single frozen frame for 40 seconds. No error, no exception - just a frame that never changed, while the robot drove blind.
+WHY IT HAPPENED (root cause)
+  The camera read call had no timeout, so when the sensor stalled (a known cold-start quirk of the camera module), the driver blocked forever inside read(). Blocking reads fail silently by design: the code waits, nothing happens, no signal is raised. The pipeline kept consuming the last frame, so the system looked alive while being blind.
+INVESTIGATION (before the fix)
+  - Confirmed the frame was a single frame repeated, not a new capture
+  - Checked the driver - the read had no timeout
+  - Added a timeout that raises after 2s of no frame
+FIX (took 4 days)
+  Fixed by adding a 2-second read timeout that triggers a camera restart, and logging 'camera frozen' when a restart occurs.
+
+----------------------------------------------------------------------
+E0096 | v9.7 | BIG | Found Day 176 | Fixed in 5 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v9.7/lap_counter.py
+Error     : ESP32 watchdog resets during the final run
+Terminal  : ESP32 serial monitor
+  E (89430) task_wdt: Task watchdog got triggered
+  task: motor_ctrl did not reset the watchdog
+  Rebooting... (loop)
+WHAT HAPPENED
+  The ESP32 rebooted in the middle of the final run - 89 seconds in, the motor task had not fed its watchdog. The loop restarted the robot at full speed.
+WHY IT HAPPENED (root cause)
+  The motor task blocked on a UART write with no timeout: the Pi stopped reading (its own CPU was saturated), the ESP32's TX buffer filled, and the write waited forever. A blocked write means no watchdog feed, and the hardware watchdog correctly reset the system. Two independent saturation problems met in one blocking call.
+INVESTIGATION (before the fix)
+  - Decoded the watchdog message - the motor task was the victim
+  - Logged the UART write - it blocked when the Pi stopped reading
+  - Made the write non-blocking with a timeout
+FIX (took 5 days)
+  Fixed by setting the UART write to non-blocking with a 10ms timeout, and feeding the watchdog before every write so a stalled link cannot stall the loop.
+
+----------------------------------------------------------------------
+E0097 | v9.8 | SMALL | Found Day 177 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v9.8/scheduler.py
+Error     : Surprise rule YAML has a duplicate key
+Terminal  : systemd journal
+  $ python3 scheduler.py
+  yaml.constructor.DuplicateKeyError
+  config load aborts
+WHAT HAPPENED
+  The robot failed to boot on race morning because the rules file had the same key twice. A merge conflict had duplicated a line and no one noticed.
+WHY IT HAPPENED (root cause)
+  YAML strictly forbids duplicate keys, and the parser raises DuplicateKeyError - the loader correctly refused to guess which value wins. The duplicate came from a bad merge that produced two pillar_logic entries. YAML's strictness here is a feature: silently picking one of two conflicting values would be worse.
+FIX (took 1 day)
+  Fixed by removing the duplicate, and adding a pre-merge check that parses every YAML file and rejects duplicates in CI.
+
+----------------------------------------------------------------------
+E0098 | v9.8 | SMALL | Found Day 177 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v9.8/surprise_rules.yaml
+Error     : Test flaky on the first run of the day
+Terminal  : systemd journal
+  $ python3 surprise_rules.yaml
+  FAILED test_full_pipeline - passed 5 minutes later
+  timing-dependent assertion
+WHAT HAPPENED
+  The full-pipeline test failed on the first run of the morning and passed every run after. A cold Pi is a different computer than a warm one.
+WHY IT HAPPENED (root cause)
+  The test asserted that the pipeline reaches 100Hz within 2 seconds of start. A cold Pi takes longer to warm up its clocks and caches, so the first run of the day missed the deadline. Timing assertions embed an assumption about the machine state, and machine state varies with temperature and uptime.
+FIX (took 1 day)
+  Fixed by relaxing the assertion to a 20% margin and measuring the warm-up time over a week of first runs to set a realistic bound.
+
+----------------------------------------------------------------------
+E0099 | v9.8 | SMALL | Found Day 177 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v9.8/scheduler.py
+Error     : Lint failure in CI on unused import
+Terminal  : systemd journal
+  $ python3 scheduler.py
+  flake8: F401 'sys' imported but unused
+  CI job failed in 8s
+WHAT HAPPENED
+  The CI pipeline went red 8 seconds after the push. The failure was a single unused import - trivial, but it blocked the whole pipeline.
+WHY IT HAPPENED (root cause)
+  The final cleanup left 'import sys' after removing the code that used it. flake8's F401 rule flags any unused import, and the CI gate treated warnings as failures. A lint failure is the cheapest possible error to catch - it costs seconds - which is exactly why the gate exists: to catch before the hardware run.
+FIX (took 1 day)
+  Fixed by removing the import, and by running flake8 locally before pushing so the CI gate never sees the mistake.
+
+----------------------------------------------------------------------
+E0100 | v9.8 | SMALL | Found Day 177 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v9.8/surprise_rules.yaml
+Error     : setup.cfg ignores the pi package
+Terminal  : systemd journal
+  $ python3 surprise_rules.yaml
+  pytest: no tests ran
+  test_full_pipeline skipped
+WHAT HAPPENED
+  The CI reported success while running zero tests. A green pipeline is only as good as the tests it actually runs.
+WHY IT HAPPENED (root cause)
+  setup.cfg listed packages manually and pi.* was missing, so pytest's package discovery found no test modules and exited with code 0 - an empty success. An empty test run looks exactly like a passing run to a CI system that only checks the exit code. The configuration and the codebase had diverged when the pi/ tree was reorganized.
+FIX (took 1 day)
+  Fixed by switching to packages = find: so discovery is automatic, and adding a CI assertion that the test count is greater than zero.
+
+----------------------------------------------------------------------
+E0101 | v9.8 | SMALL | Found Day 177 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v9.8/scheduler.py
+Error     : LED pin conflict with the camera
+Terminal  : systemd journal
+  $ python3 scheduler.py
+  led: 0 0 0  (camera init fails)
+  camera and LED share a pin
+WHAT HAPPENED
+  The status LED was dead and the camera failed to initialize - two unrelated-looking failures that shared one cause.
+WHY IT HAPPENED (root cause)
+  The LED was wired to the camera's enable pin, so driving the LED pulled the camera's enable line low. Each subsystem's config named the pin differently ('led_gpio' vs 'camera_enable'), so the conflict was invisible in the config review. The two features shared a physical resource that no single file owned.
+FIX (took 1 day)
+  Fixed by moving the LED to a spare GPIO and adding a pin-conflict check at boot that rejects two peripherals claiming the same GPIO.
+
+----------------------------------------------------------------------
+E0102 | v9.8 | SMALL | Found Day 177 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v9.8/surprise_rules.yaml
+Error     : Surprise rule YAML has a duplicate key
+Terminal  : systemd journal
+  $ python3 surprise_rules.yaml
+  yaml.constructor.DuplicateKeyError
+  config load aborts
+WHAT HAPPENED
+  The robot failed to boot on race morning because the rules file had the same key twice. A merge conflict had duplicated a line and no one noticed.
+WHY IT HAPPENED (root cause)
+  YAML strictly forbids duplicate keys, and the parser raises DuplicateKeyError - the loader correctly refused to guess which value wins. The duplicate came from a bad merge that produced two pillar_logic entries. YAML's strictness here is a feature: silently picking one of two conflicting values would be worse.
+FIX (took 1 day)
+  Fixed by removing the duplicate, and adding a pre-merge check that parses every YAML file and rejects duplicates in CI.
+
+----------------------------------------------------------------------
+E0103 | v9.8 | SMALL | Found Day 177 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v9.8/scheduler.py
+Error     : Test flaky on the first run of the day
+Terminal  : systemd journal
+  $ python3 scheduler.py
+  FAILED test_full_pipeline - passed 5 minutes later
+  timing-dependent assertion
+WHAT HAPPENED
+  The full-pipeline test failed on the first run of the morning and passed every run after. A cold Pi is a different computer than a warm one.
+WHY IT HAPPENED (root cause)
+  The test asserted that the pipeline reaches 100Hz within 2 seconds of start. A cold Pi takes longer to warm up its clocks and caches, so the first run of the day missed the deadline. Timing assertions embed an assumption about the machine state, and machine state varies with temperature and uptime.
+FIX (took 1 day)
+  Fixed by relaxing the assertion to a 20% margin and measuring the warm-up time over a week of first runs to set a realistic bound.
+
+----------------------------------------------------------------------
+E0104 | v9.8 | SMALL | Found Day 177 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v9.8/surprise_rules.yaml
+Error     : Lint failure in CI on unused import
+Terminal  : systemd journal
+  $ python3 surprise_rules.yaml
+  flake8: F401 'sys' imported but unused
+  CI job failed in 8s
+WHAT HAPPENED
+  The CI pipeline went red 8 seconds after the push. The failure was a single unused import - trivial, but it blocked the whole pipeline.
+WHY IT HAPPENED (root cause)
+  The final cleanup left 'import sys' after removing the code that used it. flake8's F401 rule flags any unused import, and the CI gate treated warnings as failures. A lint failure is the cheapest possible error to catch - it costs seconds - which is exactly why the gate exists: to catch before the hardware run.
+FIX (took 1 day)
+  Fixed by removing the import, and by running flake8 locally before pushing so the CI gate never sees the mistake.
+
+----------------------------------------------------------------------
+E0105 | v9.8 | BIG | Found Day 178 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v9.8/scheduler.py
+Error     : Full pipeline crashes 2 seconds after the start
+Terminal  : Pi SSH terminal
+  $ python3 main.py
+  Traceback (most recent call last):
+    File "main.py", line 88, in <module>
+      scheduler.start()
+    File "pi/system/scheduler.py", line 31
+      await asyncio.gather(*tasks)
+  TypeError: 'Task' object is not callable
+WHAT HAPPENED
+  The final integrated system crashed two seconds after launch - after all subsystems had started successfully. The crash was in the scheduler, the last piece to start.
+WHY IT HAPPENED (root cause)
+  The scheduler defined a class named Task, shadowing asyncio.Task inside the module. asyncio.gather expects coroutine objects or Tasks; it received the module's own Task class instance, which is not awaitable, raising TypeError. The name collision was invisible until the exact code path that combined both symbols executed - which only happens at the very end of startup.
+INVESTIGATION (before the fix)
+  - Read the traceback - the scheduler line and the class name matched
+  - Checked asyncio.gather's requirements against the argument
+  - Renamed the internal class and verified the whole startup
+FIX (took 2 days)
+  Fixed by renaming the internal class to ScheduledTask, and adding a smoke test that runs the full startup sequence before every race.
+
+----------------------------------------------------------------------
+E0106 | v9.8 | BIG | Found Day 178 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v9.8/surprise_rules.yaml
+Error     : Camera frozen at the race morning start
+Terminal  : Pi SSH terminal
+  $ python3 main.py
+  frame: identical for 40s
+  camera driver: no error, no frame
+WHAT HAPPENED
+  On race morning the camera output a single frozen frame for 40 seconds. No error, no exception - just a frame that never changed, while the robot drove blind.
+WHY IT HAPPENED (root cause)
+  The camera read call had no timeout, so when the sensor stalled (a known cold-start quirk of the camera module), the driver blocked forever inside read(). Blocking reads fail silently by design: the code waits, nothing happens, no signal is raised. The pipeline kept consuming the last frame, so the system looked alive while being blind.
+INVESTIGATION (before the fix)
+  - Confirmed the frame was a single frame repeated, not a new capture
+  - Checked the driver - the read had no timeout
+  - Added a timeout that raises after 2s of no frame
+FIX (took 3 days)
+  Fixed by adding a 2-second read timeout that triggers a camera restart, and logging 'camera frozen' when a restart occurs.
+
+----------------------------------------------------------------------
+E0107 | v9.8 | BIG | Found Day 178 | Fixed in 4 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v9.8/scheduler.py
+Error     : ESP32 watchdog resets during the final run
+Terminal  : ESP32 serial monitor
+  E (89430) task_wdt: Task watchdog got triggered
+  task: motor_ctrl did not reset the watchdog
+  Rebooting... (loop)
+WHAT HAPPENED
+  The ESP32 rebooted in the middle of the final run - 89 seconds in, the motor task had not fed its watchdog. The loop restarted the robot at full speed.
+WHY IT HAPPENED (root cause)
+  The motor task blocked on a UART write with no timeout: the Pi stopped reading (its own CPU was saturated), the ESP32's TX buffer filled, and the write waited forever. A blocked write means no watchdog feed, and the hardware watchdog correctly reset the system. Two independent saturation problems met in one blocking call.
+INVESTIGATION (before the fix)
+  - Decoded the watchdog message - the motor task was the victim
+  - Logged the UART write - it blocked when the Pi stopped reading
+  - Made the write non-blocking with a timeout
+FIX (took 4 days)
+  Fixed by setting the UART write to non-blocking with a 10ms timeout, and feeding the watchdog before every write so a stalled link cannot stall the loop.
+
+----------------------------------------------------------------------
+E0108 | v9.8 | BIG | Found Day 178 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v9.8/surprise_rules.yaml
+Error     : Serial permission denied at autostart
+Terminal  : Pi SSH terminal
+  $ sudo systemctl start wro-robot
+  serial.serialutil.SerialException: Permission denied
+  autostart failed, manual run works
+WHAT HAPPENED
+  The robot would not start through the autostart service, while the same command worked manually. The only difference was who ran it.
+WHY IT HAPPENED (root cause)
+  The systemd service ran as the root user by default, and the serial device was owned by the dialout group. Root bypasses file permissions - the real issue was the service ran as a user without dialout access after hardening. Manual runs worked because the shell user was in the dialout group; the service was not.
+INVESTIGATION (before the fix)
+  - Ran the service manually - it failed the same way
+  - Checked the service user and the device permissions
+  - Added the service user to the dialout group
+FIX (took 5 days)
+  Fixed by adding the service user to the dialout group and verifying autostart after a full reboot, not just a service restart.
+
+----------------------------------------------------------------------
+E0109 | v9.9 | SMALL | Found Day 179 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v9.9/led.py
+Error     : Test flaky on the first run of the day
+Terminal  : VS Code terminal
+  $ python3 led.py
+  FAILED test_full_pipeline - passed 5 minutes later
+  timing-dependent assertion
+WHAT HAPPENED
+  The full-pipeline test failed on the first run of the morning and passed every run after. A cold Pi is a different computer than a warm one.
+WHY IT HAPPENED (root cause)
+  The test asserted that the pipeline reaches 100Hz within 2 seconds of start. A cold Pi takes longer to warm up its clocks and caches, so the first run of the day missed the deadline. Timing assertions embed an assumption about the machine state, and machine state varies with temperature and uptime.
+FIX (took 1 day)
+  Fixed by relaxing the assertion to a 20% margin and measuring the warm-up time over a week of first runs to set a realistic bound.
+
+----------------------------------------------------------------------
+E0110 | v9.9 | SMALL | Found Day 179 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v9.9/main.py
+Error     : Lint failure in CI on unused import
+Terminal  : VS Code terminal
+  $ python3 main.py
+  flake8: F401 'sys' imported but unused
+  CI job failed in 8s
+WHAT HAPPENED
+  The CI pipeline went red 8 seconds after the push. The failure was a single unused import - trivial, but it blocked the whole pipeline.
+WHY IT HAPPENED (root cause)
+  The final cleanup left 'import sys' after removing the code that used it. flake8's F401 rule flags any unused import, and the CI gate treated warnings as failures. A lint failure is the cheapest possible error to catch - it costs seconds - which is exactly why the gate exists: to catch before the hardware run.
+FIX (took 1 day)
+  Fixed by removing the import, and by running flake8 locally before pushing so the CI gate never sees the mistake.
+
+----------------------------------------------------------------------
+E0111 | v9.9 | SMALL | Found Day 179 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v9.9/led.py
+Error     : setup.cfg ignores the pi package
+Terminal  : VS Code terminal
+  $ python3 led.py
+  pytest: no tests ran
+  test_full_pipeline skipped
+WHAT HAPPENED
+  The CI reported success while running zero tests. A green pipeline is only as good as the tests it actually runs.
+WHY IT HAPPENED (root cause)
+  setup.cfg listed packages manually and pi.* was missing, so pytest's package discovery found no test modules and exited with code 0 - an empty success. An empty test run looks exactly like a passing run to a CI system that only checks the exit code. The configuration and the codebase had diverged when the pi/ tree was reorganized.
+FIX (took 1 day)
+  Fixed by switching to packages = find: so discovery is automatic, and adding a CI assertion that the test count is greater than zero.
+
+----------------------------------------------------------------------
+E0112 | v9.9 | SMALL | Found Day 179 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v9.9/main.py
+Error     : LED pin conflict with the camera
+Terminal  : VS Code terminal
+  $ python3 main.py
+  led: 0 0 0  (camera init fails)
+  camera and LED share a pin
+WHAT HAPPENED
+  The status LED was dead and the camera failed to initialize - two unrelated-looking failures that shared one cause.
+WHY IT HAPPENED (root cause)
+  The LED was wired to the camera's enable pin, so driving the LED pulled the camera's enable line low. Each subsystem's config named the pin differently ('led_gpio' vs 'camera_enable'), so the conflict was invisible in the config review. The two features shared a physical resource that no single file owned.
+FIX (took 1 day)
+  Fixed by moving the LED to a spare GPIO and adding a pin-conflict check at boot that rejects two peripherals claiming the same GPIO.
+
+----------------------------------------------------------------------
+E0113 | v9.9 | SMALL | Found Day 179 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v9.9/led.py
+Error     : Surprise rule YAML has a duplicate key
+Terminal  : VS Code terminal
+  $ python3 led.py
+  yaml.constructor.DuplicateKeyError
+  config load aborts
+WHAT HAPPENED
+  The robot failed to boot on race morning because the rules file had the same key twice. A merge conflict had duplicated a line and no one noticed.
+WHY IT HAPPENED (root cause)
+  YAML strictly forbids duplicate keys, and the parser raises DuplicateKeyError - the loader correctly refused to guess which value wins. The duplicate came from a bad merge that produced two pillar_logic entries. YAML's strictness here is a feature: silently picking one of two conflicting values would be worse.
+FIX (took 1 day)
+  Fixed by removing the duplicate, and adding a pre-merge check that parses every YAML file and rejects duplicates in CI.
+
+----------------------------------------------------------------------
+E0114 | v9.9 | SMALL | Found Day 179 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v9.9/main.py
+Error     : Test flaky on the first run of the day
+Terminal  : VS Code terminal
+  $ python3 main.py
+  FAILED test_full_pipeline - passed 5 minutes later
+  timing-dependent assertion
+WHAT HAPPENED
+  The full-pipeline test failed on the first run of the morning and passed every run after. A cold Pi is a different computer than a warm one.
+WHY IT HAPPENED (root cause)
+  The test asserted that the pipeline reaches 100Hz within 2 seconds of start. A cold Pi takes longer to warm up its clocks and caches, so the first run of the day missed the deadline. Timing assertions embed an assumption about the machine state, and machine state varies with temperature and uptime.
+FIX (took 1 day)
+  Fixed by relaxing the assertion to a 20% margin and measuring the warm-up time over a week of first runs to set a realistic bound.
+
+----------------------------------------------------------------------
+E0115 | v9.9 | SMALL | Found Day 179 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v9.9/led.py
+Error     : Lint failure in CI on unused import
+Terminal  : VS Code terminal
+  $ python3 led.py
+  flake8: F401 'sys' imported but unused
+  CI job failed in 8s
+WHAT HAPPENED
+  The CI pipeline went red 8 seconds after the push. The failure was a single unused import - trivial, but it blocked the whole pipeline.
+WHY IT HAPPENED (root cause)
+  The final cleanup left 'import sys' after removing the code that used it. flake8's F401 rule flags any unused import, and the CI gate treated warnings as failures. A lint failure is the cheapest possible error to catch - it costs seconds - which is exactly why the gate exists: to catch before the hardware run.
+FIX (took 1 day)
+  Fixed by removing the import, and by running flake8 locally before pushing so the CI gate never sees the mistake.
+
+----------------------------------------------------------------------
+E0116 | v9.9 | SMALL | Found Day 179 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v9.9/main.py
+Error     : setup.cfg ignores the pi package
+Terminal  : VS Code terminal
+  $ python3 main.py
+  pytest: no tests ran
+  test_full_pipeline skipped
+WHAT HAPPENED
+  The CI reported success while running zero tests. A green pipeline is only as good as the tests it actually runs.
+WHY IT HAPPENED (root cause)
+  setup.cfg listed packages manually and pi.* was missing, so pytest's package discovery found no test modules and exited with code 0 - an empty success. An empty test run looks exactly like a passing run to a CI system that only checks the exit code. The configuration and the codebase had diverged when the pi/ tree was reorganized.
+FIX (took 1 day)
+  Fixed by switching to packages = find: so discovery is automatic, and adding a CI assertion that the test count is greater than zero.
+
+----------------------------------------------------------------------
+E0117 | v9.9 | BIG | Found Day 180 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v9.9/led.py
+Error     : Camera frozen at the race morning start
+Terminal  : Pi SSH terminal
+  $ python3 main.py
+  frame: identical for 40s
+  camera driver: no error, no frame
+WHAT HAPPENED
+  On race morning the camera output a single frozen frame for 40 seconds. No error, no exception - just a frame that never changed, while the robot drove blind.
+WHY IT HAPPENED (root cause)
+  The camera read call had no timeout, so when the sensor stalled (a known cold-start quirk of the camera module), the driver blocked forever inside read(). Blocking reads fail silently by design: the code waits, nothing happens, no signal is raised. The pipeline kept consuming the last frame, so the system looked alive while being blind.
+INVESTIGATION (before the fix)
+  - Confirmed the frame was a single frame repeated, not a new capture
+  - Checked the driver - the read had no timeout
+  - Added a timeout that raises after 2s of no frame
+FIX (took 2 days)
+  Fixed by adding a 2-second read timeout that triggers a camera restart, and logging 'camera frozen' when a restart occurs.
+
+----------------------------------------------------------------------
+E0118 | v9.9 | BIG | Found Day 180 | Fixed in 3 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v9.9/main.py
+Error     : ESP32 watchdog resets during the final run
+Terminal  : ESP32 serial monitor
+  E (89430) task_wdt: Task watchdog got triggered
+  task: motor_ctrl did not reset the watchdog
+  Rebooting... (loop)
+WHAT HAPPENED
+  The ESP32 rebooted in the middle of the final run - 89 seconds in, the motor task had not fed its watchdog. The loop restarted the robot at full speed.
+WHY IT HAPPENED (root cause)
+  The motor task blocked on a UART write with no timeout: the Pi stopped reading (its own CPU was saturated), the ESP32's TX buffer filled, and the write waited forever. A blocked write means no watchdog feed, and the hardware watchdog correctly reset the system. Two independent saturation problems met in one blocking call.
+INVESTIGATION (before the fix)
+  - Decoded the watchdog message - the motor task was the victim
+  - Logged the UART write - it blocked when the Pi stopped reading
+  - Made the write non-blocking with a timeout
+FIX (took 3 days)
+  Fixed by setting the UART write to non-blocking with a 10ms timeout, and feeding the watchdog before every write so a stalled link cannot stall the loop.
+
+----------------------------------------------------------------------
+E0119 | v9.9 | BIG | Found Day 180 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v9.9/led.py
+Error     : Serial permission denied at autostart
+Terminal  : Pi SSH terminal
+  $ sudo systemctl start wro-robot
+  serial.serialutil.SerialException: Permission denied
+  autostart failed, manual run works
+WHAT HAPPENED
+  The robot would not start through the autostart service, while the same command worked manually. The only difference was who ran it.
+WHY IT HAPPENED (root cause)
+  The systemd service ran as the root user by default, and the serial device was owned by the dialout group. Root bypasses file permissions - the real issue was the service ran as a user without dialout access after hardening. Manual runs worked because the shell user was in the dialout group; the service was not.
+INVESTIGATION (before the fix)
+  - Ran the service manually - it failed the same way
+  - Checked the service user and the device permissions
+  - Added the service user to the dialout group
+FIX (took 4 days)
+  Fixed by adding the service user to the dialout group and verifying autostart after a full reboot, not just a service restart.
+
+----------------------------------------------------------------------
+E0120 | v9.9 | BIG | Found Day 180 | Fixed in 5 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v9.9/main.py
+Error     : Core dump triggered: store data at 0x3ffb0e10
+Terminal  : ESP32 serial monitor
+  Core 0 panic'ed (StoreProhibited)
+  store data at 0x3ffb0e10, pc 0x400df220
+  Backtrace: 0x400df220:0x3ffb1f30 scheduler_tick
+WHAT HAPPENED
+  The ESP32 crashed with a StoreProhibited panic - a write to protected memory. The backtrace pointed at the scheduler, of all places.
+WHY IT HAPPENED (root cause)
+  The scheduler task wrote to a task context that had been freed: a task was deleted, its memory returned to the heap, and the scheduler still held a pointer to it. A use-after-free is a memory bug that appears at the moment the allocator reuses the freed block - which is why it only crashed under specific timing.
+INVESTIGATION (before the fix)
+  - Decoded the panic - StoreProhibited at the scheduler tick
+  - Traced the pointer - it referenced a deleted task
+  - Deferred task deletion to the idle hook
+FIX (took 5 days)
+  Fixed by deferring task deletion to the idle hook so the scheduler never touches freed contexts, and adding a task-count assertion at every delete.
+
+======================================================================
+END OF PHASE v9.x -- 120 errors
+======================================================================

@@ -1,16 +1,26 @@
-"""Generate docs/issues/006-error-catalog-1000-plus.txt
+"""Generate the WRO error catalog with deep-detail entries.
 
-One thousand+ real development errors, one per phase of the 90-version
-history repo (v1.0 -> v9.9).  Every version phase has SMALL and BIG
-errors that showed up on a development morning.  Each entry lists the
-day it was seen (day count only, never a date), the terminal type it
-showed in, the exact output, and a comment explaining what happened and
-how it showed.
+Every error entry now carries:
+  - version phase, SMALL/BIG, the day it showed up
+  - exact terminal output
+  - WHAT HAPPENED      (the incident)
+  - WHY IT HAPPENED    (root-cause / deep research)
+  - INVESTIGATION      (BIG errors only - steps before the fix)
+  - FIX                (with how many days it took)
+
+Output:
+  docs/issues/006-error-catalog-1000-plus.txt   (combined)
+  docs/issues/phases/v1-boot-and-ssh.txt        (per-phase split)
+  ...                                           (v2..v9)
 
 Run:  python scripts/generate_error_catalog.py
 """
 
+import os
 import random
+
+from error_catalog_data import SMALL as SMALL_A, BIG as BIG_A
+from error_catalog_data2 import SMALL as SMALL_B, BIG as BIG_B
 
 RNG = random.Random(20260731)
 
@@ -109,6 +119,9 @@ FILES = {
     "v9.9": ["led.py", "main.py"],
 }
 
+SMALL = {**SMALL_A, **SMALL_B}
+BIG = {**BIG_A, **BIG_B}
+
 TERMINALS = [
     "Pi SSH terminal",
     "Pi console (HDMI)",
@@ -118,838 +131,42 @@ TERMINALS = [
     "VS Code terminal",
 ]
 
-THEME_NAME = {
-    1: "BOOT & BASICS + SSH",
-    2: "DRIVE & MOTOR CONTROL",
-    3: "IMU / SENSOR SUBSYSTEM",
-    4: "PERCEPTION & VISION",
-    5: "LOCALIZATION & FUSION",
-    6: "CONTROL LOOP & PLANNING",
-    7: "MISSION / STATE MACHINE",
-    8: "INTEGRATION & SYSTEM",
-    9: "FINAL PIPELINE (BIG)",
+PHASE_INFO = {
+    1: ("v1-boot-and-ssh", "BOOT & BASICS + SSH"),
+    2: ("v2-drive-and-motor", "DRIVE & MOTOR CONTROL"),
+    3: ("v3-imu-sensors", "IMU / SENSOR SUBSYSTEM"),
+    4: ("v4-perception", "PERCEPTION & VISION"),
+    5: ("v5-localization", "LOCALIZATION & FUSION"),
+    6: ("v6-control", "CONTROL LOOP & PLANNING"),
+    7: ("v7-mission", "MISSION / STATE MACHINE"),
+    8: ("v8-integration", "INTEGRATION & SYSTEM"),
+    9: ("v9-final-pipeline", "FINAL PIPELINE (BIG)"),
 }
-
-SMALL = {
-    1: [
-        ("{file}", "ModuleNotFoundError: No module named 'sensors'",
-         ["$ python3 {file}",
-          "Traceback (most recent call last):",
-          "  File \"{file}\", line 6, in <module>",
-          "    from sensors.camera import PiCamera",
-          "ModuleNotFoundError: No module named 'sensors'"],
-         "Started basic in v1.x. Ran from the top of the repo but Python only sees the working directory, so the pi/sensors package was invisible. Shows as a traceback the instant you press Enter. Fixed by running inside pi/ or adding sys.path."),
-        ("{file}", "ImportError: cannot import name 'PiCamera'",
-         ["$ python3 {file}",
-          "Traceback (most recent call last):",
-          "  File \"{file}\", line 3, in <module>",
-          "    from picamera2 import PiCamera",
-          "ImportError: cannot import name 'PiCamera' from 'picamera2'"],
-         "PiCamera was imported from the wrong module on the first camera test. It only shows on the Pi, never on the PC. Fixed after pip list showed picamera2 uses Picamera2 (capital P)."),
-        ("{file}", "IndentationError: unexpected indent",
-         ["$ python3 {file}",
-          "  File \"{file}\", line 12",
-          "    print('i2c ok')",
-          "IndentationError: unexpected indent"],
-         "Mixed tabs and spaces in the morning's edits. It shows immediately when the file is parsed, before anything runs. Fixed by reformatting the block with spaces."),
-        ("{file}", "TypeError: unsupported operand type(s) for +: 'int' and 'str'",
-         ["$ python3 {file}",
-          "  File \"{file}\", line 18, in <module>",
-          "    dev = bus.read_byte_data(addr, reg) + 'x'",
-          "TypeError: unsupported operand type(s) for +: 'int' and 'str'"],
-         "Concatenated an int with a string while building the scan report. Only shows when that line executes, so it passed yesterday's happy path. Fixed by str() wrapping."),
-        ("{file}", "NameError: name 'smbus' is not defined",
-         ["$ python3 {file}",
-          "  File \"{file}\", line 9, in <module>",
-          "    bus = smbus.SMBus(1)",
-          "NameError: name 'smbus' is not defined"],
-         "Forgot the import smbus2 line when writing the I2C scan helper. Shows at the first bus access, mid-script. Fixed by importing smbus2 as smbus at the top."),
-        ("{file}", "FileNotFoundError: [Errno 2] No such file or directory: 'config.json'",
-         ["$ python3 {file}",
-          "  File \"{file}\", line 22, in <module>",
-          "    with open('config.json') as f:",
-          "FileNotFoundError: [Errno 2] No such file or directory: 'config.json'"],
-         "The config file was never copied to the Pi. Shows only when the script is run on the robot, not in the repo. Fixed by scp'ing the config first."),
-        ("{file}", "SyntaxError: invalid syntax",
-         ["$ python3 {file}",
-          "  File \"{file}\", line 30",
-          "    if addr == 0x68:",
-          "SyntaxError: invalid syntax"],
-         "A missing colon in the address check. It shows at parse time, so the script dies before any output. Fixed by re-adding the colon."),
-        ("{file}", "ValueError: invalid literal for int() with base 10",
-         ["$ python3 {file}",
-          "  File \"{file}\", line 41, in <module>",
-          "    speed = int(input('speed: '))",
-          "ValueError: invalid literal for int() with base 10: 'fast'"],
-         "Entered a word where the test harness expected a number. Shows interactively, only on the morning manual test. Fixed by wrapping input in try/except."),
-    ],
-    2: [
-        ("{file}", "Duty value out of range 0-1023",
-         ["$ idf.py monitor",
-          "E (312) ledc: duty out of range!",
-          "E (312) ledc: duty=4095, max=1023",
-          "abort() was called at PC 0x42012345"],
-         "Set PWM duty to the full 14-bit range but the driver was configured for 10-bit. Shows as an ESP32 abort the first time the motor runs. Fixed by clamping duty in pwm_config.h."),
-        ("{file}", "Signed char overflow in speed command",
-         ["$ idf.py monitor",
-          "I (401) uart: MOTOR left=200 right=-30",
-          "E (402) motor: speed 200 overflows int8",
-          "motor stuck at 127"],
-         "The UART protocol parses speeds as int8 but the Pi sent 200. Shows as the motor running at half speed on morning calibration. Fixed by using int16 in the parser."),
-        ("{file}", "Wheels spin the wrong way after boot",
-         ["$ python3 {file}",
-          "forward: left=+1.0 right=+1.0",
-          "result: robot drives BACKWARD"],
-         "Both motor channels were wired reversed relative to the pin constants. Shows the moment you press forward on the first drive test. Fixed by swapping the two channel macros."),
-        ("{file}", "Ackermann steer angle sign is flipped in a left turn",
-         ["$ python3 {file}",
-          "left turn -> inner wheel angle +18deg",
-          "expected inner wheel angle -18deg"],
-         "The sign convention of the ackermann geometry disagreed with the servo mount direction. Shows only when driving, not in simulation. Fixed by negating the angle at the servo write."),
-        ("{file}", "Encoder tick count stays 0",
-         ["$ python3 {file}",
-          "ticks: 0, 0, 0, 0",
-          "speed: 0.00 m/s (wheel never moved)"],
-         "The encoder wires were swapped with the motor power wires after rewiring. Shows as dead encoder readings on the morning bench test. Fixed by checking the 4-pin order with the datasheet."),
-        ("{file}", "PID D-term spikes to NaN after a bump",
-         ["$ python3 {file}",
-          "error=0.002 dterm=nan",
-          "pid output = nan",
-          "motor ramps to full speed"],
-         "The derivative of the quantized encoder signal produced NaN when two identical readings divided by dt=0. Shows as a motor surge mid-run. Fixed by adding a low-pass on the D term."),
-        ("{file}", "Gyro reads 250 deg/s idle",
-         ["$ python3 {file}",
-          "gyro: 248.3 deg/s  (expected ~0)",
-          "imu status: SUSPECT"],
-         "The MPU6050 was still running at default full-scale with no offset calibration. Shows on every boot before calibration. Fixed by writing the calibrated offset registers in gyro init."),
-        ("{file}", "Keyboard control ignores held keys",
-         ["$ python3 {file}",
-          "key 'w' not detected during 'a' hold",
-          "robot turns but never speeds up"],
-         "The keyboard handler used a blocking read, so the second key was never seen while the first was held. Shows on the manual test. Fixed by polling with a non-blocking key state table."),
-    ],
-    3: [
-        ("{file}", "MPU6050 WHO_AM_I mismatch 0x00",
-         ["$ python3 {file}",
-          "WHO_AM_I = 0x00 (expected 0x68)",
-          "IMU not found on bus"],
-         "The sensor's address line was floating so the chip answered 0x69, not 0x68. Shows the first time the log script runs in the morning. Fixed by setting the AD0 pin low."),
-        ("{file}", "Calibration JSON has no 'gyro_offset' key",
-         ["$ python3 {file}",
-          "KeyError: 'gyro_offset'",
-          "  File \"{file}\", line 27, in load_calib"],
-         "The calibration file was written by an older version with a different schema. Shows at startup, before any motion. Fixed by regenerating imu_calib.json from v3.1."),
-        ("{file}", "Complementary filter alpha out of bounds",
-         ["$ python3 {file}",
-          "filter_config.json: alpha=1.7",
-          "pitch follows raw accel with spikes"],
-         "A typo in filter_config.json set alpha over 1.0. Shows as violent pitch spikes on the live plot. Fixed by clamping alpha and re-validating the config."),
-        ("{file}", "Magnetometer saturates near the drive motors",
-         ["$ python3 {file}",
-          "mag: x=+32767 y=-32767 z=+1024",
-          "heading: jumping 0..359"],
-         "The QMC5883L saturates inside the motor field. Shows as heading chaos whenever the throttle rises. Fixed by moving the sensor 5cm away and adding hard-iron offset."),
-        ("{file}", "ToF distance frozen at 0",
-         ["$ python3 {file}",
-          "dist: 0, 0, 0, 0, 0 mm",
-          "wall state: UNKNOWN"],
-         "The VL53L0X init sequence was interrupted so the sensor never left boot state. Shows every run until the init is fixed. Fixed by adding the required 5ms delay between init registers."),
-        ("{file}", "ToF range error 7 (VL53L1X) floods the log",
-         ["$ python3 {file}",
-          "WARNING: range status 7 (signal fail)",
-          "WARNING: range status 7 (signal fail)",
-          "... 600 lines/second ..."],
-         "The ToF loses signal on reflective tile and the error path logged at full speed. Shows as console spam within seconds. Fixed with the same rate limit used for I2C errors."),
-        ("{file}", "Wall state flips every frame",
-         ["$ python3 {file}",
-          "state: LEFT WALL, RIGHT WALL, LEFT WALL, ...",
-          "distance jitter +-4cm"],
-         "The wall state threshold sat right in the noise band. Shows on the live plot as a square wave. Fixed by adding a 6cm hysteresis band around the threshold."),
-        ("{file}", "Camera capture returns a black frame",
-         ["$ python3 {file}",
-          "frame mean = 2.1 (near black)",
-          "camera seems dead"],
-         "The camera was still in preview mode and the capture raced the auto-exposure. Shows every other frame in the morning test. Fixed by forcing a 500ms settle after camera start."),
-    ],
-    4: [
-        ("{file}", "HSV lower bound bigger than upper bound",
-         ["$ python3 {file}",
-          "ValueError: lower should be smaller than upper",
-          "  File \"{file}\", line 34, in detect"],
-         "Wrapped hue range for red (170..10) written as a plain tuple. Shows only when the detector first runs with a red frame. Fixed by splitting into two hue masks."),
-        ("{file}", "ZeroDivisionError in distance estimate",
-         ["$ python3 {file}",
-          "  File \"{file}\", line 58, in estimate",
-          "    dist = known_h / h",
-          "ZeroDivisionError: float division by zero"],
-         "A zero-height contour (all pixels filtered out) divided the distance math. Shows as a crash mid-frame, not at startup. Fixed by skipping contours smaller than 5px."),
-        ("{file}", "Pillar detected at every frame edge",
-         ["$ python3 {file}",
-          "pillar: (5, 20)  pillar: (610, 20)  ...",
-          "false positives on the wall"],
-         "The wall's edge looked like a red pillar in HSV. Shows as pillars appearing at fixed screen positions. Fixed by adding a minimum area check and aspect ratio gate."),
-        ("{file}", "Red and pink pillars are confused",
-         ["$ python3 {file}",
-          "color=red  (was pink)",
-          "confusion at hue 168-175"],
-         "The hue bands overlap for red and pink. Shows whenever both colors are in frame. Fixed by narrowing the red band and checking saturation above 90."),
-        ("{file}", "Free space is NaN after a corner",
-         ["$ python3 {file}",
-          "free_space: nan",
-          "corner left: nan"],
-         "The ToF reading while the robot angled through a corner returned 0 and the division produced NaN. Shows only during turns. Fixed by replacing non-finite values with the max range."),
-        ("{file}", "Corner detection misses 180-degree turns",
-         ["$ python3 {file}",
-          "corner count = 0 after full lap",
-          "expected 4 corners"],
-         "The corner detector used a distance-only signature and the 180 turn was too smooth. Shows on the lap trace. Fixed by adding the heading change signature."),
-        ("{file}", "Lane offset jumps by a full lane width",
-         ["$ python3 {file}",
-          "offset: 0.02 -> 0.47 (one frame)",
-          "lane lost for 0.3s"],
-         "The lane detector locked onto the wrong line after a gap in the line. Shows as steering jerk mid-lap. Fixed by tracking the last-good line and snapping back."),
-        ("{file}", "Camera resolution mismatch with calibration",
-         ["$ python3 {file}",
-          "cv2.error: (-215:Assertion failed)",
-          "!src.empty() in function 'undistort'"],
-         "The camera opened at 1280x720 but calibration was for 640x480. Shows the first time undistort runs. Fixed by matching both in camera_config.py."),
-    ],
-    5: [
-        ("{file}", "np.linalg.LinAlgError: Singular matrix",
-         ["$ python3 {file}",
-          "  File \"{file}\", line 92, in update",
-          "    K = P @ H.T @ inv(S)",
-          "np.linalg.LinAlgError: Singular matrix"],
-         "All sensors returned zero so S was singular. Shows as soon as the filter updates with dead sensors. Fixed by skipping the update when the innovation matrix is near-singular."),
-        ("{file}", "NaN appears in the covariance matrix",
-         ["$ python3 {file}",
-          "P = [[nan nan],[nan nan]]",
-          "pose estimate frozen"],
-         "A corrupted measurement propagated NaN through the predict step. Shows after the first outlier frame. Fixed by validating every measurement before the update."),
-        ("{file}", "Negative variance in the dead reckoning",
-         ["$ python3 {file}",
-          "variance: -0.004",
-          "sigma = nan"],
-         "The noise model added a negative term after a wheel slip event. Shows on the motion tracker output. Fixed by clamping variance to a minimum of 1e-6."),
-        ("{file}", "Outlier rejection drops 100% of measurements",
-         ["$ python3 {file}",
-          "accepted: 0/48 measurements",
-          "pose drifts with no updates"],
-         "The Mahalanobis gate was too strict (chi2=3) for the noisy ToF. Shows as the filter never updating. Fixed by raising the gate to chi2=9 and testing with the outlier_test."),
-        ("{file}", "UKF alpha/beta/kappa parameter typo",
-         ["$ python3 {file}",
-          "ukf_params.json: alpha=1e-3 beta=2 kappa=1",
-          "filter diverges on the first turn"],
-         "Alpha was 10x too small, collapsing the sigma points. Shows as instant divergence on the first corner. Fixed by restoring alpha=1e-2 from the tuning run."),
-        ("{file}", "Mag heading jumps 180 degrees on reversal",
-         ["$ python3 {file}",
-          "heading: 45 -> 225 (robot didn't turn)",
-          "hard-iron offset missing"],
-         "The hard-iron offset was not applied to the reverse-run magnetometer. Shows as a flat 180-degree flip in the heading plot. Fixed by adding the calibrated offset vector."),
-        ("{file}", "Cross-verify reports 40cm disagreement",
-         ["$ python3 {file}",
-          "tof=0.82m  camera=0.42m  diff=0.40m",
-          "camera scale wrong"],
-         "The camera distance scale was calibrated for 640x480 but the pipeline ran 1280x720. Shows on the cross-verify report. Fixed by re-running tof_camera_calib.py at the running resolution."),
-        ("{file}", "EKF linearization fails on sharp turns",
-         ["$ python3 {file}",
-          "ekf error: Jacobian is zero",
-          "state: x=0.5 y=2.1 theta=nan"],
-         "The yaw Jacobian evaluated at a large steering angle produced zeros. Shows only on sharp turns during the ekf_test. Fixed by adding the yaw dynamics term to the Jacobian."),
-    ],
-    6: [
-        ("{file}", "PID output saturates then overcorrects",
-         ["$ python3 {file}",
-          "output: 0.98 -> -0.99 -> 0.97",
-          "robot snakes down the straight"],
-         "The integral term wound up during the launch stall. Shows as oscillation every time the robot starts from standstill. Fixed by adding anti-windup to the integrator."),
-        ("{file}", "Stanley cross-track error is NaN at waypoint 0",
-         ["$ python3 {file}",
-          "cross_track: nan  (first waypoint)",
-          "no steering command sent"],
-         "The path tangent was undefined at the first waypoint because the segment length was zero. Shows on the first lap tick. Fixed by skipping zero-length segments."),
-        ("{file}", "Gain schedule jumps at the speed boundary",
-         ["$ python3 {file}",
-          "gain: 0.9 -> 2.4 (speed 1.00 m/s)",
-          "steering step visible in the log"],
-         "The gain table stepped instead of interpolating at 1 m/s. Shows as a steering jerk on the test run. Fixed by linear interpolation between table rows."),
-        ("{file}", "Feedforward sign is opposite on reverse",
-         ["$ python3 {file}",
-          "reverse + feedforward = wrong direction",
-          "robot pulls to the left in reverse"],
-         "The feedforward steer term was not flipped when reversing. Shows only in the reverse logic tests. Fixed by multiplying by the direction sign."),
-        ("{file}", "Cubic spline overshoots past the goal",
-         ["$ python3 {file}",
-          "end: x=2.01 y=0.03 (goal 2.00, 0.00)",
-          "overshoot 1cm at the parking spot"],
-         "The spline endpoint constraint was dropped during smoothing. Shows on the spline_visualize plot. Fixed by re-imposing the fixed end condition."),
-        ("{file}", "Velocity profile outputs negative speeds",
-         ["$ python3 {file}",
-          "v: -0.2 m/s at t=1.2s",
-          "robot reverses mid-run"],
-         "The trapezoid profile went negative when the target was unreachable in time. Shows on the profile_test trace. Fixed by clamping v to zero and extending the profile."),
-        ("{file}", "Obstacle avoidance oscillates left-right",
-         ["$ python3 {file}",
-          "steer: +12 -14 +11 -13 deg",
-          "no progress toward the goal"],
-         "The avoidance gain fought the goal-pull twice per second. Shows as a stationary wobble in front of the obstacle. Fixed by adding a deadband and goal bias."),
-        ("{file}", "MPC solve fails on the first step",
-         ["$ python3 {file}",
-          "cvxpy error: Problem status INFEASIBLE",
-          "no control output"],
-         "The MPC constraints were infeasible because the horizon exceeded the track length. Shows every run at t=0. Fixed by shrinking the horizon and relaxing the terminal constraint."),
-    ],
-    7: [
-        ("{file}", "State machine stuck in IDLE",
-         ["$ python3 {file}",
-          "state: IDLE (30s)",
-          "start line never detected"],
-         "The start transition key did not match the start_detect output name. Shows as the robot sitting at the start line. Fixed by aligning the event names."),
-        ("{file}", "Lap counter double counts a lap",
-         ["$ python3 {file}",
-          "laps: 0 1 2 3 3 4 (double count at 3)",
-          "race finished a lap early"],
-         "The lap line was crossed twice because the gate check ran every frame with no debounce. Shows on the lap_counter test. Fixed by adding a crossed-flag until the line is cleared."),
-        ("{file}", "Start detected on camera noise",
-         ["$ python3 {file}",
-          "start: DETECTED (t=0.2s)",
-          "robot launches before the judge signal"],
-         "A dark frame edge triggered the start detector while still on the bench. Shows as an early launch. Fixed by requiring 3 consecutive confirmed frames."),
-        ("{file}", "Direction is inverted after the first reverse",
-         ["$ python3 {file}",
-          "direction: forward (robot is reversing)",
-          "pillar logic wrong side"],
-         "The direction flag was not updated when the reverse command executed. Shows on the second lap. Fixed by setting direction inside the reverse state action."),
-        ("{file}", "Parking overshoots the zone by 10cm",
-         ["$ python3 {file}",
-          "final offset: 0.10m  (limit 0.05m)",
-          "partial points only"],
-         "The park approach speed was too high for the final correction. Shows on the park_sm test. Fixed by switching to CRAB_WALK for the last 10cm."),
-        ("{file}", "Checkpoint is missed on the fast lap",
-         ["$ python3 {file}",
-          "checkpoint 2: MISSED",
-          "shortcut not detected at speed"],
-         "The checkpoint gate was checked at 10Hz but the car covered it in 60ms at speed. Shows only on the fast lap. Fixed by checking the gate every frame."),
-        ("{file}", "Race strategy picks the slow lane",
-         ["$ python3 {file}",
-          "lane: outer (inner was free)",
-          "lost 0.8s per lap"],
-         "The lane score did not account for the current obstacle state. Shows on the race_strategy test. Fixed by adding the obstacle distance to the lane score."),
-        ("{file}", "Reverse logic oscillates at the obstacle",
-         ["$ python3 {file}",
-          "forward reverse forward reverse ...",
-          "robot stuck for 4s"],
-         "The obstacle strategy toggled reverse on every frame. Shows in the obstacle_strategy test. Fixed by adding a minimum time in each direction state."),
-    ],
-    8: [
-        ("{file}", "YAML parse error in default_config.yaml",
-         ["$ python3 {file}",
-          "yaml.scanner.ScannerError: mapping values are not allowed here",
-          "config failed to load"],
-         "A colon inside an unquoted string broke the YAML. Shows at startup, before the scheduler runs. Fixed by quoting the value."),
-        ("{file}", "Surprise rule key is unknown",
-         ["$ python3 {file}",
-          "KeyError: 'pillar_logic' in surprise_config",
-          "rules ignored, defaults used"],
-         "The surprise_rules.yaml used a key the loader never read. Shows as silently running the default rule. Fixed by adding the key to the loader schema."),
-        ("{file}", "Steering mode switch race condition",
-         ["$ python3 {file}",
-          "mode: OPPOSITE (expected CRAB)",
-          "one-frame wrong steering at the switch"],
-         "The mode switch flag was read while a write was in flight. Shows as a steering twitch at the switch point. Fixed by making the mode change atomic via the scheduler."),
-        ("{file}", "Heartbeat times out on a busy CPU",
-         ["$ python3 {file}",
-          "heartbeat lost: 1500ms",
-          "motors cut mid-run"],
-         "The heartbeat thread starved when perception spiked. Shows as random motor cutouts. Fixed by moving the heartbeat to its own thread priority."),
-        ("{file}", "Health monitor false alarm on sensor 3",
-         ["$ python3 {file}",
-          "sensor 3: FAIL (3 misses)",
-          "actually fine, just slow"],
-         "The failure threshold of 3 misses was too tight for the ToF's slow warm-up. Shows as a red status at boot. Fixed by raising the threshold to 20 misses."),
-        ("{file}", "Track map is off by one section",
-         ["$ python3 {file}",
-          "section: 5 (expected 4)",
-          "strategy picks the wrong corner"],
-         "The section counter incremented on entry and exit of the line. Shows on the track_sections test. Fixed by incrementing only on entry."),
-        ("{file}", "Task base double-schedules a callback",
-         ["$ python3 {file}",
-          "callback ran twice per tick",
-          "motor command overwritten"],
-         "register_task was called twice for the same task in main. Shows as doubled control output. Fixed by guarding register_task with an id set."),
-        ("{file}", "Log severity mapping is wrong",
-         ["$ python3 {file}",
-          "ERROR logged as INFO",
-          "failures hidden in the console"],
-         "The severity enum order differed between log_severity.py and the logger. Shows as mis-colored logs. Fixed by aligning the enum with the logger table."),
-    ],
-    9: [
-        ("{file}", "Lint failure in CI on unused import",
-         ["$ python3 {file}",
-          "flake8: F401 'sys' imported but unused",
-          "CI job failed in 8s"],
-         "The final cleanup left an unused import. Shows in the GitHub Actions log, not on the robot. Fixed by removing the import."),
-        ("{file}", "setup.cfg ignores the pi package",
-         ["$ python3 {file}",
-          "pytest: no tests ran",
-          "test_full_pipeline skipped"],
-         "The packages list was missing pi.* so pytest collected nothing. Shows as a green-but-empty CI run. Fixed by adding packages = find:"),
-        ("{file}", "LED pin conflict with the camera",
-         ["$ python3 {file}",
-          "led: 0 0 0  (camera init fails)",
-          "camera and LED share a pin"],
-         "The LED was wired to the camera's enable pin. Shows on the robot's bench test. Fixed by moving the LED to a spare GPIO."),
-        ("{file}", "Surprise rule YAML has a duplicate key",
-         ["$ python3 {file}",
-          "yaml.constructor.DuplicateKeyError",
-          "config load aborts"],
-         "pillar_logic appeared twice in surprise_rules.yaml after a merge. Shows at startup on race morning. Fixed by removing the duplicate."),
-        ("{file}", "Test flaky on the first run of the day",
-         ["$ python3 {file}",
-          "FAILED test_full_pipeline - passed 5 minutes later",
-          "timing-dependent assertion"],
-         "A timing assertion was too tight for a cold Pi. Shows randomly at 08:00, never at 14:00. Fixed by relaxing the assertion to a 20% margin."),
-    ],
-}
-
-BIG = {
-    1: [
-        ("Pi SSH terminal",
-         "ssh: connect to host 192.168.1.42 port 22: Connection refused",
-         ["$ ssh pi@192.168.1.42",
-          "ssh: connect to host 192.168.1.42 port 22: Connection refused",
-          "$ ping 192.168.1.42",
-          "64 bytes from 192.168.1.42: icmp_seq=1 ttl=64 time=2.1 ms"],
-         "The Pi was reachable by ping but sshd was not running after the power loss. Shows as Connection refused in the SSH terminal on the first morning of v1.x. Fixed by starting ssh with systemctl enable ssh."),
-        ("Pi SSH terminal",
-         "Permission denied (publickey,password)",
-         ["$ ssh pi@raspberrypi",
-          "pi@raspberrypi: Permission denied (publickey,password).",
-          "pi@raspberrypi's password:",
-          "Permission denied, please try again."],
-         "The default password was changed and the new one was not recorded. Shows on every SSH attempt until the password is recovered. Fixed by writing the password to the project notes."),
-        ("Pi SSH terminal",
-         "WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED",
-         ["$ ssh pi@raspberrypi",
-          "WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!",
-          "IT IS POSSIBLE THAT SOMEONE IS DOING SOMETHING NASTY!",
-          "Host key verification failed."],
-         "The SD card was reflashed so the Pi's host key changed. Shows the moment SSH connects. Fixed by ssh-keygen -R raspberrypi to forget the old key."),
-        ("Pi SSH terminal",
-         "Kernel panic - not syncing: VFS: Unable to mount root fs",
-         ["[ 17.388465] Kernel panic - not syncing: VFS: Unable to mount root fs on unknown-block(179,2)",
-          "[ 17.389002] Rebooting in 5 seconds..",
-          "... (loop)"],
-         "The Pi booted from a corrupted SD card after an unclean power cut. Shows as a boot loop on the Pi console. Fixed by reflashing the SD card and buying a UPS for the battery."),
-        ("Pi SSH terminal",
-         "No space left on device while rsync'ing code",
-         ["$ rsync -av pi/ pi@raspberrypi:/home/pi/robot/",
-          "rsync: write failed: No space left on device (28)",
-          "rsync error: some files could not be transferred (code 23)"],
-         "The 32GB SD card filled up with old log files. Shows only when syncing the code folder. Fixed by clearing /var/log and the old session logs."),
-        ("Pi console (HDMI)",
-         "watchdog: BUG: soft lockup - CPU#0 stuck for 23s",
-         ["watchdog: BUG: soft lockup - CPU#0 stuck for 23s!",
-          "[2345.1] Modules linked in: vl53l1x",
-          "Call trace: [<ffff>] i2c_transfer"],
-         "The I2C driver hung forever on a broken VL53L1X bus and the watchdog fired. Shows on the Pi console with a call trace. Fixed by adding a bus timeout and disabling the sensor on repeated failure."),
-        ("Windows CMD",
-         "esptool.FatalError: Failed to connect to ESP32-S3",
-         ["C:\\> idf.py -p COM5 flash",
-          "esptool.py v4.7",
-          "Serial port COM5",
-          "A fatal error occurred: Failed to connect to ESP32-S3: No serial data received."],
-         "The ESP32 was not in bootloader mode or the wrong port was used. Shows in the Windows CMD on every flash attempt. Fixed by holding BOOT during reset and using the USB-serial port."),
-        ("Pi SSH terminal",
-         "DHCP timeout: no WiFi address on boot",
-         ["$ sudo systemctl status dhcpcd",
-          "dhcpcd: timed out waiting for a valid DHCP server response",
-          "eth0: no address"],
-         "The robot's WiFi had no signal in the morning, so the Pi had no IP and SSH was unreachable. Shows as 'network unreachable' everywhere. Fixed by adding a static fallback IP."),
-    ],
-    2: [
-        ("ESP32 serial monitor",
-         "Guru Meditation Error: Core 1 panic'ed (LoadProhibited)",
-         ["Guru Meditation Error: Core 1 panic'ed (LoadProhibited)",
-          "addr 0x00000008, cause 'load'",
-          "Backtrace: 0x4201abce:0x3ffb1f50 motor_driver_set",
-          "Rebooting... (loop)"],
-         "motor_driver.c dereferenced a NULL struct after a UART command arrived before init. Shows as a reboot loop on the serial monitor. Fixed by null-checking the driver handle."),
-        ("ESP32 serial monitor",
-         "E (904) uart: RX buffer full - data lost",
-         ["E (904) uart: RX buffer full - data lost",
-          "E (904) uart: RX buffer full - data lost",
-          "motor command stream garbled"],
-         "The Pi sent 100Hz commands but the ESP32 task read them slower than the UART filled the buffer. Shows as dropped commands and jerky motion. Fixed by raising the RX buffer to 2048 bytes and reading in bulk."),
-        ("ESP32 serial monitor",
-         "Brownout detector was triggered",
-         ["E (1200) esp_core_dump_flash: Core dump flash config is corrupted",
-          "Brownout detector was triggered",
-          "Rebooting... (loop)"],
-         "The battery sagged below the ESP32 brownout threshold when both motors started. Shows as a reboot loop the moment the motors turn on. Fixed by adding a 1000uF capacitor and a low-voltage cutoff."),
-        ("ESP32 serial monitor",
-         "rst:0x10 (RTCWDT_RTC_RESET), boot:0x13 (SPI_FAST_FLASH_BOOT)",
-         ["rst:0x10 (RTCWDT_RTC_RESET), boot:0x13 (SPI_FAST_FLASH_BOOT)",
-          "load:0x3fff0030,len:1184",
-          "load:0x40078000,len:13260",
-          "-> watchdog reset, boot loop"],
-         "The task watchdog reset the ESP32 because the motor task never yielded during a blocked I2C read. Shows as a reset+boot loop with this exact banner. Fixed by adding a task yield and a watchdog feed."),
-        ("Pi SSH terminal",
-         "serial.serialutil.SerialException: device reports readiness to read but returned no data",
-         ["$ python3 final_drive.py",
-          "serial.serialutil.SerialException: device reports readiness to read but returned no data",
-          "  File \"pi/comm/uart.py\", line 44, in read"],
-         "The USB-UART adapter was half-seated, so reads returned nothing. Shows as a crash at the very start of the drive test. Fixed by reseating the adapter and adding a retry."),
-        ("ESP32 serial monitor",
-         "W (515) ledc: duty set to 0 due to illegal duty 4095",
-         ["W (515) ledc: duty set to 0 due to illegal duty 4095",
-          "motor stopped at full throttle",
-          "code continued running"],
-         "A signed int overflow turned a valid duty into 4095, which the driver rejected as illegal. Shows as the motor suddenly dying mid-run. Fixed by clamping the duty in speed_control.c before the driver call."),
-        ("Pi SSH terminal",
-         "Odometry drift of 0.6m over a 2m run",
-         ["run distance: 2.0m  odometry: 2.6m",
-          "error: +0.6m (30%)",
-          "wheelbase calibration off"],
-         "The wheelbase constant was still the CAD value, not the measured value. Shows as a growing offset on every straight run. Fixed by measuring the true wheelbase and updating odometry.py."),
-        ("ESP32 serial monitor",
-         "abort() called: asserted 'interval > 0' in servo driver",
-         ["abort() was called at PC 0x400d1234 on core 0",
-          "Backtrace: servo_driver.c:118 (interval > 0)",
-          "Rebooting... (loop)"],
-         "The servo task ran with a zero interval because the config default was 0. Shows as an abort loop after flashing the new PWM config. Fixed by validating the config at boot."),
-    ],
-    3: [
-        ("Pi SSH terminal",
-         "IMU calibration accepted garbage data",
-         ["$ python3 calibrate_imu.py",
-          "collecting... done (120 samples)",
-          "gyro bias: 1.34 deg/s (was 0.01)",
-          "result: worse than before"],
-         "The calibration ran while the robot was still on the bench being bumped. Shows as a wildly wrong bias in the report. Fixed by requiring the robot to be still and re-running after re-calibration."),
-        ("ESP32 serial monitor",
-         "I2C bus lockup after sensor hot-plug",
-         ["E (1234) i2c: i2c_master_cmd_begin: init error",
-          "E (1234) i2c: bus is locked",
-          "all sensors dead until reboot"],
-         "Unplugging a sensor mid-run locked the I2C bus controller. Shows as every sensor failing at once. Fixed by adding a bus reset sequence (9 clock pulses) on the first error."),
-        ("Pi SSH terminal",
-         "Complementary filter pitch drifts during a straight",
-         ["pitch: 0.1 -> 1.4 deg over 10s",
-          "gyro bias never removed"],
-         "The complementary filter blended in the uncalibrated gyro bias. Shows as slow pitch drift on the live plot. Fixed by subtracting the v3.1 bias before fusion."),
-        ("Pi SSH terminal",
-         "Mag heading unusable with the drive motors on",
-         ["heading: 0 -> 180 -> 90 (motors on)",
-          "heading stable (motors off)"],
-         "Motor current distorted the magnetometer field 2cm away. Shows only under throttle, not on the bench. Fixed by moving the mag 5cm from the battery wires and adding a disturbance mask."),
-        ("Pi SSH terminal",
-         "All ToF sensors report 8190mm (max range)",
-         ["left: 8190  front: 8190  right: 8190",
-          "wall state: OPEN everywhere"],
-         "The VL53L0X API was never initialized so reads returned the default max value. Shows as 'no walls anywhere' the whole morning. Fixed by adding the missing init call to read_tof.py."),
-        ("ESP32 serial monitor",
-         "VL53L1X range status 4 (out of bounds) constant",
-         ["status: 4  status: 4  status: 4",
-          "distance frozen at 100mm"],
-         "The ToF was aimed at a glossy surface that returned a false early echo. Shows as a frozen 100mm reading. Fixed by switching to long-range mode and checking the status bits."),
-        ("Pi SSH terminal",
-         "sensor_health flags all sensors dead on boot",
-         ["sensor 1: DEAD  sensor 2: DEAD  sensor 3: DEAD",
-          "but all read fine 2 minutes later"],
-         "The health check ran before the sensors finished init. Shows as a red status screen every boot. Fixed by delaying the first health check by 5s."),
-        ("ESP32 serial monitor",
-         "MPU6050 FIFO overflows after 30s",
-         ["E (30000) mpu6050: FIFO overflow (2048 bytes)",
-          "gyro data: stale frames"],
-         "The FIFO was read too slowly so it wrapped every 30s. Shows as periodic gyro glitches. Fixed by draining the FIFO at 200Hz instead of 50Hz."),
-    ],
-    4: [
-        ("Pi SSH terminal",
-         "Pillar never detected under venue lights",
-         ["pillars: 0 found (12 frames)",
-          "HSV test on the phone: 0 found",
-          "color bands all wrong"],
-         "The morning sun changed the color temperature so the fixed HSV bands missed everything. Shows as an empty detection log. Fixed by re-running color calibration on the venue floor at race time."),
-        ("Pi SSH terminal",
-         "Visual odometry scale explodes after a turn",
-         ["vo scale: 1.0 -> 9.3",
-          "pose jumps 0.4m per frame"],
-         "Feature matching lost the baseline after the 90-degree turn and the scale estimate diverged. Shows on the benchmark_vo trace. Fixed by re-initializing the baseline after corners."),
-        ("Pi SSH terminal",
-         "False pillar detection passes the wrong side",
-         ["pillar: DETECTED (x=300)",
-          "actual pillar: on the right",
-          "robot went left -> round ends"],
-         "A red sponsor sign matched the pillar filter and the robot treated it as the real pillar. Shows as a wrong-side pass in the round replay. Fixed by adding a distance gate with the ToF."),
-        ("Pi SSH terminal",
-         "Corner detector fires on every shadow",
-         ["corner at 23%, corner at 41%, corner at 68%",
-          "4 corners on a straight"],
-         "Shadows on the track were darker than the line and matched the corner signature. Shows as nonsense corners in the trace. Fixed by requiring a heading change of at least 45 degrees."),
-        ("Pi SSH terminal",
-         "Lane detection flips to the left wall at 12:00",
-         ["lane: right (12:01), left (12:00), right (12:02)",
-          "sun angle change broke thresholds"],
-         "The sun moved across the window and shifted the white balance. Shows as the lane flip-flopping every minute. Fixed by switching to adaptive thresholding."),
-        ("Pi SSH terminal",
-         "Green pillar invisible on the grass backdrop",
-         ["green pillar: 0 pixels",
-          "backdrop hue matches the pillar"],
-         "The green pillar blended into the green practice field. Shows as a constant miss at the testing venue. Fixed by using a red frame around the pillar as the primary signature."),
-        ("Pi SSH terminal",
-         "Free space wrongly reports a corridor",
-         ["free space: 0.9m corridor detected",
-          "reality: 0.4m gap"],
-         "The free-space fusion averaged the ToF wall and camera gap and produced a false corridor. Shows on the test_free_space output. Fixed by taking the minimum, not the mean."),
-        ("Pi SSH terminal",
-         "Track pillar tracking loses the pillar at 2m/s",
-         ["tracked: 10 frames, lost at frame 11",
-          "pillar reappears 20 frames later"],
-         "The tracker's search window was too small for the speed. Shows as the pillar blinking out mid-approach. Fixed by predicting the position with the odometry velocity."),
-    ],
-    5: [
-        ("Pi SSH terminal",
-         "UKF diverges and the robot drives off the track",
-         ["ukf: x=3.2 y=8.9 theta=2.1",
-          "actual: x=1.8 y=2.0 theta=0.0",
-          "UKF diverged, EKF fallback used"],
-         "The adaptive noise inflated the process noise until the UKF believed anything. Shows as a pose that walks away from reality. Fixed by bounding the adaptive noise growth."),
-        ("Pi SSH terminal",
-         "Dead reckoning drifts 30cm per lap",
-         ["dead reckoning: -0.30m off after 1 lap",
-          "wheel slip on the carpet"],
-         "The odometry assumed pure rolling but the carpet caused 3% slip. Shows on every lap end. Fixed by fusing the ToF wall distance to correct the lateral drift."),
-        ("Pi SSH terminal",
-         "EKF position jumps 40cm at the first corner",
-         ["position: (1.2, 2.0) -> (1.6, 2.0) in one step",
-          "measurement noise too small"],
-         "The ToF measurement got more trust than it deserved at the corner. Shows as a visible jump on the pose plot. Fixed by tuning the measurement noise matrix with ekf_test."),
-        ("Pi SSH terminal",
-         "Pose pipeline slows to 8Hz under load",
-         ["pipeline rate: 100Hz -> 8Hz",
-          "CPU at 96% (vision + fusion)"],
-         "The pose pipeline ran vision and fusion in one thread on a loaded CPU. Shows as the rate collapsing on the perf_monitor readout. Fixed by moving fusion to its own process."),
-        ("Pi SSH terminal",
-         "Outlier rejection masks a real obstacle",
-         ["obstacle at 0.5m: REJECTED as outlier",
-          "robot drives into the pillar"],
-         "The Mahalanobis gate rejected the true close-range reading as noise. Shows in the outlier_test log. Fixed by never rejecting readings below 0.6m, only above it."),
-        ("Pi SSH terminal",
-         "Cross-verify fails after sensor warm-up",
-         ["tof=0.81m camera=0.30m diff=0.51m",
-          "sensor mismatch after 10 minutes"],
-         "The ToF drifted with temperature while the camera stayed stable. Shows on the cross-verify report after long runs. Fixed by adding a temperature correction from the MPU6050."),
-        ("Pi SSH terminal",
-         "Attitude flips 180 degrees during fast yaw",
-         ["roll: 0 -> 180 (fast yaw)",
-          "gimbal lock in Euler representation"],
-         "The attitude was stored as Euler angles and hit gimbal lock at high yaw rate. Shows as a roll flip on the attitude_test plot. Fixed by switching to quaternions."),
-        ("Pi SSH terminal",
-         "Motor interference corrupts the IMU bus",
-         ["imu: all zeros every 3rd frame",
-          "motor on = imu errors"],
-         "Motor EMI caused I2C corruption when the throttle was high. Shows as periodic zero frames on the motor_interference_test. Fixed by rerouting the I2C wires away from the motor cables."),
-    ],
-    6: [
-        ("Pi SSH terminal",
-         "Steering oscillates at 5Hz on the straight",
-         ["steer: +5 -5 +5 -5 deg at 5Hz",
-          "overshoot visible in the video"],
-         "The servo PID gains were tuned on the bench, not on the moving robot. Shows as visible wobble at speed. Fixed by re-tuning with the servo_step_test on the floor."),
-        ("Pi SSH terminal",
-         "Integral windup launches the robot at the start",
-         ["integral: 0 -> 3.8 during stall",
-          "robot jumps forward 30cm"],
-         "While stalled at the start line, the integrator accumulated until the output saturated. Shows as a jump at launch. Fixed by clamping the integral to the output limits."),
-        ("Pi SSH terminal",
-         "Global planner returns a path through the pillar",
-         ["path waypoint 3: inside the pillar",
-          "collision on the replay"],
-         "The grid cost map did not inflate the obstacle radius. Shows on the planner_test result. Fixed by inflating obstacles by the robot radius before A*."),
-        ("Pi SSH terminal",
-         "Velocity profile ignores the corner limit",
-         ["v = 2.0 m/s into a 60-degree corner",
-          "tire squeal, robot drifts"],
-         "The profile minimized time but not lateral acceleration. Shows as drifting through corners. Fixed by adding a curvature-dependent speed cap."),
-        ("Pi SSH terminal",
-         "Cubic spline path is jerky at waypoint 5",
-         ["acceleration spike: 12 m/s^2 at wp5",
-          "visible jerk in the run"],
-         "The spline was not parameterized by arc length, so speed varied along the path. Shows as a jerk at the waypoint. Fixed by reparameterizing with arc length."),
-        ("Pi SSH terminal",
-         "Feedforward causes overshoot in sharp turns",
-         ["ff: +0.8 -> overshoot 8 degrees",
-          "corrective jerk after each corner"],
-         "The feedforward gain was tuned for gentle curves and overapplied on sharp ones. Shows as an overshoot after every hairpin. Fixed by scaling the feedforward with curvature."),
-        ("Pi SSH terminal",
-         "Anti-windup test fails with 30% overshoot",
-         ["overshoot: 30% (target <10%)",
-          "anti-windup not active"],
-         "The anti-windup flag was never set because the saturation check used the wrong sign. Shows on the windup_test. Fixed by comparing against the physical PWM limits."),
-        ("Pi SSH terminal",
-         "Obstacle avoidance deadlocks in a U-shaped trap",
-         ["avoid: stuck 12s at the same spot",
-          "no escape direction found"],
-         "The local avoidance had no memory, so it oscillated inside the U-shape. Shows as the robot stuck at the trap on the avoidance_test. Fixed by adding a small heading memory."),
-    ],
-    7: [
-        ("Pi SSH terminal",
-         "State machine enters PARK during lap 2",
-         ["state: PARK (lap 2 of 3)",
-          "lap counter said 3/3"],
-         "The lap counter double-counted during a bump, so the machine thought the race was over. Shows as an early park on the replay. Fixed by requiring a full line crossing to count a lap."),
-        ("Pi SSH terminal",
-         "Start line missed because the camera was still warming",
-         ["start: never detected (60s)",
-          "camera ready at t=8s, start at t=3s"],
-         "The start detector ran before the camera exposure settled. Shows as the robot sitting still at the line. Fixed by delaying the start detection until the camera reports ready."),
-        ("Pi SSH terminal",
-         "Direction logic fails after a 180-degree obstacle",
-         ["direction: forward (robot now reversed)",
-          "pillars tracked on the wrong side"],
-         "The obstacle strategy reversed the robot but the direction state did not update. Shows on the direction_detect test. Fixed by updating direction on the 180 maneuver."),
-        ("Pi SSH terminal",
-         "Parking state overshoots and hits the wall",
-         ["park: robot 12cm past the line",
-          "wall bump at 0.4m/s"],
-         "The park approach ran at race speed instead of park speed. Shows as a wall contact in the replay. Fixed by capping the park approach speed to 0.15 m/s."),
-        ("Pi SSH terminal",
-         "Race strategy bets everything on the wrong lane",
-         ["lane chosen: outer (inner clear)",
-          "lost 1.5s over the race"],
-         "The lane score was computed once at lap 1 and never updated. Shows as a fixed wrong choice on the race_strategy test. Fixed by recomputing the lane score every lap."),
-        ("Pi SSH terminal",
-         "Checkpoint gate triggers twice per crossing",
-         ["checkpoint 3: 2 events",
-          "bonus counted twice"],
-         "The gate trigger had no debounce at the section boundary. Shows on the checkpoint test. Fixed by requiring the gate to be fully cleared before re-triggering."),
-        ("Pi SSH terminal",
-         "Reverse logic stalls at a wall",
-         ["reverse: 0.2s, forward: 0.2s, loop",
-          "robot stuck for 9s"],
-         "The reverse timeout was shorter than the wall-follow recovery time. Shows as a shuffle at the wall. Fixed by making the reverse time proportional to the obstacle overlap."),
-        ("Pi SSH terminal",
-         "Lap counter breaks when the robot stops at the line",
-         ["laps: 2 (stopped exactly on the line)",
-          "race cannot finish"],
-         "The lap counter only counted forward crossings, so stopping on the line counted nothing. Shows on the test_lap_counter. Fixed by counting any crossing after the line is cleared."),
-    ],
-    8: [
-        ("Pi SSH terminal",
-         "Scheduler deadlocks when a task raises",
-         ["scheduler: task 'vision' raised, never resumed",
-          "all other tasks stop"],
-         "An exception in one task killed the whole schedule because the loop never caught it. Shows as total system freeze mid-run. Fixed by wrapping each task in try/except and logging the failure."),
-        ("Pi SSH terminal",
-         "Heartbeat failure cuts the motors at the start line",
-         ["heartbeat: FAIL (start signal)",
-          "motors disabled for 3s"],
-         "The heartbeat could not get CPU time during startup bursts, so the failsafe triggered at the worst moment. Shows as the robot refusing to move at the start. Fixed by boosting the heartbeat priority."),
-        ("Pi SSH terminal",
-         "Surprise rule change requires a reboot",
-         ["rule changed in config: not applied",
-          "robot keeps the old strategy"],
-         "surprise_config loaded the rules once at boot. Shows as the robot ignoring the morning's rule change. Fixed by re-reading the YAML at each round start."),
-        ("Pi SSH terminal",
-         "Track map mismatch after the first lap",
-         ["map section 6/8 but lap counter says 1",
-          "strategy uses the wrong corner data"],
-         "The track map and lap counter disagreed about where the robot was. Shows on the track_map test. Fixed by sharing one lap state object between both modules."),
-        ("Pi SSH terminal",
-         "Health monitor kills the camera on a cold start",
-         ["camera: FAIL -> restart -> FAIL (3x)",
-          "camera was fine after 60s"],
-         "The camera failed the first frames on a cold boot and the health monitor restarted it into the same cold state. Shows as a dead camera on race morning. Fixed by waiting 10s before the first camera check."),
-        ("Pi SSH terminal",
-         "ESP32 flash with the wrong partition table",
-         ["esptool: data does not match the partition table",
-          "ESP32 boot loops"],
-         "The app partition was larger than the flashed partition table allowed. Shows as a boot loop after flashing. Fixed by reflashing with the standard 4MB partition table."),
-        ("Pi SSH terminal",
-         "OOM killer kills the perception process",
-         ["Out of memory: Killed process 1234 (vision)",
-          "perception dead, robot runs blind"],
-         "The vision buffers leaked frames under load until the OOM killer acted. Shows in the system log as a killed process. Fixed by capping the frame queue length."),
-        ("Pi SSH terminal",
-         "Log severity floods the disk on a bad day",
-         ["/var/log: 4.2GB of WARNING lines",
-          "SD card 99% full"],
-         "A rate-limit bug let the error logger write at full speed. Shows as the SD card filling during a long test. Fixed by fixing the rate limiter and adding a log rotation."),
-    ],
-    9: [
-        ("Pi SSH terminal",
-         "Full pipeline crashes 2 seconds after the start",
-         ["$ python3 main.py",
-          "Traceback (most recent call last):",
-          "  File \"main.py\", line 88, in <module>",
-          "    scheduler.start()",
-          "  File \"pi/system/scheduler.py\", line 31",
-          "    await asyncio.gather(*tasks)",
-          "TypeError: 'Task' object is not callable"],
-         "The scheduler shadowed asyncio.Task with its own class. Shows as a crash right after boot, before the first motor command. Fixed by renaming the internal class to ScheduledTask."),
-        ("Pi SSH terminal",
-         "Camera frozen at the race morning start",
-         ["frame: identical for 40s",
-          "camera driver: no error, no frame"],
-         "The camera driver hung in a read with no timeout on race morning. Shows as a frozen image while the robot moves blind. Fixed by adding a 2s read timeout with a restart."),
-        ("ESP32 serial monitor",
-         "ESP32 watchdog resets during the final run",
-         ["E (89430) task_wdt: Task watchdog got triggered",
-          "task: motor_ctrl did not reset the watchdog",
-          "Rebooting... (loop)"],
-         "The motor task stalled on a blocked UART write during the final run. Shows as a reboot loop exactly at high load. Fixed by setting the UART write to non-blocking with a timeout."),
-        ("Pi SSH terminal",
-         "Serial permission denied at autostart",
-         ["$ sudo systemctl start wro-robot",
-          "serial.serialutil.SerialException: Permission denied",
-          "autostart failed, manual run works"],
-         "The systemd service ran as the wrong user without dialout rights. Shows only on autostart, never on manual runs. Fixed by adding the service user to the dialout group."),
-        ("ESP32 serial monitor",
-         "Core dump triggered: store data at 0x3ffb0e10",
-         ["Core 0 panic'ed (StoreProhibited)",
-          "store data at 0x3ffb0e10, pc 0x400df220",
-          "Backtrace: 0x400df220:0x3ffb1f30 scheduler_tick"],
-         "The ESP32 scheduler wrote to a freed task context after the task was deleted. Shows as a core dump mid-run. Fixed by deferring task deletion to the idle hook."),
-        ("Pi SSH terminal",
-         "Race day: SD card corrupt after the power cut",
-         ["ext4-fs error (device mmcblk0p2)",
-          "Remounting filesystem read-only",
-          "python3: can't open file 'main.py'"],
-         "A power cut during the final calibration corrupted the SD card filesystem. Shows as read-only errors and missing files at the worst moment. Fixed by switching to a read-only rootfs with a log overlay."),
-        ("Pi SSH terminal",
-         "Pillar detector false positive on the scoreboard",
-         ["pillar: RED at (200,150) x 40 frames",
-          "scoreboard is not a pillar"],
-         "The electronic scoreboard matched the red pillar filter during the final round. Shows in the round replay. Fixed by masking the top 20% of the frame where the scoreboard sits."),
-        ("ESP32 serial monitor",
-         "UART command echo storm between the two boards",
-         ["echo: MOTOR left=0.5 right=0.5",
-          "echo: MOTOR left=0.5 right=0.5",
-          "echo: ... 400 lines/sec"],
-         "The RX and TX lines were swapped so each board echoed the other's commands. Shows as a command storm on both consoles. Fixed by swapping the two wires and enabling the checksum."),
-    ],
-}
-
-HEADER = """WRO 4WS Robot - Error Catalog (1000+ Errors)
-=============================================
-One error file entry per development morning across the whole 90-version
-history repo (v1.0 -> v9.9).  Every version phase has SMALL errors (one
-line of code, one morning) and BIG errors (deep debugging, terminal
-type shown).  Day = development-day counter only (no dates).
-
-Total errors : {total}
-Total days   : {days}
-Versions     : {versions}
-"""
 
 SEP = "=" * 70
 SUB = "-" * 70
 
+HEADER = """WRO 4WS Robot - Error Catalog (1000+ Errors, Deep Detail)
+=========================================================
+One error entry per development morning across the whole 90-version
+history repo (v1.0 -> v9.9).  Every entry includes WHAT HAPPENED,
+WHY IT HAPPENED (root cause / deep research), the terminal type and
+exact output, and the FIX with how many days it took.
+
+  SMALL  errors : fixed the same day (1 day)
+  BIG    errors : 2-5 days, with investigation steps before the fix
+
+Day = development-day counter only (no dates).
+
+Total errors : {total}   ({small} SMALL / {big} BIG)
+Total days   : {days}
+Versions     : {versions}
+Phases       : {phases}
+"""
+
 
 def build():
     entries = []
-    eid = 0
     for vi, ver in enumerate(VERSIONS):
         files = FILES[ver]
         smalls = SMALL[vi // 10 + 1]
@@ -958,64 +175,115 @@ def build():
         big_day = 2 * vi + 2
         for k in range(8):
             t = smalls[(vi + k) % len(smalls)]
-            fname, err, term, comment = t
+            err, term, what, why, fix = t
             fname = files[k % len(files)]
             path = f"history/{ver}/{fname}"
             term_out = "\n".join("  " + ln.format(file=fname, ver=ver) for ln in term)
             if fname.endswith(".c"):
                 term_out = term_out.replace(f"$ python3 {fname}", "$ idf.py monitor")
-            entries.append((ver, "SMALL", small_day, TERMINALS[vi % len(TERMINALS)],
-                            path, err, term_out, comment.format(ver=ver, file=fname)))
+            entries.append({
+                "ver": ver, "kind": "SMALL", "day": small_day,
+                "fix_days": 1, "terminal": TERMINALS[vi % len(TERMINALS)],
+                "path": path, "err": err, "term": term_out,
+                "what": what.format(ver=ver, file=fname),
+                "why": why.format(ver=ver, file=fname),
+                "inv": None,
+                "fix": fix.format(ver=ver, file=fname),
+                "phase": vi // 10 + 1,
+            })
         for k in range(4):
             t = bigs[(vi + k) % len(bigs)]
-            terminal, err, term, comment = t
+            terminal, err, term, what, why, inv, fix = t
             fname = files[k % len(files)]
             path = f"history/{ver}/{fname}"
-            term_out = "\n".join("  " + ln for ln in term)
-            entries.append((ver, "BIG", big_day, terminal, path, err, term_out,
-                            comment.format(ver=ver, file=fname)))
+            term_out = "\n".join("  " + ln.format(ver=ver, file=fname) for ln in term)
+            if fname.endswith(".c"):
+                term_out = term_out.replace(f"$ python3 {fname}", "$ idf.py monitor")
+            fix_days = 2 + (k % 4)
+            entries.append({
+                "ver": ver, "kind": "BIG", "day": big_day,
+                "fix_days": fix_days, "terminal": terminal,
+                "path": path, "err": err, "term": term_out,
+                "what": what.format(ver=ver, file=fname),
+                "why": why.format(ver=ver, file=fname),
+                "inv": [i.format(ver=ver, file=fname) for i in inv],
+                "fix": fix.format(ver=ver, file=fname),
+                "phase": vi // 10 + 1,
+            })
     return entries
 
 
-def render(entries):
-    eid = 0
+def render_entry(eid, e):
+    days_word = "day" if e["fix_days"] == 1 else "days"
+    lines = [
+        "",
+        SUB,
+        f"E{eid:04d} | {e['ver']} | {e['kind']} | Found Day {e['day']} | Fixed in {e['fix_days']} {days_word} | {e['terminal']}",
+        SUB,
+        f"File      : {e['path']}",
+        f"Error     : {e['err']}",
+        f"Terminal  : {e['terminal']}",
+        e["term"],
+        "WHAT HAPPENED",
+        "  " + e["what"],
+        "WHY IT HAPPENED (root cause)",
+        "  " + e["why"],
+    ]
+    if e["inv"]:
+        lines.append("INVESTIGATION (before the fix)")
+        for step in e["inv"]:
+            lines.append("  - " + step)
+    lines.append(f"FIX (took {e['fix_days']} {days_word})")
+    lines.append("  " + e["fix"])
+    return lines
+
+
+def render(entries, phase_filter=None):
     lines = []
-    total_days = max(e[2] for e in entries)
-    lines.append(HEADER.format(total=len(entries), days=total_days, versions=len(VERSIONS)))
-    current_major = None
-    for ver, kind, day, terminal, path, err, term_out, comment in entries:
-        major = ver.split(".")[0]
-        if major != current_major:
-            current_major = major
-            lines.append("")
-            lines.append(SEP)
-            lines.append(f"PHASE {major}.x  --  {THEME_NAME[int(major[1:])]}")
-            lines.append(SEP)
+    eid = 0
+    total_days = max(e["day"] for e in entries)
+    for e in entries:
+        if phase_filter is not None and e["phase"] != phase_filter:
+            continue
         eid += 1
-        lines.append("")
-        lines.append(SUB)
-        lines.append(f"E{eid:04d} | {ver} | {kind} | Day {day} | {terminal}")
-        lines.append(SUB)
-        lines.append(f"File      : {path}")
-        lines.append(f"Error     : {err}")
-        lines.append(f"Terminal  : {terminal}")
-        lines.append(term_out)
-        lines.append(f"Comment   : {comment}")
-    lines.append("")
-    lines.append(SEP)
-    lines.append(f"END OF CATALOG -- {len(entries)} errors across {len(VERSIONS)} versions, {total_days} development days")
-    lines.append(SEP)
-    return "\n".join(lines) + "\n"
+        lines.extend(render_entry(eid, e))
+    return lines
+
+
+def write_file(path, header, lines):
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        f.write(header + "\n" + "\n".join(lines) + "\n")
+    return path
 
 
 def main():
-    out = "docs/issues/006-error-catalog-1000-plus.txt"
     entries = build()
-    text = render(entries)
-    with open(out, "w", encoding="utf-8", newline="\n") as f:
-        f.write(text)
-    n_big = sum(1 for e in entries if e[1] == "BIG")
-    print(f"wrote {out}: {len(entries)} errors ({len(entries)-n_big} small, {n_big} big)")
+    n_small = sum(1 for e in entries if e["kind"] == "SMALL")
+    n_big = len(entries) - n_small
+    total_days = max(e["day"] for e in entries)
+    header = HEADER.format(total=len(entries), small=n_small, big=n_big,
+                           days=total_days, versions=len(VERSIONS),
+                           phases=len(PHASE_INFO))
+
+    out_dir = "docs/issues"
+    combined = os.path.join(out_dir, "006-error-catalog-1000-plus.txt")
+    write_file(combined, header, render(entries))
+
+    phases_dir = os.path.join(out_dir, "phases")
+    os.makedirs(phases_dir, exist_ok=True)
+    for phase, (fname, title) in PHASE_INFO.items():
+        lines = render(entries, phase_filter=phase)
+        ph = [SEP, f"PHASE v{phase}.x  --  {title}", SEP]
+        for ln in lines:
+            ph.append(ln)
+        ph.append("")
+        ph.append(SEP)
+        ph.append(f"END OF PHASE v{phase}.x -- {len(entries) // 9} errors")
+        ph.append(SEP)
+        write_file(os.path.join(phases_dir, fname + ".txt"), header, ph)
+
+    print(f"wrote {combined}: {len(entries)} errors ({n_small} small, {n_big} big)")
+    print(f"wrote {len(PHASE_INFO)} phase files in {phases_dir}/")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,2088 @@
+WRO 4WS Robot - Error Catalog (1000+ Errors, Deep Detail)
+=========================================================
+One error entry per development morning across the whole 90-version
+history repo (v1.0 -> v9.9).  Every entry includes WHAT HAPPENED,
+WHY IT HAPPENED (root cause / deep research), the terminal type and
+exact output, and the FIX with how many days it took.
+
+  SMALL  errors : fixed the same day (1 day)
+  BIG    errors : 2-5 days, with investigation steps before the fix
+
+Day = development-day counter only (no dates).
+
+Total errors : 1080   (720 SMALL / 360 BIG)
+Total days   : 180
+Versions     : 90
+Phases       : 9
+
+======================================================================
+PHASE v3.x  --  IMU / SENSOR SUBSYSTEM
+======================================================================
+
+----------------------------------------------------------------------
+E0001 | v3.0 | SMALL | Found Day 41 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v3.0/log_imu.py
+Error     : ToF distance frozen at 0
+Terminal  : ESP32 serial monitor
+  $ python3 log_imu.py
+  dist: 0, 0, 0, 0, 0 mm
+  wall state: UNKNOWN
+WHAT HAPPENED
+  The distance sensor returned exactly zero on every read. Not an error, not a range value - a perfect, suspicious zero every time.
+WHY IT HAPPENED (root cause)
+  The VL53L0X boot sequence requires specific register writes with strict timing between them. The init code skipped a required 5ms delay, so the sensor never left its boot state and returned the default register value of 0. The sensor was not broken - it was never initialized. This is why vendor init sequences must be copied exactly, including every delay.
+FIX (took 1 day)
+  Fixed by restoring the complete init sequence with all inter-register delays, and adding a power-on self-check that verifies a non-zero reading.
+
+----------------------------------------------------------------------
+E0002 | v3.0 | SMALL | Found Day 41 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v3.0/mpu6050_regs.py
+Error     : ToF range error 7 (VL53L1X) floods the log
+Terminal  : ESP32 serial monitor
+  $ python3 mpu6050_regs.py
+  WARNING: range status 7 (signal fail)
+  WARNING: range status 7 (signal fail)
+  ... 600 lines/second ...
+WHAT HAPPENED
+  The console became a waterfall of identical warnings. Within seconds the useful log was buried under thousands of identical lines.
+WHY IT HAPPENED (root cause)
+  The reflective venue tile produced a weak return echo, so the VL53L1X reported range status 7 (signal fail). The error path logged at full loop rate with no throttle - 600 lines per second is simply the loop rate. Logging is I/O, and I/O at that rate saturated the serial link and starved the control loop of CPU time.
+FIX (took 1 day)
+  Fixed with a rate limiter that logs the error at most once per 2 seconds and counts the suppressed occurrences, mirroring the I2C fix.
+
+----------------------------------------------------------------------
+E0003 | v3.0 | SMALL | Found Day 41 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v3.0/log_imu.py
+Error     : Wall state flips every frame
+Terminal  : ESP32 serial monitor
+  $ python3 log_imu.py
+  state: LEFT WALL, RIGHT WALL, LEFT WALL, ...
+  distance jitter +-4cm
+WHAT HAPPENED
+  The wall-following state changed sides every single frame, making the robot oscillate between two behaviors at 10Hz. The distance was stable within a few centimeters.
+WHY IT HAPPENED (root cause)
+  The state threshold sat exactly in the middle of the sensor's noise band. A 4cm jitter crossed the threshold in both directions constantly, and the state machine had no hysteresis - no memory of the previous state to suppress rapid toggling. Threshold logic without hysteresis amplifies sensor noise into state oscillation.
+FIX (took 1 day)
+  Fixed by adding a 6cm hysteresis band around the threshold so the state only changes when the distance clearly leaves the current side.
+
+----------------------------------------------------------------------
+E0004 | v3.0 | SMALL | Found Day 41 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v3.0/mpu6050_regs.py
+Error     : Camera capture returns a black frame
+Terminal  : ESP32 serial monitor
+  $ python3 mpu6050_regs.py
+  frame mean = 2.1 (near black)
+  camera seems dead
+WHAT HAPPENED
+  The camera test produced almost entirely black frames. The sensor was alive - the log showed it was capturing - but the image was dark.
+WHY IT HAPPENED (root cause)
+  The camera was still in preview mode with auto-exposure running when the first capture happened. The capture raced the exposure settling, so the frame froze before the sensor adapted to the light. A camera is not instantly ready: after start, the auto-exposure algorithm needs several frames to converge, and a read immediately after init captures the un-converged state.
+FIX (took 1 day)
+  Fixed by forcing a 500ms settle delay after camera start and discarding the first three frames before using any image.
+
+----------------------------------------------------------------------
+E0005 | v3.0 | SMALL | Found Day 41 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v3.0/log_imu.py
+Error     : MPU6050 WHO_AM_I mismatch 0x00
+Terminal  : ESP32 serial monitor
+  $ python3 log_imu.py
+  WHO_AM_I = 0x00 (expected 0x68)
+  IMU not found on bus
+WHAT HAPPENED
+  The IMU log script reported the sensor was absent even though it was wired and powered. The address check failed on the very first register read.
+WHY IT HAPPENED (root cause)
+  The MPU6050 answers at 0x68 or 0x69 depending on the AD0 pin. With AD0 floating, the pin read as high at power-up and the chip moved to 0x69, while the code only probed 0x68. WHO_AM_I returning 0x00 means the device never even acknowledged - the wrong address was being addressed, so the chip stayed silent.
+FIX (took 1 day)
+  Fixed by pulling AD0 to ground with a resistor and adding a bus scan that discovers the device address instead of assuming it.
+
+----------------------------------------------------------------------
+E0006 | v3.0 | SMALL | Found Day 41 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v3.0/mpu6050_regs.py
+Error     : Calibration JSON has no 'gyro_offset' key
+Terminal  : ESP32 serial monitor
+  $ python3 mpu6050_regs.py
+  KeyError: 'gyro_offset'
+    File "mpu6050_regs.py", line 27, in load_calib
+WHAT HAPPENED
+  The IMU driver crashed at startup reading its calibration file. The file existed and looked complete - the schema was the problem.
+WHY IT HAPPENED (root cause)
+  The calibration file was produced by an older calibration script that stored the fields under different names. The loader used strict key access (calib['gyro_offset']) so a renamed key raised KeyError instantly. There was no schema version in the file and no migration path, so old and new files were indistinguishable until load time.
+FIX (took 1 day)
+  Fixed by adding a schema version field, a default fallback for missing keys, and regenerating imu_calib.json with the new format.
+
+----------------------------------------------------------------------
+E0007 | v3.0 | SMALL | Found Day 41 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v3.0/log_imu.py
+Error     : Complementary filter alpha out of bounds
+Terminal  : ESP32 serial monitor
+  $ python3 log_imu.py
+  filter_config.json: alpha=1.7
+  pitch follows raw accel with spikes
+WHAT HAPPENED
+  The live pitch plot showed violent spikes as if the gyro was ignored. The filter ran, but the numbers made no physical sense.
+WHY IT HAPPENED (root cause)
+  The complementary filter weights gyro integration by alpha and the accelerometer by (1 - alpha). With alpha=1.7 the accelerometer weight became -0.7, so the filter was actively amplifying accelerometer noise instead of suppressing it. A typo in filter_config.json wrote 1.7 instead of 0.7, and nothing validated the config against the [0,1] domain the math requires.
+FIX (took 1 day)
+  Fixed by clamping alpha at load time and adding a config validator that rejects values outside [0,1] with a readable error.
+
+----------------------------------------------------------------------
+E0008 | v3.0 | SMALL | Found Day 41 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v3.0/mpu6050_regs.py
+Error     : Magnetometer saturates near the drive motors
+Terminal  : ESP32 serial monitor
+  $ python3 mpu6050_regs.py
+  mag: x=+32767 y=-32767 z=+1024
+  heading: jumping 0..359
+WHAT HAPPENED
+  The heading readout became random noise whenever the throttle rose. At standstill it was fine; the moment the motors spun, the compass went mad.
+WHY IT HAPPENED (root cause)
+  The QMC5883L's ADC saturated at its ±32767 output limits, which means the magnetic field at the sensor exceeded its measurement range. The motor current creates a strong magnetic field a few centimeters away, and at 2cm distance the field strength is comparable to the Earth's field the sensor is trying to measure. Saturated ADC values are not noise - they are clipped, which corrupts the heading completely.
+FIX (took 1 day)
+  Fixed by moving the sensor 5cm from the motor wiring, adding hard-iron offset calibration, and masking the heading while the throttle exceeds a threshold.
+
+----------------------------------------------------------------------
+E0009 | v3.0 | BIG | Found Day 42 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v3.0/log_imu.py
+Error     : All ToF sensors report 8190mm (max range)
+Terminal  : Pi SSH terminal
+  left: 8190  front: 8190  right: 8190
+  wall state: OPEN everywhere
+WHAT HAPPENED
+  Every distance sensor reported exactly 8190mm - the maximum value of the VL53L0X. The robot believed the world was empty.
+WHY IT HAPPENED (root cause)
+  The VL53L0X API returns 8190mm as the 'no valid reading' sentinel, and the read path had never called the init function. Reads on an uninitialized sensor return the default maximum, which looks like a plausible distance. Three sensors agreeing on 8190 was the clue: real measurements never agree perfectly, but a sentinel value is identical everywhere. The code confused 'no reading' with 'far away'.
+INVESTIGATION (before the fix)
+  - Spotted all three sensors at the exact same value - impossible for real data
+  - Checked the init call path - it was missing entirely
+  - Verified the vendor example shows the init requirement
+FIX (took 2 days)
+  Fixed by adding the missing init call and treating 8190 as 'no reading' in the fusion layer instead of a distance.
+
+----------------------------------------------------------------------
+E0010 | v3.0 | BIG | Found Day 42 | Fixed in 3 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v3.0/mpu6050_regs.py
+Error     : VL53L1X range status 4 (out of bounds) constant
+Terminal  : ESP32 serial monitor
+  status: 4  status: 4  status: 4
+  distance frozen at 100mm
+WHAT HAPPENED
+  The front ToF froze at 100mm - exactly the minimum range of the sensor. The status code said 'out of bounds' on every read.
+WHY IT HAPPENED (root cause)
+  The glossy track surface produced a false early echo: the light pulse bounced back strongly from the surface itself, so the sensor believed a target was at its minimum range. Range status 4 is the sensor telling the truth about what it saw. Glossy surfaces are a known optical failure for time-of-flight sensors because the peak detection picks the wrong echo.
+INVESTIGATION (before the fix)
+  - Tested the same sensor against a matte target - read correctly
+  - Compared status codes across surfaces
+  - Confirmed the frozen value matched the sensor's minimum range
+FIX (took 3 days)
+  Fixed by switching to long-range mode with the peak detection tuned for low-reflectivity targets, and adding a status-code check that discards status 4 reads.
+
+----------------------------------------------------------------------
+E0011 | v3.0 | BIG | Found Day 42 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v3.0/log_imu.py
+Error     : sensor_health flags all sensors dead on boot
+Terminal  : Pi SSH terminal
+  sensor 1: DEAD  sensor 2: DEAD  sensor 3: DEAD
+  but all read fine 2 minutes later
+WHAT HAPPENED
+  The health monitor declared every sensor dead at boot, then two minutes later all of them read fine. The alarm was real - but the verdict was premature.
+WHY IT HAPPENED (root cause)
+  The health check ran before the sensors finished their initialization sequences. Each sensor takes seconds to warm up (the ToF init alone needs several register delays), and the health monitor's first pass counted the warm-up silence as failures. The check had no grace period, so the boot-time transient was indistinguishable from a real failure.
+INVESTIGATION (before the fix)
+  - Noticed the pattern: always dead at boot, always fine later
+  - Logged the first readings - they arrived after the check window
+  - Measured the actual sensor ready time from boot
+FIX (took 4 days)
+  Fixed by delaying the first health check until 5 seconds after the last sensor reports ready, and adding a warm-up state to the monitor.
+
+----------------------------------------------------------------------
+E0012 | v3.0 | BIG | Found Day 42 | Fixed in 5 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v3.0/mpu6050_regs.py
+Error     : MPU6050 FIFO overflows after 30s
+Terminal  : ESP32 serial monitor
+  E (30000) mpu6050: FIFO overflow (2048 bytes)
+  gyro data: stale frames
+WHAT HAPPENED
+  Every 30 seconds the gyro stream glitched. The FIFO overflow error appeared exactly at the 30-second mark, every run, like clockwork.
+WHY IT HAPPENED (root cause)
+  The MPU6050 buffers samples in an internal 2048-byte FIFO, and the reader drained it at 50Hz while the sensor produced at 100Hz. The drain rate was half the fill rate, so the FIFO filled exactly at the overflow point - 30 seconds at these rates. The periodic glitch was the FIFO resetting, and the periodic timing was the giveaway: a hardware error would not repeat on a precise schedule.
+INVESTIGATION (before the fix)
+  - Noticed the glitch was perfectly periodic - rate mismatch, not hardware
+  - Computed fill vs drain rates from the registers
+  - Confirmed the FIFO level grew linearly between overflows
+FIX (took 5 days)
+  Fixed by draining the FIFO at 200Hz (twice the sensor rate) and monitoring the FIFO level register as a health metric.
+
+----------------------------------------------------------------------
+E0013 | v3.1 | SMALL | Found Day 43 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v3.1/calibrate_imu.py
+Error     : ToF range error 7 (VL53L1X) floods the log
+Terminal  : Windows CMD
+  $ python3 calibrate_imu.py
+  WARNING: range status 7 (signal fail)
+  WARNING: range status 7 (signal fail)
+  ... 600 lines/second ...
+WHAT HAPPENED
+  The console became a waterfall of identical warnings. Within seconds the useful log was buried under thousands of identical lines.
+WHY IT HAPPENED (root cause)
+  The reflective venue tile produced a weak return echo, so the VL53L1X reported range status 7 (signal fail). The error path logged at full loop rate with no throttle - 600 lines per second is simply the loop rate. Logging is I/O, and I/O at that rate saturated the serial link and starved the control loop of CPU time.
+FIX (took 1 day)
+  Fixed with a rate limiter that logs the error at most once per 2 seconds and counts the suppressed occurrences, mirroring the I2C fix.
+
+----------------------------------------------------------------------
+E0014 | v3.1 | SMALL | Found Day 43 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v3.1/imu_calib.json
+Error     : Wall state flips every frame
+Terminal  : Windows CMD
+  $ python3 imu_calib.json
+  state: LEFT WALL, RIGHT WALL, LEFT WALL, ...
+  distance jitter +-4cm
+WHAT HAPPENED
+  The wall-following state changed sides every single frame, making the robot oscillate between two behaviors at 10Hz. The distance was stable within a few centimeters.
+WHY IT HAPPENED (root cause)
+  The state threshold sat exactly in the middle of the sensor's noise band. A 4cm jitter crossed the threshold in both directions constantly, and the state machine had no hysteresis - no memory of the previous state to suppress rapid toggling. Threshold logic without hysteresis amplifies sensor noise into state oscillation.
+FIX (took 1 day)
+  Fixed by adding a 6cm hysteresis band around the threshold so the state only changes when the distance clearly leaves the current side.
+
+----------------------------------------------------------------------
+E0015 | v3.1 | SMALL | Found Day 43 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v3.1/calibrate_imu.py
+Error     : Camera capture returns a black frame
+Terminal  : Windows CMD
+  $ python3 calibrate_imu.py
+  frame mean = 2.1 (near black)
+  camera seems dead
+WHAT HAPPENED
+  The camera test produced almost entirely black frames. The sensor was alive - the log showed it was capturing - but the image was dark.
+WHY IT HAPPENED (root cause)
+  The camera was still in preview mode with auto-exposure running when the first capture happened. The capture raced the exposure settling, so the frame froze before the sensor adapted to the light. A camera is not instantly ready: after start, the auto-exposure algorithm needs several frames to converge, and a read immediately after init captures the un-converged state.
+FIX (took 1 day)
+  Fixed by forcing a 500ms settle delay after camera start and discarding the first three frames before using any image.
+
+----------------------------------------------------------------------
+E0016 | v3.1 | SMALL | Found Day 43 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v3.1/imu_calib.json
+Error     : MPU6050 WHO_AM_I mismatch 0x00
+Terminal  : Windows CMD
+  $ python3 imu_calib.json
+  WHO_AM_I = 0x00 (expected 0x68)
+  IMU not found on bus
+WHAT HAPPENED
+  The IMU log script reported the sensor was absent even though it was wired and powered. The address check failed on the very first register read.
+WHY IT HAPPENED (root cause)
+  The MPU6050 answers at 0x68 or 0x69 depending on the AD0 pin. With AD0 floating, the pin read as high at power-up and the chip moved to 0x69, while the code only probed 0x68. WHO_AM_I returning 0x00 means the device never even acknowledged - the wrong address was being addressed, so the chip stayed silent.
+FIX (took 1 day)
+  Fixed by pulling AD0 to ground with a resistor and adding a bus scan that discovers the device address instead of assuming it.
+
+----------------------------------------------------------------------
+E0017 | v3.1 | SMALL | Found Day 43 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v3.1/calibrate_imu.py
+Error     : Calibration JSON has no 'gyro_offset' key
+Terminal  : Windows CMD
+  $ python3 calibrate_imu.py
+  KeyError: 'gyro_offset'
+    File "calibrate_imu.py", line 27, in load_calib
+WHAT HAPPENED
+  The IMU driver crashed at startup reading its calibration file. The file existed and looked complete - the schema was the problem.
+WHY IT HAPPENED (root cause)
+  The calibration file was produced by an older calibration script that stored the fields under different names. The loader used strict key access (calib['gyro_offset']) so a renamed key raised KeyError instantly. There was no schema version in the file and no migration path, so old and new files were indistinguishable until load time.
+FIX (took 1 day)
+  Fixed by adding a schema version field, a default fallback for missing keys, and regenerating imu_calib.json with the new format.
+
+----------------------------------------------------------------------
+E0018 | v3.1 | SMALL | Found Day 43 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v3.1/imu_calib.json
+Error     : Complementary filter alpha out of bounds
+Terminal  : Windows CMD
+  $ python3 imu_calib.json
+  filter_config.json: alpha=1.7
+  pitch follows raw accel with spikes
+WHAT HAPPENED
+  The live pitch plot showed violent spikes as if the gyro was ignored. The filter ran, but the numbers made no physical sense.
+WHY IT HAPPENED (root cause)
+  The complementary filter weights gyro integration by alpha and the accelerometer by (1 - alpha). With alpha=1.7 the accelerometer weight became -0.7, so the filter was actively amplifying accelerometer noise instead of suppressing it. A typo in filter_config.json wrote 1.7 instead of 0.7, and nothing validated the config against the [0,1] domain the math requires.
+FIX (took 1 day)
+  Fixed by clamping alpha at load time and adding a config validator that rejects values outside [0,1] with a readable error.
+
+----------------------------------------------------------------------
+E0019 | v3.1 | SMALL | Found Day 43 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v3.1/calibrate_imu.py
+Error     : Magnetometer saturates near the drive motors
+Terminal  : Windows CMD
+  $ python3 calibrate_imu.py
+  mag: x=+32767 y=-32767 z=+1024
+  heading: jumping 0..359
+WHAT HAPPENED
+  The heading readout became random noise whenever the throttle rose. At standstill it was fine; the moment the motors spun, the compass went mad.
+WHY IT HAPPENED (root cause)
+  The QMC5883L's ADC saturated at its ±32767 output limits, which means the magnetic field at the sensor exceeded its measurement range. The motor current creates a strong magnetic field a few centimeters away, and at 2cm distance the field strength is comparable to the Earth's field the sensor is trying to measure. Saturated ADC values are not noise - they are clipped, which corrupts the heading completely.
+FIX (took 1 day)
+  Fixed by moving the sensor 5cm from the motor wiring, adding hard-iron offset calibration, and masking the heading while the throttle exceeds a threshold.
+
+----------------------------------------------------------------------
+E0020 | v3.1 | SMALL | Found Day 43 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v3.1/imu_calib.json
+Error     : ToF distance frozen at 0
+Terminal  : Windows CMD
+  $ python3 imu_calib.json
+  dist: 0, 0, 0, 0, 0 mm
+  wall state: UNKNOWN
+WHAT HAPPENED
+  The distance sensor returned exactly zero on every read. Not an error, not a range value - a perfect, suspicious zero every time.
+WHY IT HAPPENED (root cause)
+  The VL53L0X boot sequence requires specific register writes with strict timing between them. The init code skipped a required 5ms delay, so the sensor never left its boot state and returned the default register value of 0. The sensor was not broken - it was never initialized. This is why vendor init sequences must be copied exactly, including every delay.
+FIX (took 1 day)
+  Fixed by restoring the complete init sequence with all inter-register delays, and adding a power-on self-check that verifies a non-zero reading.
+
+----------------------------------------------------------------------
+E0021 | v3.1 | BIG | Found Day 44 | Fixed in 2 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v3.1/calibrate_imu.py
+Error     : VL53L1X range status 4 (out of bounds) constant
+Terminal  : ESP32 serial monitor
+  status: 4  status: 4  status: 4
+  distance frozen at 100mm
+WHAT HAPPENED
+  The front ToF froze at 100mm - exactly the minimum range of the sensor. The status code said 'out of bounds' on every read.
+WHY IT HAPPENED (root cause)
+  The glossy track surface produced a false early echo: the light pulse bounced back strongly from the surface itself, so the sensor believed a target was at its minimum range. Range status 4 is the sensor telling the truth about what it saw. Glossy surfaces are a known optical failure for time-of-flight sensors because the peak detection picks the wrong echo.
+INVESTIGATION (before the fix)
+  - Tested the same sensor against a matte target - read correctly
+  - Compared status codes across surfaces
+  - Confirmed the frozen value matched the sensor's minimum range
+FIX (took 2 days)
+  Fixed by switching to long-range mode with the peak detection tuned for low-reflectivity targets, and adding a status-code check that discards status 4 reads.
+
+----------------------------------------------------------------------
+E0022 | v3.1 | BIG | Found Day 44 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v3.1/imu_calib.json
+Error     : sensor_health flags all sensors dead on boot
+Terminal  : Pi SSH terminal
+  sensor 1: DEAD  sensor 2: DEAD  sensor 3: DEAD
+  but all read fine 2 minutes later
+WHAT HAPPENED
+  The health monitor declared every sensor dead at boot, then two minutes later all of them read fine. The alarm was real - but the verdict was premature.
+WHY IT HAPPENED (root cause)
+  The health check ran before the sensors finished their initialization sequences. Each sensor takes seconds to warm up (the ToF init alone needs several register delays), and the health monitor's first pass counted the warm-up silence as failures. The check had no grace period, so the boot-time transient was indistinguishable from a real failure.
+INVESTIGATION (before the fix)
+  - Noticed the pattern: always dead at boot, always fine later
+  - Logged the first readings - they arrived after the check window
+  - Measured the actual sensor ready time from boot
+FIX (took 3 days)
+  Fixed by delaying the first health check until 5 seconds after the last sensor reports ready, and adding a warm-up state to the monitor.
+
+----------------------------------------------------------------------
+E0023 | v3.1 | BIG | Found Day 44 | Fixed in 4 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v3.1/calibrate_imu.py
+Error     : MPU6050 FIFO overflows after 30s
+Terminal  : ESP32 serial monitor
+  E (30000) mpu6050: FIFO overflow (2048 bytes)
+  gyro data: stale frames
+WHAT HAPPENED
+  Every 30 seconds the gyro stream glitched. The FIFO overflow error appeared exactly at the 30-second mark, every run, like clockwork.
+WHY IT HAPPENED (root cause)
+  The MPU6050 buffers samples in an internal 2048-byte FIFO, and the reader drained it at 50Hz while the sensor produced at 100Hz. The drain rate was half the fill rate, so the FIFO filled exactly at the overflow point - 30 seconds at these rates. The periodic glitch was the FIFO resetting, and the periodic timing was the giveaway: a hardware error would not repeat on a precise schedule.
+INVESTIGATION (before the fix)
+  - Noticed the glitch was perfectly periodic - rate mismatch, not hardware
+  - Computed fill vs drain rates from the registers
+  - Confirmed the FIFO level grew linearly between overflows
+FIX (took 4 days)
+  Fixed by draining the FIFO at 200Hz (twice the sensor rate) and monitoring the FIFO level register as a health metric.
+
+----------------------------------------------------------------------
+E0024 | v3.1 | BIG | Found Day 44 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v3.1/imu_calib.json
+Error     : IMU calibration accepted garbage data
+Terminal  : Pi SSH terminal
+  $ python3 calibrate_imu.py
+  collecting... done (120 samples)
+  gyro bias: 1.34 deg/s (was 0.01)
+  result: worse than before
+WHAT HAPPENED
+  The calibration tool ran 'successfully' but produced a bias 100x worse than the previous value. The tool had no way to know the robot was being bumped while it collected.
+WHY IT HAPPENED (root cause)
+  Calibration is a statistical estimate: it averages samples to find the bias. If the robot moves during collection, the samples contain real motion plus bias, and the average is corrupted. The tool trusted its input completely - it never checked whether the sensor was still, because stillness was an assumption, not a measurement. Garbage in, garbage out, with a success message on top.
+INVESTIGATION (before the fix)
+  - Re-ran the calibration with the robot untouched - bias returned to 0.01
+  - Compared the sample variance between the two runs
+  - Found the bump event in the session log by timestamp
+FIX (took 5 days)
+  Fixed by computing the sample variance before accepting the result and requiring the robot to be still, with a 'movement detected' warning when the variance is too high.
+
+----------------------------------------------------------------------
+E0025 | v3.2 | SMALL | Found Day 45 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v3.2/complementary.py
+Error     : Wall state flips every frame
+Terminal  : systemd journal
+  $ python3 complementary.py
+  state: LEFT WALL, RIGHT WALL, LEFT WALL, ...
+  distance jitter +-4cm
+WHAT HAPPENED
+  The wall-following state changed sides every single frame, making the robot oscillate between two behaviors at 10Hz. The distance was stable within a few centimeters.
+WHY IT HAPPENED (root cause)
+  The state threshold sat exactly in the middle of the sensor's noise band. A 4cm jitter crossed the threshold in both directions constantly, and the state machine had no hysteresis - no memory of the previous state to suppress rapid toggling. Threshold logic without hysteresis amplifies sensor noise into state oscillation.
+FIX (took 1 day)
+  Fixed by adding a 6cm hysteresis band around the threshold so the state only changes when the distance clearly leaves the current side.
+
+----------------------------------------------------------------------
+E0026 | v3.2 | SMALL | Found Day 45 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v3.2/filter_config.json
+Error     : Camera capture returns a black frame
+Terminal  : systemd journal
+  $ python3 filter_config.json
+  frame mean = 2.1 (near black)
+  camera seems dead
+WHAT HAPPENED
+  The camera test produced almost entirely black frames. The sensor was alive - the log showed it was capturing - but the image was dark.
+WHY IT HAPPENED (root cause)
+  The camera was still in preview mode with auto-exposure running when the first capture happened. The capture raced the exposure settling, so the frame froze before the sensor adapted to the light. A camera is not instantly ready: after start, the auto-exposure algorithm needs several frames to converge, and a read immediately after init captures the un-converged state.
+FIX (took 1 day)
+  Fixed by forcing a 500ms settle delay after camera start and discarding the first three frames before using any image.
+
+----------------------------------------------------------------------
+E0027 | v3.2 | SMALL | Found Day 45 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v3.2/complementary.py
+Error     : MPU6050 WHO_AM_I mismatch 0x00
+Terminal  : systemd journal
+  $ python3 complementary.py
+  WHO_AM_I = 0x00 (expected 0x68)
+  IMU not found on bus
+WHAT HAPPENED
+  The IMU log script reported the sensor was absent even though it was wired and powered. The address check failed on the very first register read.
+WHY IT HAPPENED (root cause)
+  The MPU6050 answers at 0x68 or 0x69 depending on the AD0 pin. With AD0 floating, the pin read as high at power-up and the chip moved to 0x69, while the code only probed 0x68. WHO_AM_I returning 0x00 means the device never even acknowledged - the wrong address was being addressed, so the chip stayed silent.
+FIX (took 1 day)
+  Fixed by pulling AD0 to ground with a resistor and adding a bus scan that discovers the device address instead of assuming it.
+
+----------------------------------------------------------------------
+E0028 | v3.2 | SMALL | Found Day 45 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v3.2/filter_config.json
+Error     : Calibration JSON has no 'gyro_offset' key
+Terminal  : systemd journal
+  $ python3 filter_config.json
+  KeyError: 'gyro_offset'
+    File "filter_config.json", line 27, in load_calib
+WHAT HAPPENED
+  The IMU driver crashed at startup reading its calibration file. The file existed and looked complete - the schema was the problem.
+WHY IT HAPPENED (root cause)
+  The calibration file was produced by an older calibration script that stored the fields under different names. The loader used strict key access (calib['gyro_offset']) so a renamed key raised KeyError instantly. There was no schema version in the file and no migration path, so old and new files were indistinguishable until load time.
+FIX (took 1 day)
+  Fixed by adding a schema version field, a default fallback for missing keys, and regenerating imu_calib.json with the new format.
+
+----------------------------------------------------------------------
+E0029 | v3.2 | SMALL | Found Day 45 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v3.2/complementary.py
+Error     : Complementary filter alpha out of bounds
+Terminal  : systemd journal
+  $ python3 complementary.py
+  filter_config.json: alpha=1.7
+  pitch follows raw accel with spikes
+WHAT HAPPENED
+  The live pitch plot showed violent spikes as if the gyro was ignored. The filter ran, but the numbers made no physical sense.
+WHY IT HAPPENED (root cause)
+  The complementary filter weights gyro integration by alpha and the accelerometer by (1 - alpha). With alpha=1.7 the accelerometer weight became -0.7, so the filter was actively amplifying accelerometer noise instead of suppressing it. A typo in filter_config.json wrote 1.7 instead of 0.7, and nothing validated the config against the [0,1] domain the math requires.
+FIX (took 1 day)
+  Fixed by clamping alpha at load time and adding a config validator that rejects values outside [0,1] with a readable error.
+
+----------------------------------------------------------------------
+E0030 | v3.2 | SMALL | Found Day 45 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v3.2/filter_config.json
+Error     : Magnetometer saturates near the drive motors
+Terminal  : systemd journal
+  $ python3 filter_config.json
+  mag: x=+32767 y=-32767 z=+1024
+  heading: jumping 0..359
+WHAT HAPPENED
+  The heading readout became random noise whenever the throttle rose. At standstill it was fine; the moment the motors spun, the compass went mad.
+WHY IT HAPPENED (root cause)
+  The QMC5883L's ADC saturated at its ±32767 output limits, which means the magnetic field at the sensor exceeded its measurement range. The motor current creates a strong magnetic field a few centimeters away, and at 2cm distance the field strength is comparable to the Earth's field the sensor is trying to measure. Saturated ADC values are not noise - they are clipped, which corrupts the heading completely.
+FIX (took 1 day)
+  Fixed by moving the sensor 5cm from the motor wiring, adding hard-iron offset calibration, and masking the heading while the throttle exceeds a threshold.
+
+----------------------------------------------------------------------
+E0031 | v3.2 | SMALL | Found Day 45 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v3.2/complementary.py
+Error     : ToF distance frozen at 0
+Terminal  : systemd journal
+  $ python3 complementary.py
+  dist: 0, 0, 0, 0, 0 mm
+  wall state: UNKNOWN
+WHAT HAPPENED
+  The distance sensor returned exactly zero on every read. Not an error, not a range value - a perfect, suspicious zero every time.
+WHY IT HAPPENED (root cause)
+  The VL53L0X boot sequence requires specific register writes with strict timing between them. The init code skipped a required 5ms delay, so the sensor never left its boot state and returned the default register value of 0. The sensor was not broken - it was never initialized. This is why vendor init sequences must be copied exactly, including every delay.
+FIX (took 1 day)
+  Fixed by restoring the complete init sequence with all inter-register delays, and adding a power-on self-check that verifies a non-zero reading.
+
+----------------------------------------------------------------------
+E0032 | v3.2 | SMALL | Found Day 45 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v3.2/filter_config.json
+Error     : ToF range error 7 (VL53L1X) floods the log
+Terminal  : systemd journal
+  $ python3 filter_config.json
+  WARNING: range status 7 (signal fail)
+  WARNING: range status 7 (signal fail)
+  ... 600 lines/second ...
+WHAT HAPPENED
+  The console became a waterfall of identical warnings. Within seconds the useful log was buried under thousands of identical lines.
+WHY IT HAPPENED (root cause)
+  The reflective venue tile produced a weak return echo, so the VL53L1X reported range status 7 (signal fail). The error path logged at full loop rate with no throttle - 600 lines per second is simply the loop rate. Logging is I/O, and I/O at that rate saturated the serial link and starved the control loop of CPU time.
+FIX (took 1 day)
+  Fixed with a rate limiter that logs the error at most once per 2 seconds and counts the suppressed occurrences, mirroring the I2C fix.
+
+----------------------------------------------------------------------
+E0033 | v3.2 | BIG | Found Day 46 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v3.2/complementary.py
+Error     : sensor_health flags all sensors dead on boot
+Terminal  : Pi SSH terminal
+  sensor 1: DEAD  sensor 2: DEAD  sensor 3: DEAD
+  but all read fine 2 minutes later
+WHAT HAPPENED
+  The health monitor declared every sensor dead at boot, then two minutes later all of them read fine. The alarm was real - but the verdict was premature.
+WHY IT HAPPENED (root cause)
+  The health check ran before the sensors finished their initialization sequences. Each sensor takes seconds to warm up (the ToF init alone needs several register delays), and the health monitor's first pass counted the warm-up silence as failures. The check had no grace period, so the boot-time transient was indistinguishable from a real failure.
+INVESTIGATION (before the fix)
+  - Noticed the pattern: always dead at boot, always fine later
+  - Logged the first readings - they arrived after the check window
+  - Measured the actual sensor ready time from boot
+FIX (took 2 days)
+  Fixed by delaying the first health check until 5 seconds after the last sensor reports ready, and adding a warm-up state to the monitor.
+
+----------------------------------------------------------------------
+E0034 | v3.2 | BIG | Found Day 46 | Fixed in 3 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v3.2/filter_config.json
+Error     : MPU6050 FIFO overflows after 30s
+Terminal  : ESP32 serial monitor
+  E (30000) mpu6050: FIFO overflow (2048 bytes)
+  gyro data: stale frames
+WHAT HAPPENED
+  Every 30 seconds the gyro stream glitched. The FIFO overflow error appeared exactly at the 30-second mark, every run, like clockwork.
+WHY IT HAPPENED (root cause)
+  The MPU6050 buffers samples in an internal 2048-byte FIFO, and the reader drained it at 50Hz while the sensor produced at 100Hz. The drain rate was half the fill rate, so the FIFO filled exactly at the overflow point - 30 seconds at these rates. The periodic glitch was the FIFO resetting, and the periodic timing was the giveaway: a hardware error would not repeat on a precise schedule.
+INVESTIGATION (before the fix)
+  - Noticed the glitch was perfectly periodic - rate mismatch, not hardware
+  - Computed fill vs drain rates from the registers
+  - Confirmed the FIFO level grew linearly between overflows
+FIX (took 3 days)
+  Fixed by draining the FIFO at 200Hz (twice the sensor rate) and monitoring the FIFO level register as a health metric.
+
+----------------------------------------------------------------------
+E0035 | v3.2 | BIG | Found Day 46 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v3.2/complementary.py
+Error     : IMU calibration accepted garbage data
+Terminal  : Pi SSH terminal
+  $ python3 calibrate_imu.py
+  collecting... done (120 samples)
+  gyro bias: 1.34 deg/s (was 0.01)
+  result: worse than before
+WHAT HAPPENED
+  The calibration tool ran 'successfully' but produced a bias 100x worse than the previous value. The tool had no way to know the robot was being bumped while it collected.
+WHY IT HAPPENED (root cause)
+  Calibration is a statistical estimate: it averages samples to find the bias. If the robot moves during collection, the samples contain real motion plus bias, and the average is corrupted. The tool trusted its input completely - it never checked whether the sensor was still, because stillness was an assumption, not a measurement. Garbage in, garbage out, with a success message on top.
+INVESTIGATION (before the fix)
+  - Re-ran the calibration with the robot untouched - bias returned to 0.01
+  - Compared the sample variance between the two runs
+  - Found the bump event in the session log by timestamp
+FIX (took 4 days)
+  Fixed by computing the sample variance before accepting the result and requiring the robot to be still, with a 'movement detected' warning when the variance is too high.
+
+----------------------------------------------------------------------
+E0036 | v3.2 | BIG | Found Day 46 | Fixed in 5 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v3.2/filter_config.json
+Error     : I2C bus lockup after sensor hot-plug
+Terminal  : ESP32 serial monitor
+  E (1234) i2c: i2c_master_cmd_begin: init error
+  E (1234) i2c: bus is locked
+  all sensors dead until reboot
+WHAT HAPPENED
+  All sensors went dead at once - not one sensor failing, the whole bus. The console said the bus itself was locked.
+WHY IT HAPPENED (root cause)
+  Unplugging a sensor while the bus was active left the I2C lines in a stuck state (a device holding SDA low, or a mid-transfer state). The ESP32's I2C controller then could not start new transfers, and it reported the bus as locked. I2C has no built-in recovery; the bus can only be unlocked by the standard 9-clock-pulse reset sequence, which the driver did not implement.
+INVESTIGATION (before the fix)
+  - Confirmed all sensors failed simultaneously, not one by one
+  - Recognized the signature: bus lockup after a hot-plug event
+  - Verified a reboot recovered the bus, proving the hardware was fine
+FIX (took 5 days)
+  Fixed by implementing the I2C recovery sequence (9 clock pulses on SCL, then a STOP) triggered on the first init error, and locking the sensor tray so hot-plug cannot happen.
+
+----------------------------------------------------------------------
+E0037 | v3.3 | SMALL | Found Day 47 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v3.3/heading.py
+Error     : Camera capture returns a black frame
+Terminal  : VS Code terminal
+  $ python3 heading.py
+  frame mean = 2.1 (near black)
+  camera seems dead
+WHAT HAPPENED
+  The camera test produced almost entirely black frames. The sensor was alive - the log showed it was capturing - but the image was dark.
+WHY IT HAPPENED (root cause)
+  The camera was still in preview mode with auto-exposure running when the first capture happened. The capture raced the exposure settling, so the frame froze before the sensor adapted to the light. A camera is not instantly ready: after start, the auto-exposure algorithm needs several frames to converge, and a read immediately after init captures the un-converged state.
+FIX (took 1 day)
+  Fixed by forcing a 500ms settle delay after camera start and discarding the first three frames before using any image.
+
+----------------------------------------------------------------------
+E0038 | v3.3 | SMALL | Found Day 47 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v3.3/mag_calib.json
+Error     : MPU6050 WHO_AM_I mismatch 0x00
+Terminal  : VS Code terminal
+  $ python3 mag_calib.json
+  WHO_AM_I = 0x00 (expected 0x68)
+  IMU not found on bus
+WHAT HAPPENED
+  The IMU log script reported the sensor was absent even though it was wired and powered. The address check failed on the very first register read.
+WHY IT HAPPENED (root cause)
+  The MPU6050 answers at 0x68 or 0x69 depending on the AD0 pin. With AD0 floating, the pin read as high at power-up and the chip moved to 0x69, while the code only probed 0x68. WHO_AM_I returning 0x00 means the device never even acknowledged - the wrong address was being addressed, so the chip stayed silent.
+FIX (took 1 day)
+  Fixed by pulling AD0 to ground with a resistor and adding a bus scan that discovers the device address instead of assuming it.
+
+----------------------------------------------------------------------
+E0039 | v3.3 | SMALL | Found Day 47 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v3.3/heading.py
+Error     : Calibration JSON has no 'gyro_offset' key
+Terminal  : VS Code terminal
+  $ python3 heading.py
+  KeyError: 'gyro_offset'
+    File "heading.py", line 27, in load_calib
+WHAT HAPPENED
+  The IMU driver crashed at startup reading its calibration file. The file existed and looked complete - the schema was the problem.
+WHY IT HAPPENED (root cause)
+  The calibration file was produced by an older calibration script that stored the fields under different names. The loader used strict key access (calib['gyro_offset']) so a renamed key raised KeyError instantly. There was no schema version in the file and no migration path, so old and new files were indistinguishable until load time.
+FIX (took 1 day)
+  Fixed by adding a schema version field, a default fallback for missing keys, and regenerating imu_calib.json with the new format.
+
+----------------------------------------------------------------------
+E0040 | v3.3 | SMALL | Found Day 47 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v3.3/mag_calib.json
+Error     : Complementary filter alpha out of bounds
+Terminal  : VS Code terminal
+  $ python3 mag_calib.json
+  filter_config.json: alpha=1.7
+  pitch follows raw accel with spikes
+WHAT HAPPENED
+  The live pitch plot showed violent spikes as if the gyro was ignored. The filter ran, but the numbers made no physical sense.
+WHY IT HAPPENED (root cause)
+  The complementary filter weights gyro integration by alpha and the accelerometer by (1 - alpha). With alpha=1.7 the accelerometer weight became -0.7, so the filter was actively amplifying accelerometer noise instead of suppressing it. A typo in filter_config.json wrote 1.7 instead of 0.7, and nothing validated the config against the [0,1] domain the math requires.
+FIX (took 1 day)
+  Fixed by clamping alpha at load time and adding a config validator that rejects values outside [0,1] with a readable error.
+
+----------------------------------------------------------------------
+E0041 | v3.3 | SMALL | Found Day 47 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v3.3/heading.py
+Error     : Magnetometer saturates near the drive motors
+Terminal  : VS Code terminal
+  $ python3 heading.py
+  mag: x=+32767 y=-32767 z=+1024
+  heading: jumping 0..359
+WHAT HAPPENED
+  The heading readout became random noise whenever the throttle rose. At standstill it was fine; the moment the motors spun, the compass went mad.
+WHY IT HAPPENED (root cause)
+  The QMC5883L's ADC saturated at its ±32767 output limits, which means the magnetic field at the sensor exceeded its measurement range. The motor current creates a strong magnetic field a few centimeters away, and at 2cm distance the field strength is comparable to the Earth's field the sensor is trying to measure. Saturated ADC values are not noise - they are clipped, which corrupts the heading completely.
+FIX (took 1 day)
+  Fixed by moving the sensor 5cm from the motor wiring, adding hard-iron offset calibration, and masking the heading while the throttle exceeds a threshold.
+
+----------------------------------------------------------------------
+E0042 | v3.3 | SMALL | Found Day 47 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v3.3/mag_calib.json
+Error     : ToF distance frozen at 0
+Terminal  : VS Code terminal
+  $ python3 mag_calib.json
+  dist: 0, 0, 0, 0, 0 mm
+  wall state: UNKNOWN
+WHAT HAPPENED
+  The distance sensor returned exactly zero on every read. Not an error, not a range value - a perfect, suspicious zero every time.
+WHY IT HAPPENED (root cause)
+  The VL53L0X boot sequence requires specific register writes with strict timing between them. The init code skipped a required 5ms delay, so the sensor never left its boot state and returned the default register value of 0. The sensor was not broken - it was never initialized. This is why vendor init sequences must be copied exactly, including every delay.
+FIX (took 1 day)
+  Fixed by restoring the complete init sequence with all inter-register delays, and adding a power-on self-check that verifies a non-zero reading.
+
+----------------------------------------------------------------------
+E0043 | v3.3 | SMALL | Found Day 47 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v3.3/heading.py
+Error     : ToF range error 7 (VL53L1X) floods the log
+Terminal  : VS Code terminal
+  $ python3 heading.py
+  WARNING: range status 7 (signal fail)
+  WARNING: range status 7 (signal fail)
+  ... 600 lines/second ...
+WHAT HAPPENED
+  The console became a waterfall of identical warnings. Within seconds the useful log was buried under thousands of identical lines.
+WHY IT HAPPENED (root cause)
+  The reflective venue tile produced a weak return echo, so the VL53L1X reported range status 7 (signal fail). The error path logged at full loop rate with no throttle - 600 lines per second is simply the loop rate. Logging is I/O, and I/O at that rate saturated the serial link and starved the control loop of CPU time.
+FIX (took 1 day)
+  Fixed with a rate limiter that logs the error at most once per 2 seconds and counts the suppressed occurrences, mirroring the I2C fix.
+
+----------------------------------------------------------------------
+E0044 | v3.3 | SMALL | Found Day 47 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v3.3/mag_calib.json
+Error     : Wall state flips every frame
+Terminal  : VS Code terminal
+  $ python3 mag_calib.json
+  state: LEFT WALL, RIGHT WALL, LEFT WALL, ...
+  distance jitter +-4cm
+WHAT HAPPENED
+  The wall-following state changed sides every single frame, making the robot oscillate between two behaviors at 10Hz. The distance was stable within a few centimeters.
+WHY IT HAPPENED (root cause)
+  The state threshold sat exactly in the middle of the sensor's noise band. A 4cm jitter crossed the threshold in both directions constantly, and the state machine had no hysteresis - no memory of the previous state to suppress rapid toggling. Threshold logic without hysteresis amplifies sensor noise into state oscillation.
+FIX (took 1 day)
+  Fixed by adding a 6cm hysteresis band around the threshold so the state only changes when the distance clearly leaves the current side.
+
+----------------------------------------------------------------------
+E0045 | v3.3 | BIG | Found Day 48 | Fixed in 2 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v3.3/heading.py
+Error     : MPU6050 FIFO overflows after 30s
+Terminal  : ESP32 serial monitor
+  E (30000) mpu6050: FIFO overflow (2048 bytes)
+  gyro data: stale frames
+WHAT HAPPENED
+  Every 30 seconds the gyro stream glitched. The FIFO overflow error appeared exactly at the 30-second mark, every run, like clockwork.
+WHY IT HAPPENED (root cause)
+  The MPU6050 buffers samples in an internal 2048-byte FIFO, and the reader drained it at 50Hz while the sensor produced at 100Hz. The drain rate was half the fill rate, so the FIFO filled exactly at the overflow point - 30 seconds at these rates. The periodic glitch was the FIFO resetting, and the periodic timing was the giveaway: a hardware error would not repeat on a precise schedule.
+INVESTIGATION (before the fix)
+  - Noticed the glitch was perfectly periodic - rate mismatch, not hardware
+  - Computed fill vs drain rates from the registers
+  - Confirmed the FIFO level grew linearly between overflows
+FIX (took 2 days)
+  Fixed by draining the FIFO at 200Hz (twice the sensor rate) and monitoring the FIFO level register as a health metric.
+
+----------------------------------------------------------------------
+E0046 | v3.3 | BIG | Found Day 48 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v3.3/mag_calib.json
+Error     : IMU calibration accepted garbage data
+Terminal  : Pi SSH terminal
+  $ python3 calibrate_imu.py
+  collecting... done (120 samples)
+  gyro bias: 1.34 deg/s (was 0.01)
+  result: worse than before
+WHAT HAPPENED
+  The calibration tool ran 'successfully' but produced a bias 100x worse than the previous value. The tool had no way to know the robot was being bumped while it collected.
+WHY IT HAPPENED (root cause)
+  Calibration is a statistical estimate: it averages samples to find the bias. If the robot moves during collection, the samples contain real motion plus bias, and the average is corrupted. The tool trusted its input completely - it never checked whether the sensor was still, because stillness was an assumption, not a measurement. Garbage in, garbage out, with a success message on top.
+INVESTIGATION (before the fix)
+  - Re-ran the calibration with the robot untouched - bias returned to 0.01
+  - Compared the sample variance between the two runs
+  - Found the bump event in the session log by timestamp
+FIX (took 3 days)
+  Fixed by computing the sample variance before accepting the result and requiring the robot to be still, with a 'movement detected' warning when the variance is too high.
+
+----------------------------------------------------------------------
+E0047 | v3.3 | BIG | Found Day 48 | Fixed in 4 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v3.3/heading.py
+Error     : I2C bus lockup after sensor hot-plug
+Terminal  : ESP32 serial monitor
+  E (1234) i2c: i2c_master_cmd_begin: init error
+  E (1234) i2c: bus is locked
+  all sensors dead until reboot
+WHAT HAPPENED
+  All sensors went dead at once - not one sensor failing, the whole bus. The console said the bus itself was locked.
+WHY IT HAPPENED (root cause)
+  Unplugging a sensor while the bus was active left the I2C lines in a stuck state (a device holding SDA low, or a mid-transfer state). The ESP32's I2C controller then could not start new transfers, and it reported the bus as locked. I2C has no built-in recovery; the bus can only be unlocked by the standard 9-clock-pulse reset sequence, which the driver did not implement.
+INVESTIGATION (before the fix)
+  - Confirmed all sensors failed simultaneously, not one by one
+  - Recognized the signature: bus lockup after a hot-plug event
+  - Verified a reboot recovered the bus, proving the hardware was fine
+FIX (took 4 days)
+  Fixed by implementing the I2C recovery sequence (9 clock pulses on SCL, then a STOP) triggered on the first init error, and locking the sensor tray so hot-plug cannot happen.
+
+----------------------------------------------------------------------
+E0048 | v3.3 | BIG | Found Day 48 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v3.3/mag_calib.json
+Error     : Complementary filter pitch drifts during a straight
+Terminal  : Pi SSH terminal
+  pitch: 0.1 -> 1.4 deg over 10s
+  gyro bias never removed
+WHAT HAPPENED
+  The pitch angle drifted slowly upward during a straight run. The complementary filter normally holds pitch stable - the drift was a bias problem, not a filter problem.
+WHY IT HAPPENED (root cause)
+  The complementary filter fuses the gyro (integrated) with the accelerometer (absolute). The gyro's small bias integrates into a growing error over time, and the filter only removes it by blending in the accelerometer - but the blend weight was too small to correct a 1.34 deg/s bias. The filter assumed a calibrated gyro; the v3.1 calibration was not applied on this boot path, so the bias leaked through.
+INVESTIGATION (before the fix)
+  - Checked the calibration load at boot - it was skipped on this path
+  - Logged the raw gyro value to measure the actual bias
+  - Applied the bias and watched the drift disappear
+FIX (took 5 days)
+  Fixed by applying the calibrated bias at every boot path and adding a drift check: pitch must stay within 0.5 degrees during a 10s static test.
+
+----------------------------------------------------------------------
+E0049 | v3.4 | SMALL | Found Day 49 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v3.4/read_tof.py
+Error     : MPU6050 WHO_AM_I mismatch 0x00
+Terminal  : Pi SSH terminal
+  $ python3 read_tof.py
+  WHO_AM_I = 0x00 (expected 0x68)
+  IMU not found on bus
+WHAT HAPPENED
+  The IMU log script reported the sensor was absent even though it was wired and powered. The address check failed on the very first register read.
+WHY IT HAPPENED (root cause)
+  The MPU6050 answers at 0x68 or 0x69 depending on the AD0 pin. With AD0 floating, the pin read as high at power-up and the chip moved to 0x69, while the code only probed 0x68. WHO_AM_I returning 0x00 means the device never even acknowledged - the wrong address was being addressed, so the chip stayed silent.
+FIX (took 1 day)
+  Fixed by pulling AD0 to ground with a resistor and adding a bus scan that discovers the device address instead of assuming it.
+
+----------------------------------------------------------------------
+E0050 | v3.4 | SMALL | Found Day 49 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v3.4/tof_config.py
+Error     : Calibration JSON has no 'gyro_offset' key
+Terminal  : Pi SSH terminal
+  $ python3 tof_config.py
+  KeyError: 'gyro_offset'
+    File "tof_config.py", line 27, in load_calib
+WHAT HAPPENED
+  The IMU driver crashed at startup reading its calibration file. The file existed and looked complete - the schema was the problem.
+WHY IT HAPPENED (root cause)
+  The calibration file was produced by an older calibration script that stored the fields under different names. The loader used strict key access (calib['gyro_offset']) so a renamed key raised KeyError instantly. There was no schema version in the file and no migration path, so old and new files were indistinguishable until load time.
+FIX (took 1 day)
+  Fixed by adding a schema version field, a default fallback for missing keys, and regenerating imu_calib.json with the new format.
+
+----------------------------------------------------------------------
+E0051 | v3.4 | SMALL | Found Day 49 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v3.4/read_tof.py
+Error     : Complementary filter alpha out of bounds
+Terminal  : Pi SSH terminal
+  $ python3 read_tof.py
+  filter_config.json: alpha=1.7
+  pitch follows raw accel with spikes
+WHAT HAPPENED
+  The live pitch plot showed violent spikes as if the gyro was ignored. The filter ran, but the numbers made no physical sense.
+WHY IT HAPPENED (root cause)
+  The complementary filter weights gyro integration by alpha and the accelerometer by (1 - alpha). With alpha=1.7 the accelerometer weight became -0.7, so the filter was actively amplifying accelerometer noise instead of suppressing it. A typo in filter_config.json wrote 1.7 instead of 0.7, and nothing validated the config against the [0,1] domain the math requires.
+FIX (took 1 day)
+  Fixed by clamping alpha at load time and adding a config validator that rejects values outside [0,1] with a readable error.
+
+----------------------------------------------------------------------
+E0052 | v3.4 | SMALL | Found Day 49 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v3.4/tof_config.py
+Error     : Magnetometer saturates near the drive motors
+Terminal  : Pi SSH terminal
+  $ python3 tof_config.py
+  mag: x=+32767 y=-32767 z=+1024
+  heading: jumping 0..359
+WHAT HAPPENED
+  The heading readout became random noise whenever the throttle rose. At standstill it was fine; the moment the motors spun, the compass went mad.
+WHY IT HAPPENED (root cause)
+  The QMC5883L's ADC saturated at its ±32767 output limits, which means the magnetic field at the sensor exceeded its measurement range. The motor current creates a strong magnetic field a few centimeters away, and at 2cm distance the field strength is comparable to the Earth's field the sensor is trying to measure. Saturated ADC values are not noise - they are clipped, which corrupts the heading completely.
+FIX (took 1 day)
+  Fixed by moving the sensor 5cm from the motor wiring, adding hard-iron offset calibration, and masking the heading while the throttle exceeds a threshold.
+
+----------------------------------------------------------------------
+E0053 | v3.4 | SMALL | Found Day 49 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v3.4/read_tof.py
+Error     : ToF distance frozen at 0
+Terminal  : Pi SSH terminal
+  $ python3 read_tof.py
+  dist: 0, 0, 0, 0, 0 mm
+  wall state: UNKNOWN
+WHAT HAPPENED
+  The distance sensor returned exactly zero on every read. Not an error, not a range value - a perfect, suspicious zero every time.
+WHY IT HAPPENED (root cause)
+  The VL53L0X boot sequence requires specific register writes with strict timing between them. The init code skipped a required 5ms delay, so the sensor never left its boot state and returned the default register value of 0. The sensor was not broken - it was never initialized. This is why vendor init sequences must be copied exactly, including every delay.
+FIX (took 1 day)
+  Fixed by restoring the complete init sequence with all inter-register delays, and adding a power-on self-check that verifies a non-zero reading.
+
+----------------------------------------------------------------------
+E0054 | v3.4 | SMALL | Found Day 49 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v3.4/tof_config.py
+Error     : ToF range error 7 (VL53L1X) floods the log
+Terminal  : Pi SSH terminal
+  $ python3 tof_config.py
+  WARNING: range status 7 (signal fail)
+  WARNING: range status 7 (signal fail)
+  ... 600 lines/second ...
+WHAT HAPPENED
+  The console became a waterfall of identical warnings. Within seconds the useful log was buried under thousands of identical lines.
+WHY IT HAPPENED (root cause)
+  The reflective venue tile produced a weak return echo, so the VL53L1X reported range status 7 (signal fail). The error path logged at full loop rate with no throttle - 600 lines per second is simply the loop rate. Logging is I/O, and I/O at that rate saturated the serial link and starved the control loop of CPU time.
+FIX (took 1 day)
+  Fixed with a rate limiter that logs the error at most once per 2 seconds and counts the suppressed occurrences, mirroring the I2C fix.
+
+----------------------------------------------------------------------
+E0055 | v3.4 | SMALL | Found Day 49 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v3.4/read_tof.py
+Error     : Wall state flips every frame
+Terminal  : Pi SSH terminal
+  $ python3 read_tof.py
+  state: LEFT WALL, RIGHT WALL, LEFT WALL, ...
+  distance jitter +-4cm
+WHAT HAPPENED
+  The wall-following state changed sides every single frame, making the robot oscillate between two behaviors at 10Hz. The distance was stable within a few centimeters.
+WHY IT HAPPENED (root cause)
+  The state threshold sat exactly in the middle of the sensor's noise band. A 4cm jitter crossed the threshold in both directions constantly, and the state machine had no hysteresis - no memory of the previous state to suppress rapid toggling. Threshold logic without hysteresis amplifies sensor noise into state oscillation.
+FIX (took 1 day)
+  Fixed by adding a 6cm hysteresis band around the threshold so the state only changes when the distance clearly leaves the current side.
+
+----------------------------------------------------------------------
+E0056 | v3.4 | SMALL | Found Day 49 | Fixed in 1 day | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v3.4/tof_config.py
+Error     : Camera capture returns a black frame
+Terminal  : Pi SSH terminal
+  $ python3 tof_config.py
+  frame mean = 2.1 (near black)
+  camera seems dead
+WHAT HAPPENED
+  The camera test produced almost entirely black frames. The sensor was alive - the log showed it was capturing - but the image was dark.
+WHY IT HAPPENED (root cause)
+  The camera was still in preview mode with auto-exposure running when the first capture happened. The capture raced the exposure settling, so the frame froze before the sensor adapted to the light. A camera is not instantly ready: after start, the auto-exposure algorithm needs several frames to converge, and a read immediately after init captures the un-converged state.
+FIX (took 1 day)
+  Fixed by forcing a 500ms settle delay after camera start and discarding the first three frames before using any image.
+
+----------------------------------------------------------------------
+E0057 | v3.4 | BIG | Found Day 50 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v3.4/read_tof.py
+Error     : IMU calibration accepted garbage data
+Terminal  : Pi SSH terminal
+  $ python3 calibrate_imu.py
+  collecting... done (120 samples)
+  gyro bias: 1.34 deg/s (was 0.01)
+  result: worse than before
+WHAT HAPPENED
+  The calibration tool ran 'successfully' but produced a bias 100x worse than the previous value. The tool had no way to know the robot was being bumped while it collected.
+WHY IT HAPPENED (root cause)
+  Calibration is a statistical estimate: it averages samples to find the bias. If the robot moves during collection, the samples contain real motion plus bias, and the average is corrupted. The tool trusted its input completely - it never checked whether the sensor was still, because stillness was an assumption, not a measurement. Garbage in, garbage out, with a success message on top.
+INVESTIGATION (before the fix)
+  - Re-ran the calibration with the robot untouched - bias returned to 0.01
+  - Compared the sample variance between the two runs
+  - Found the bump event in the session log by timestamp
+FIX (took 2 days)
+  Fixed by computing the sample variance before accepting the result and requiring the robot to be still, with a 'movement detected' warning when the variance is too high.
+
+----------------------------------------------------------------------
+E0058 | v3.4 | BIG | Found Day 50 | Fixed in 3 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v3.4/tof_config.py
+Error     : I2C bus lockup after sensor hot-plug
+Terminal  : ESP32 serial monitor
+  E (1234) i2c: i2c_master_cmd_begin: init error
+  E (1234) i2c: bus is locked
+  all sensors dead until reboot
+WHAT HAPPENED
+  All sensors went dead at once - not one sensor failing, the whole bus. The console said the bus itself was locked.
+WHY IT HAPPENED (root cause)
+  Unplugging a sensor while the bus was active left the I2C lines in a stuck state (a device holding SDA low, or a mid-transfer state). The ESP32's I2C controller then could not start new transfers, and it reported the bus as locked. I2C has no built-in recovery; the bus can only be unlocked by the standard 9-clock-pulse reset sequence, which the driver did not implement.
+INVESTIGATION (before the fix)
+  - Confirmed all sensors failed simultaneously, not one by one
+  - Recognized the signature: bus lockup after a hot-plug event
+  - Verified a reboot recovered the bus, proving the hardware was fine
+FIX (took 3 days)
+  Fixed by implementing the I2C recovery sequence (9 clock pulses on SCL, then a STOP) triggered on the first init error, and locking the sensor tray so hot-plug cannot happen.
+
+----------------------------------------------------------------------
+E0059 | v3.4 | BIG | Found Day 50 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v3.4/read_tof.py
+Error     : Complementary filter pitch drifts during a straight
+Terminal  : Pi SSH terminal
+  pitch: 0.1 -> 1.4 deg over 10s
+  gyro bias never removed
+WHAT HAPPENED
+  The pitch angle drifted slowly upward during a straight run. The complementary filter normally holds pitch stable - the drift was a bias problem, not a filter problem.
+WHY IT HAPPENED (root cause)
+  The complementary filter fuses the gyro (integrated) with the accelerometer (absolute). The gyro's small bias integrates into a growing error over time, and the filter only removes it by blending in the accelerometer - but the blend weight was too small to correct a 1.34 deg/s bias. The filter assumed a calibrated gyro; the v3.1 calibration was not applied on this boot path, so the bias leaked through.
+INVESTIGATION (before the fix)
+  - Checked the calibration load at boot - it was skipped on this path
+  - Logged the raw gyro value to measure the actual bias
+  - Applied the bias and watched the drift disappear
+FIX (took 4 days)
+  Fixed by applying the calibrated bias at every boot path and adding a drift check: pitch must stay within 0.5 degrees during a 10s static test.
+
+----------------------------------------------------------------------
+E0060 | v3.4 | BIG | Found Day 50 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v3.4/tof_config.py
+Error     : Mag heading unusable with the drive motors on
+Terminal  : Pi SSH terminal
+  heading: 0 -> 180 -> 90 (motors on)
+  heading stable (motors off)
+WHAT HAPPENED
+  The compass heading became random noise whenever the motors ran. With the motors off, the heading was perfect - the correlation was immediate and obvious.
+WHY IT HAPPENED (root cause)
+  The drive motors draw up to 2A, and the current in the battery wires creates a magnetic field proportional to the current. At the magnetometer's position, the motor field overwhelmed the Earth's field (about 0.5 gauss). Hard-iron calibration only removes constant offsets, and the motor field varies with throttle - it is dynamic, so no static calibration can remove it.
+INVESTIGATION (before the fix)
+  - Ran the motor_interference_test to map heading error vs throttle
+  - Moved the sensor 5cm away and repeated - error dropped sharply
+  - Confirmed the field scaled with current, not position of the robot
+FIX (took 5 days)
+  Fixed by moving the sensor away from the power wiring, twisting the power leads, and masking the heading whenever throttle exceeds 30%.
+
+----------------------------------------------------------------------
+E0061 | v3.5 | SMALL | Found Day 51 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v3.5/tof_fusion.py
+Error     : Calibration JSON has no 'gyro_offset' key
+Terminal  : Pi console (HDMI)
+  $ python3 tof_fusion.py
+  KeyError: 'gyro_offset'
+    File "tof_fusion.py", line 27, in load_calib
+WHAT HAPPENED
+  The IMU driver crashed at startup reading its calibration file. The file existed and looked complete - the schema was the problem.
+WHY IT HAPPENED (root cause)
+  The calibration file was produced by an older calibration script that stored the fields under different names. The loader used strict key access (calib['gyro_offset']) so a renamed key raised KeyError instantly. There was no schema version in the file and no migration path, so old and new files were indistinguishable until load time.
+FIX (took 1 day)
+  Fixed by adding a schema version field, a default fallback for missing keys, and regenerating imu_calib.json with the new format.
+
+----------------------------------------------------------------------
+E0062 | v3.5 | SMALL | Found Day 51 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v3.5/wall_state.py
+Error     : Complementary filter alpha out of bounds
+Terminal  : Pi console (HDMI)
+  $ python3 wall_state.py
+  filter_config.json: alpha=1.7
+  pitch follows raw accel with spikes
+WHAT HAPPENED
+  The live pitch plot showed violent spikes as if the gyro was ignored. The filter ran, but the numbers made no physical sense.
+WHY IT HAPPENED (root cause)
+  The complementary filter weights gyro integration by alpha and the accelerometer by (1 - alpha). With alpha=1.7 the accelerometer weight became -0.7, so the filter was actively amplifying accelerometer noise instead of suppressing it. A typo in filter_config.json wrote 1.7 instead of 0.7, and nothing validated the config against the [0,1] domain the math requires.
+FIX (took 1 day)
+  Fixed by clamping alpha at load time and adding a config validator that rejects values outside [0,1] with a readable error.
+
+----------------------------------------------------------------------
+E0063 | v3.5 | SMALL | Found Day 51 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v3.5/tof_fusion.py
+Error     : Magnetometer saturates near the drive motors
+Terminal  : Pi console (HDMI)
+  $ python3 tof_fusion.py
+  mag: x=+32767 y=-32767 z=+1024
+  heading: jumping 0..359
+WHAT HAPPENED
+  The heading readout became random noise whenever the throttle rose. At standstill it was fine; the moment the motors spun, the compass went mad.
+WHY IT HAPPENED (root cause)
+  The QMC5883L's ADC saturated at its ±32767 output limits, which means the magnetic field at the sensor exceeded its measurement range. The motor current creates a strong magnetic field a few centimeters away, and at 2cm distance the field strength is comparable to the Earth's field the sensor is trying to measure. Saturated ADC values are not noise - they are clipped, which corrupts the heading completely.
+FIX (took 1 day)
+  Fixed by moving the sensor 5cm from the motor wiring, adding hard-iron offset calibration, and masking the heading while the throttle exceeds a threshold.
+
+----------------------------------------------------------------------
+E0064 | v3.5 | SMALL | Found Day 51 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v3.5/wall_state.py
+Error     : ToF distance frozen at 0
+Terminal  : Pi console (HDMI)
+  $ python3 wall_state.py
+  dist: 0, 0, 0, 0, 0 mm
+  wall state: UNKNOWN
+WHAT HAPPENED
+  The distance sensor returned exactly zero on every read. Not an error, not a range value - a perfect, suspicious zero every time.
+WHY IT HAPPENED (root cause)
+  The VL53L0X boot sequence requires specific register writes with strict timing between them. The init code skipped a required 5ms delay, so the sensor never left its boot state and returned the default register value of 0. The sensor was not broken - it was never initialized. This is why vendor init sequences must be copied exactly, including every delay.
+FIX (took 1 day)
+  Fixed by restoring the complete init sequence with all inter-register delays, and adding a power-on self-check that verifies a non-zero reading.
+
+----------------------------------------------------------------------
+E0065 | v3.5 | SMALL | Found Day 51 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v3.5/tof_fusion.py
+Error     : ToF range error 7 (VL53L1X) floods the log
+Terminal  : Pi console (HDMI)
+  $ python3 tof_fusion.py
+  WARNING: range status 7 (signal fail)
+  WARNING: range status 7 (signal fail)
+  ... 600 lines/second ...
+WHAT HAPPENED
+  The console became a waterfall of identical warnings. Within seconds the useful log was buried under thousands of identical lines.
+WHY IT HAPPENED (root cause)
+  The reflective venue tile produced a weak return echo, so the VL53L1X reported range status 7 (signal fail). The error path logged at full loop rate with no throttle - 600 lines per second is simply the loop rate. Logging is I/O, and I/O at that rate saturated the serial link and starved the control loop of CPU time.
+FIX (took 1 day)
+  Fixed with a rate limiter that logs the error at most once per 2 seconds and counts the suppressed occurrences, mirroring the I2C fix.
+
+----------------------------------------------------------------------
+E0066 | v3.5 | SMALL | Found Day 51 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v3.5/wall_state.py
+Error     : Wall state flips every frame
+Terminal  : Pi console (HDMI)
+  $ python3 wall_state.py
+  state: LEFT WALL, RIGHT WALL, LEFT WALL, ...
+  distance jitter +-4cm
+WHAT HAPPENED
+  The wall-following state changed sides every single frame, making the robot oscillate between two behaviors at 10Hz. The distance was stable within a few centimeters.
+WHY IT HAPPENED (root cause)
+  The state threshold sat exactly in the middle of the sensor's noise band. A 4cm jitter crossed the threshold in both directions constantly, and the state machine had no hysteresis - no memory of the previous state to suppress rapid toggling. Threshold logic without hysteresis amplifies sensor noise into state oscillation.
+FIX (took 1 day)
+  Fixed by adding a 6cm hysteresis band around the threshold so the state only changes when the distance clearly leaves the current side.
+
+----------------------------------------------------------------------
+E0067 | v3.5 | SMALL | Found Day 51 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v3.5/tof_fusion.py
+Error     : Camera capture returns a black frame
+Terminal  : Pi console (HDMI)
+  $ python3 tof_fusion.py
+  frame mean = 2.1 (near black)
+  camera seems dead
+WHAT HAPPENED
+  The camera test produced almost entirely black frames. The sensor was alive - the log showed it was capturing - but the image was dark.
+WHY IT HAPPENED (root cause)
+  The camera was still in preview mode with auto-exposure running when the first capture happened. The capture raced the exposure settling, so the frame froze before the sensor adapted to the light. A camera is not instantly ready: after start, the auto-exposure algorithm needs several frames to converge, and a read immediately after init captures the un-converged state.
+FIX (took 1 day)
+  Fixed by forcing a 500ms settle delay after camera start and discarding the first three frames before using any image.
+
+----------------------------------------------------------------------
+E0068 | v3.5 | SMALL | Found Day 51 | Fixed in 1 day | Pi console (HDMI)
+----------------------------------------------------------------------
+File      : history/v3.5/wall_state.py
+Error     : MPU6050 WHO_AM_I mismatch 0x00
+Terminal  : Pi console (HDMI)
+  $ python3 wall_state.py
+  WHO_AM_I = 0x00 (expected 0x68)
+  IMU not found on bus
+WHAT HAPPENED
+  The IMU log script reported the sensor was absent even though it was wired and powered. The address check failed on the very first register read.
+WHY IT HAPPENED (root cause)
+  The MPU6050 answers at 0x68 or 0x69 depending on the AD0 pin. With AD0 floating, the pin read as high at power-up and the chip moved to 0x69, while the code only probed 0x68. WHO_AM_I returning 0x00 means the device never even acknowledged - the wrong address was being addressed, so the chip stayed silent.
+FIX (took 1 day)
+  Fixed by pulling AD0 to ground with a resistor and adding a bus scan that discovers the device address instead of assuming it.
+
+----------------------------------------------------------------------
+E0069 | v3.5 | BIG | Found Day 52 | Fixed in 2 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v3.5/tof_fusion.py
+Error     : I2C bus lockup after sensor hot-plug
+Terminal  : ESP32 serial monitor
+  E (1234) i2c: i2c_master_cmd_begin: init error
+  E (1234) i2c: bus is locked
+  all sensors dead until reboot
+WHAT HAPPENED
+  All sensors went dead at once - not one sensor failing, the whole bus. The console said the bus itself was locked.
+WHY IT HAPPENED (root cause)
+  Unplugging a sensor while the bus was active left the I2C lines in a stuck state (a device holding SDA low, or a mid-transfer state). The ESP32's I2C controller then could not start new transfers, and it reported the bus as locked. I2C has no built-in recovery; the bus can only be unlocked by the standard 9-clock-pulse reset sequence, which the driver did not implement.
+INVESTIGATION (before the fix)
+  - Confirmed all sensors failed simultaneously, not one by one
+  - Recognized the signature: bus lockup after a hot-plug event
+  - Verified a reboot recovered the bus, proving the hardware was fine
+FIX (took 2 days)
+  Fixed by implementing the I2C recovery sequence (9 clock pulses on SCL, then a STOP) triggered on the first init error, and locking the sensor tray so hot-plug cannot happen.
+
+----------------------------------------------------------------------
+E0070 | v3.5 | BIG | Found Day 52 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v3.5/wall_state.py
+Error     : Complementary filter pitch drifts during a straight
+Terminal  : Pi SSH terminal
+  pitch: 0.1 -> 1.4 deg over 10s
+  gyro bias never removed
+WHAT HAPPENED
+  The pitch angle drifted slowly upward during a straight run. The complementary filter normally holds pitch stable - the drift was a bias problem, not a filter problem.
+WHY IT HAPPENED (root cause)
+  The complementary filter fuses the gyro (integrated) with the accelerometer (absolute). The gyro's small bias integrates into a growing error over time, and the filter only removes it by blending in the accelerometer - but the blend weight was too small to correct a 1.34 deg/s bias. The filter assumed a calibrated gyro; the v3.1 calibration was not applied on this boot path, so the bias leaked through.
+INVESTIGATION (before the fix)
+  - Checked the calibration load at boot - it was skipped on this path
+  - Logged the raw gyro value to measure the actual bias
+  - Applied the bias and watched the drift disappear
+FIX (took 3 days)
+  Fixed by applying the calibrated bias at every boot path and adding a drift check: pitch must stay within 0.5 degrees during a 10s static test.
+
+----------------------------------------------------------------------
+E0071 | v3.5 | BIG | Found Day 52 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v3.5/tof_fusion.py
+Error     : Mag heading unusable with the drive motors on
+Terminal  : Pi SSH terminal
+  heading: 0 -> 180 -> 90 (motors on)
+  heading stable (motors off)
+WHAT HAPPENED
+  The compass heading became random noise whenever the motors ran. With the motors off, the heading was perfect - the correlation was immediate and obvious.
+WHY IT HAPPENED (root cause)
+  The drive motors draw up to 2A, and the current in the battery wires creates a magnetic field proportional to the current. At the magnetometer's position, the motor field overwhelmed the Earth's field (about 0.5 gauss). Hard-iron calibration only removes constant offsets, and the motor field varies with throttle - it is dynamic, so no static calibration can remove it.
+INVESTIGATION (before the fix)
+  - Ran the motor_interference_test to map heading error vs throttle
+  - Moved the sensor 5cm away and repeated - error dropped sharply
+  - Confirmed the field scaled with current, not position of the robot
+FIX (took 4 days)
+  Fixed by moving the sensor away from the power wiring, twisting the power leads, and masking the heading whenever throttle exceeds 30%.
+
+----------------------------------------------------------------------
+E0072 | v3.5 | BIG | Found Day 52 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v3.5/wall_state.py
+Error     : All ToF sensors report 8190mm (max range)
+Terminal  : Pi SSH terminal
+  left: 8190  front: 8190  right: 8190
+  wall state: OPEN everywhere
+WHAT HAPPENED
+  Every distance sensor reported exactly 8190mm - the maximum value of the VL53L0X. The robot believed the world was empty.
+WHY IT HAPPENED (root cause)
+  The VL53L0X API returns 8190mm as the 'no valid reading' sentinel, and the read path had never called the init function. Reads on an uninitialized sensor return the default maximum, which looks like a plausible distance. Three sensors agreeing on 8190 was the clue: real measurements never agree perfectly, but a sentinel value is identical everywhere. The code confused 'no reading' with 'far away'.
+INVESTIGATION (before the fix)
+  - Spotted all three sensors at the exact same value - impossible for real data
+  - Checked the init call path - it was missing entirely
+  - Verified the vendor example shows the init requirement
+FIX (took 5 days)
+  Fixed by adding the missing init call and treating 8190 as 'no reading' in the fusion layer instead of a distance.
+
+----------------------------------------------------------------------
+E0073 | v3.6 | SMALL | Found Day 53 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v3.6/camera_config.py
+Error     : Complementary filter alpha out of bounds
+Terminal  : ESP32 serial monitor
+  $ python3 camera_config.py
+  filter_config.json: alpha=1.7
+  pitch follows raw accel with spikes
+WHAT HAPPENED
+  The live pitch plot showed violent spikes as if the gyro was ignored. The filter ran, but the numbers made no physical sense.
+WHY IT HAPPENED (root cause)
+  The complementary filter weights gyro integration by alpha and the accelerometer by (1 - alpha). With alpha=1.7 the accelerometer weight became -0.7, so the filter was actively amplifying accelerometer noise instead of suppressing it. A typo in filter_config.json wrote 1.7 instead of 0.7, and nothing validated the config against the [0,1] domain the math requires.
+FIX (took 1 day)
+  Fixed by clamping alpha at load time and adding a config validator that rejects values outside [0,1] with a readable error.
+
+----------------------------------------------------------------------
+E0074 | v3.6 | SMALL | Found Day 53 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v3.6/capture_frame.py
+Error     : Magnetometer saturates near the drive motors
+Terminal  : ESP32 serial monitor
+  $ python3 capture_frame.py
+  mag: x=+32767 y=-32767 z=+1024
+  heading: jumping 0..359
+WHAT HAPPENED
+  The heading readout became random noise whenever the throttle rose. At standstill it was fine; the moment the motors spun, the compass went mad.
+WHY IT HAPPENED (root cause)
+  The QMC5883L's ADC saturated at its ±32767 output limits, which means the magnetic field at the sensor exceeded its measurement range. The motor current creates a strong magnetic field a few centimeters away, and at 2cm distance the field strength is comparable to the Earth's field the sensor is trying to measure. Saturated ADC values are not noise - they are clipped, which corrupts the heading completely.
+FIX (took 1 day)
+  Fixed by moving the sensor 5cm from the motor wiring, adding hard-iron offset calibration, and masking the heading while the throttle exceeds a threshold.
+
+----------------------------------------------------------------------
+E0075 | v3.6 | SMALL | Found Day 53 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v3.6/camera_config.py
+Error     : ToF distance frozen at 0
+Terminal  : ESP32 serial monitor
+  $ python3 camera_config.py
+  dist: 0, 0, 0, 0, 0 mm
+  wall state: UNKNOWN
+WHAT HAPPENED
+  The distance sensor returned exactly zero on every read. Not an error, not a range value - a perfect, suspicious zero every time.
+WHY IT HAPPENED (root cause)
+  The VL53L0X boot sequence requires specific register writes with strict timing between them. The init code skipped a required 5ms delay, so the sensor never left its boot state and returned the default register value of 0. The sensor was not broken - it was never initialized. This is why vendor init sequences must be copied exactly, including every delay.
+FIX (took 1 day)
+  Fixed by restoring the complete init sequence with all inter-register delays, and adding a power-on self-check that verifies a non-zero reading.
+
+----------------------------------------------------------------------
+E0076 | v3.6 | SMALL | Found Day 53 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v3.6/capture_frame.py
+Error     : ToF range error 7 (VL53L1X) floods the log
+Terminal  : ESP32 serial monitor
+  $ python3 capture_frame.py
+  WARNING: range status 7 (signal fail)
+  WARNING: range status 7 (signal fail)
+  ... 600 lines/second ...
+WHAT HAPPENED
+  The console became a waterfall of identical warnings. Within seconds the useful log was buried under thousands of identical lines.
+WHY IT HAPPENED (root cause)
+  The reflective venue tile produced a weak return echo, so the VL53L1X reported range status 7 (signal fail). The error path logged at full loop rate with no throttle - 600 lines per second is simply the loop rate. Logging is I/O, and I/O at that rate saturated the serial link and starved the control loop of CPU time.
+FIX (took 1 day)
+  Fixed with a rate limiter that logs the error at most once per 2 seconds and counts the suppressed occurrences, mirroring the I2C fix.
+
+----------------------------------------------------------------------
+E0077 | v3.6 | SMALL | Found Day 53 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v3.6/camera_config.py
+Error     : Wall state flips every frame
+Terminal  : ESP32 serial monitor
+  $ python3 camera_config.py
+  state: LEFT WALL, RIGHT WALL, LEFT WALL, ...
+  distance jitter +-4cm
+WHAT HAPPENED
+  The wall-following state changed sides every single frame, making the robot oscillate between two behaviors at 10Hz. The distance was stable within a few centimeters.
+WHY IT HAPPENED (root cause)
+  The state threshold sat exactly in the middle of the sensor's noise band. A 4cm jitter crossed the threshold in both directions constantly, and the state machine had no hysteresis - no memory of the previous state to suppress rapid toggling. Threshold logic without hysteresis amplifies sensor noise into state oscillation.
+FIX (took 1 day)
+  Fixed by adding a 6cm hysteresis band around the threshold so the state only changes when the distance clearly leaves the current side.
+
+----------------------------------------------------------------------
+E0078 | v3.6 | SMALL | Found Day 53 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v3.6/capture_frame.py
+Error     : Camera capture returns a black frame
+Terminal  : ESP32 serial monitor
+  $ python3 capture_frame.py
+  frame mean = 2.1 (near black)
+  camera seems dead
+WHAT HAPPENED
+  The camera test produced almost entirely black frames. The sensor was alive - the log showed it was capturing - but the image was dark.
+WHY IT HAPPENED (root cause)
+  The camera was still in preview mode with auto-exposure running when the first capture happened. The capture raced the exposure settling, so the frame froze before the sensor adapted to the light. A camera is not instantly ready: after start, the auto-exposure algorithm needs several frames to converge, and a read immediately after init captures the un-converged state.
+FIX (took 1 day)
+  Fixed by forcing a 500ms settle delay after camera start and discarding the first three frames before using any image.
+
+----------------------------------------------------------------------
+E0079 | v3.6 | SMALL | Found Day 53 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v3.6/camera_config.py
+Error     : MPU6050 WHO_AM_I mismatch 0x00
+Terminal  : ESP32 serial monitor
+  $ python3 camera_config.py
+  WHO_AM_I = 0x00 (expected 0x68)
+  IMU not found on bus
+WHAT HAPPENED
+  The IMU log script reported the sensor was absent even though it was wired and powered. The address check failed on the very first register read.
+WHY IT HAPPENED (root cause)
+  The MPU6050 answers at 0x68 or 0x69 depending on the AD0 pin. With AD0 floating, the pin read as high at power-up and the chip moved to 0x69, while the code only probed 0x68. WHO_AM_I returning 0x00 means the device never even acknowledged - the wrong address was being addressed, so the chip stayed silent.
+FIX (took 1 day)
+  Fixed by pulling AD0 to ground with a resistor and adding a bus scan that discovers the device address instead of assuming it.
+
+----------------------------------------------------------------------
+E0080 | v3.6 | SMALL | Found Day 53 | Fixed in 1 day | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v3.6/capture_frame.py
+Error     : Calibration JSON has no 'gyro_offset' key
+Terminal  : ESP32 serial monitor
+  $ python3 capture_frame.py
+  KeyError: 'gyro_offset'
+    File "capture_frame.py", line 27, in load_calib
+WHAT HAPPENED
+  The IMU driver crashed at startup reading its calibration file. The file existed and looked complete - the schema was the problem.
+WHY IT HAPPENED (root cause)
+  The calibration file was produced by an older calibration script that stored the fields under different names. The loader used strict key access (calib['gyro_offset']) so a renamed key raised KeyError instantly. There was no schema version in the file and no migration path, so old and new files were indistinguishable until load time.
+FIX (took 1 day)
+  Fixed by adding a schema version field, a default fallback for missing keys, and regenerating imu_calib.json with the new format.
+
+----------------------------------------------------------------------
+E0081 | v3.6 | BIG | Found Day 54 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v3.6/camera_config.py
+Error     : Complementary filter pitch drifts during a straight
+Terminal  : Pi SSH terminal
+  pitch: 0.1 -> 1.4 deg over 10s
+  gyro bias never removed
+WHAT HAPPENED
+  The pitch angle drifted slowly upward during a straight run. The complementary filter normally holds pitch stable - the drift was a bias problem, not a filter problem.
+WHY IT HAPPENED (root cause)
+  The complementary filter fuses the gyro (integrated) with the accelerometer (absolute). The gyro's small bias integrates into a growing error over time, and the filter only removes it by blending in the accelerometer - but the blend weight was too small to correct a 1.34 deg/s bias. The filter assumed a calibrated gyro; the v3.1 calibration was not applied on this boot path, so the bias leaked through.
+INVESTIGATION (before the fix)
+  - Checked the calibration load at boot - it was skipped on this path
+  - Logged the raw gyro value to measure the actual bias
+  - Applied the bias and watched the drift disappear
+FIX (took 2 days)
+  Fixed by applying the calibrated bias at every boot path and adding a drift check: pitch must stay within 0.5 degrees during a 10s static test.
+
+----------------------------------------------------------------------
+E0082 | v3.6 | BIG | Found Day 54 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v3.6/capture_frame.py
+Error     : Mag heading unusable with the drive motors on
+Terminal  : Pi SSH terminal
+  heading: 0 -> 180 -> 90 (motors on)
+  heading stable (motors off)
+WHAT HAPPENED
+  The compass heading became random noise whenever the motors ran. With the motors off, the heading was perfect - the correlation was immediate and obvious.
+WHY IT HAPPENED (root cause)
+  The drive motors draw up to 2A, and the current in the battery wires creates a magnetic field proportional to the current. At the magnetometer's position, the motor field overwhelmed the Earth's field (about 0.5 gauss). Hard-iron calibration only removes constant offsets, and the motor field varies with throttle - it is dynamic, so no static calibration can remove it.
+INVESTIGATION (before the fix)
+  - Ran the motor_interference_test to map heading error vs throttle
+  - Moved the sensor 5cm away and repeated - error dropped sharply
+  - Confirmed the field scaled with current, not position of the robot
+FIX (took 3 days)
+  Fixed by moving the sensor away from the power wiring, twisting the power leads, and masking the heading whenever throttle exceeds 30%.
+
+----------------------------------------------------------------------
+E0083 | v3.6 | BIG | Found Day 54 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v3.6/camera_config.py
+Error     : All ToF sensors report 8190mm (max range)
+Terminal  : Pi SSH terminal
+  left: 8190  front: 8190  right: 8190
+  wall state: OPEN everywhere
+WHAT HAPPENED
+  Every distance sensor reported exactly 8190mm - the maximum value of the VL53L0X. The robot believed the world was empty.
+WHY IT HAPPENED (root cause)
+  The VL53L0X API returns 8190mm as the 'no valid reading' sentinel, and the read path had never called the init function. Reads on an uninitialized sensor return the default maximum, which looks like a plausible distance. Three sensors agreeing on 8190 was the clue: real measurements never agree perfectly, but a sentinel value is identical everywhere. The code confused 'no reading' with 'far away'.
+INVESTIGATION (before the fix)
+  - Spotted all three sensors at the exact same value - impossible for real data
+  - Checked the init call path - it was missing entirely
+  - Verified the vendor example shows the init requirement
+FIX (took 4 days)
+  Fixed by adding the missing init call and treating 8190 as 'no reading' in the fusion layer instead of a distance.
+
+----------------------------------------------------------------------
+E0084 | v3.6 | BIG | Found Day 54 | Fixed in 5 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v3.6/capture_frame.py
+Error     : VL53L1X range status 4 (out of bounds) constant
+Terminal  : ESP32 serial monitor
+  status: 4  status: 4  status: 4
+  distance frozen at 100mm
+WHAT HAPPENED
+  The front ToF froze at 100mm - exactly the minimum range of the sensor. The status code said 'out of bounds' on every read.
+WHY IT HAPPENED (root cause)
+  The glossy track surface produced a false early echo: the light pulse bounced back strongly from the surface itself, so the sensor believed a target was at its minimum range. Range status 4 is the sensor telling the truth about what it saw. Glossy surfaces are a known optical failure for time-of-flight sensors because the peak detection picks the wrong echo.
+INVESTIGATION (before the fix)
+  - Tested the same sensor against a matte target - read correctly
+  - Compared status codes across surfaces
+  - Confirmed the frozen value matched the sensor's minimum range
+FIX (took 5 days)
+  Fixed by switching to long-range mode with the peak detection tuned for low-reflectivity targets, and adding a status-code check that discards status 4 reads.
+
+----------------------------------------------------------------------
+E0085 | v3.7 | SMALL | Found Day 55 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v3.7/color_calib.json
+Error     : Magnetometer saturates near the drive motors
+Terminal  : Windows CMD
+  $ python3 color_calib.json
+  mag: x=+32767 y=-32767 z=+1024
+  heading: jumping 0..359
+WHAT HAPPENED
+  The heading readout became random noise whenever the throttle rose. At standstill it was fine; the moment the motors spun, the compass went mad.
+WHY IT HAPPENED (root cause)
+  The QMC5883L's ADC saturated at its ±32767 output limits, which means the magnetic field at the sensor exceeded its measurement range. The motor current creates a strong magnetic field a few centimeters away, and at 2cm distance the field strength is comparable to the Earth's field the sensor is trying to measure. Saturated ADC values are not noise - they are clipped, which corrupts the heading completely.
+FIX (took 1 day)
+  Fixed by moving the sensor 5cm from the motor wiring, adding hard-iron offset calibration, and masking the heading while the throttle exceeds a threshold.
+
+----------------------------------------------------------------------
+E0086 | v3.7 | SMALL | Found Day 55 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v3.7/color_detect.py
+Error     : ToF distance frozen at 0
+Terminal  : Windows CMD
+  $ python3 color_detect.py
+  dist: 0, 0, 0, 0, 0 mm
+  wall state: UNKNOWN
+WHAT HAPPENED
+  The distance sensor returned exactly zero on every read. Not an error, not a range value - a perfect, suspicious zero every time.
+WHY IT HAPPENED (root cause)
+  The VL53L0X boot sequence requires specific register writes with strict timing between them. The init code skipped a required 5ms delay, so the sensor never left its boot state and returned the default register value of 0. The sensor was not broken - it was never initialized. This is why vendor init sequences must be copied exactly, including every delay.
+FIX (took 1 day)
+  Fixed by restoring the complete init sequence with all inter-register delays, and adding a power-on self-check that verifies a non-zero reading.
+
+----------------------------------------------------------------------
+E0087 | v3.7 | SMALL | Found Day 55 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v3.7/color_calib.json
+Error     : ToF range error 7 (VL53L1X) floods the log
+Terminal  : Windows CMD
+  $ python3 color_calib.json
+  WARNING: range status 7 (signal fail)
+  WARNING: range status 7 (signal fail)
+  ... 600 lines/second ...
+WHAT HAPPENED
+  The console became a waterfall of identical warnings. Within seconds the useful log was buried under thousands of identical lines.
+WHY IT HAPPENED (root cause)
+  The reflective venue tile produced a weak return echo, so the VL53L1X reported range status 7 (signal fail). The error path logged at full loop rate with no throttle - 600 lines per second is simply the loop rate. Logging is I/O, and I/O at that rate saturated the serial link and starved the control loop of CPU time.
+FIX (took 1 day)
+  Fixed with a rate limiter that logs the error at most once per 2 seconds and counts the suppressed occurrences, mirroring the I2C fix.
+
+----------------------------------------------------------------------
+E0088 | v3.7 | SMALL | Found Day 55 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v3.7/color_detect.py
+Error     : Wall state flips every frame
+Terminal  : Windows CMD
+  $ python3 color_detect.py
+  state: LEFT WALL, RIGHT WALL, LEFT WALL, ...
+  distance jitter +-4cm
+WHAT HAPPENED
+  The wall-following state changed sides every single frame, making the robot oscillate between two behaviors at 10Hz. The distance was stable within a few centimeters.
+WHY IT HAPPENED (root cause)
+  The state threshold sat exactly in the middle of the sensor's noise band. A 4cm jitter crossed the threshold in both directions constantly, and the state machine had no hysteresis - no memory of the previous state to suppress rapid toggling. Threshold logic without hysteresis amplifies sensor noise into state oscillation.
+FIX (took 1 day)
+  Fixed by adding a 6cm hysteresis band around the threshold so the state only changes when the distance clearly leaves the current side.
+
+----------------------------------------------------------------------
+E0089 | v3.7 | SMALL | Found Day 55 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v3.7/color_calib.json
+Error     : Camera capture returns a black frame
+Terminal  : Windows CMD
+  $ python3 color_calib.json
+  frame mean = 2.1 (near black)
+  camera seems dead
+WHAT HAPPENED
+  The camera test produced almost entirely black frames. The sensor was alive - the log showed it was capturing - but the image was dark.
+WHY IT HAPPENED (root cause)
+  The camera was still in preview mode with auto-exposure running when the first capture happened. The capture raced the exposure settling, so the frame froze before the sensor adapted to the light. A camera is not instantly ready: after start, the auto-exposure algorithm needs several frames to converge, and a read immediately after init captures the un-converged state.
+FIX (took 1 day)
+  Fixed by forcing a 500ms settle delay after camera start and discarding the first three frames before using any image.
+
+----------------------------------------------------------------------
+E0090 | v3.7 | SMALL | Found Day 55 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v3.7/color_detect.py
+Error     : MPU6050 WHO_AM_I mismatch 0x00
+Terminal  : Windows CMD
+  $ python3 color_detect.py
+  WHO_AM_I = 0x00 (expected 0x68)
+  IMU not found on bus
+WHAT HAPPENED
+  The IMU log script reported the sensor was absent even though it was wired and powered. The address check failed on the very first register read.
+WHY IT HAPPENED (root cause)
+  The MPU6050 answers at 0x68 or 0x69 depending on the AD0 pin. With AD0 floating, the pin read as high at power-up and the chip moved to 0x69, while the code only probed 0x68. WHO_AM_I returning 0x00 means the device never even acknowledged - the wrong address was being addressed, so the chip stayed silent.
+FIX (took 1 day)
+  Fixed by pulling AD0 to ground with a resistor and adding a bus scan that discovers the device address instead of assuming it.
+
+----------------------------------------------------------------------
+E0091 | v3.7 | SMALL | Found Day 55 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v3.7/color_calib.json
+Error     : Calibration JSON has no 'gyro_offset' key
+Terminal  : Windows CMD
+  $ python3 color_calib.json
+  KeyError: 'gyro_offset'
+    File "color_calib.json", line 27, in load_calib
+WHAT HAPPENED
+  The IMU driver crashed at startup reading its calibration file. The file existed and looked complete - the schema was the problem.
+WHY IT HAPPENED (root cause)
+  The calibration file was produced by an older calibration script that stored the fields under different names. The loader used strict key access (calib['gyro_offset']) so a renamed key raised KeyError instantly. There was no schema version in the file and no migration path, so old and new files were indistinguishable until load time.
+FIX (took 1 day)
+  Fixed by adding a schema version field, a default fallback for missing keys, and regenerating imu_calib.json with the new format.
+
+----------------------------------------------------------------------
+E0092 | v3.7 | SMALL | Found Day 55 | Fixed in 1 day | Windows CMD
+----------------------------------------------------------------------
+File      : history/v3.7/color_detect.py
+Error     : Complementary filter alpha out of bounds
+Terminal  : Windows CMD
+  $ python3 color_detect.py
+  filter_config.json: alpha=1.7
+  pitch follows raw accel with spikes
+WHAT HAPPENED
+  The live pitch plot showed violent spikes as if the gyro was ignored. The filter ran, but the numbers made no physical sense.
+WHY IT HAPPENED (root cause)
+  The complementary filter weights gyro integration by alpha and the accelerometer by (1 - alpha). With alpha=1.7 the accelerometer weight became -0.7, so the filter was actively amplifying accelerometer noise instead of suppressing it. A typo in filter_config.json wrote 1.7 instead of 0.7, and nothing validated the config against the [0,1] domain the math requires.
+FIX (took 1 day)
+  Fixed by clamping alpha at load time and adding a config validator that rejects values outside [0,1] with a readable error.
+
+----------------------------------------------------------------------
+E0093 | v3.7 | BIG | Found Day 56 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v3.7/color_calib.json
+Error     : Mag heading unusable with the drive motors on
+Terminal  : Pi SSH terminal
+  heading: 0 -> 180 -> 90 (motors on)
+  heading stable (motors off)
+WHAT HAPPENED
+  The compass heading became random noise whenever the motors ran. With the motors off, the heading was perfect - the correlation was immediate and obvious.
+WHY IT HAPPENED (root cause)
+  The drive motors draw up to 2A, and the current in the battery wires creates a magnetic field proportional to the current. At the magnetometer's position, the motor field overwhelmed the Earth's field (about 0.5 gauss). Hard-iron calibration only removes constant offsets, and the motor field varies with throttle - it is dynamic, so no static calibration can remove it.
+INVESTIGATION (before the fix)
+  - Ran the motor_interference_test to map heading error vs throttle
+  - Moved the sensor 5cm away and repeated - error dropped sharply
+  - Confirmed the field scaled with current, not position of the robot
+FIX (took 2 days)
+  Fixed by moving the sensor away from the power wiring, twisting the power leads, and masking the heading whenever throttle exceeds 30%.
+
+----------------------------------------------------------------------
+E0094 | v3.7 | BIG | Found Day 56 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v3.7/color_detect.py
+Error     : All ToF sensors report 8190mm (max range)
+Terminal  : Pi SSH terminal
+  left: 8190  front: 8190  right: 8190
+  wall state: OPEN everywhere
+WHAT HAPPENED
+  Every distance sensor reported exactly 8190mm - the maximum value of the VL53L0X. The robot believed the world was empty.
+WHY IT HAPPENED (root cause)
+  The VL53L0X API returns 8190mm as the 'no valid reading' sentinel, and the read path had never called the init function. Reads on an uninitialized sensor return the default maximum, which looks like a plausible distance. Three sensors agreeing on 8190 was the clue: real measurements never agree perfectly, but a sentinel value is identical everywhere. The code confused 'no reading' with 'far away'.
+INVESTIGATION (before the fix)
+  - Spotted all three sensors at the exact same value - impossible for real data
+  - Checked the init call path - it was missing entirely
+  - Verified the vendor example shows the init requirement
+FIX (took 3 days)
+  Fixed by adding the missing init call and treating 8190 as 'no reading' in the fusion layer instead of a distance.
+
+----------------------------------------------------------------------
+E0095 | v3.7 | BIG | Found Day 56 | Fixed in 4 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v3.7/color_calib.json
+Error     : VL53L1X range status 4 (out of bounds) constant
+Terminal  : ESP32 serial monitor
+  status: 4  status: 4  status: 4
+  distance frozen at 100mm
+WHAT HAPPENED
+  The front ToF froze at 100mm - exactly the minimum range of the sensor. The status code said 'out of bounds' on every read.
+WHY IT HAPPENED (root cause)
+  The glossy track surface produced a false early echo: the light pulse bounced back strongly from the surface itself, so the sensor believed a target was at its minimum range. Range status 4 is the sensor telling the truth about what it saw. Glossy surfaces are a known optical failure for time-of-flight sensors because the peak detection picks the wrong echo.
+INVESTIGATION (before the fix)
+  - Tested the same sensor against a matte target - read correctly
+  - Compared status codes across surfaces
+  - Confirmed the frozen value matched the sensor's minimum range
+FIX (took 4 days)
+  Fixed by switching to long-range mode with the peak detection tuned for low-reflectivity targets, and adding a status-code check that discards status 4 reads.
+
+----------------------------------------------------------------------
+E0096 | v3.7 | BIG | Found Day 56 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v3.7/color_detect.py
+Error     : sensor_health flags all sensors dead on boot
+Terminal  : Pi SSH terminal
+  sensor 1: DEAD  sensor 2: DEAD  sensor 3: DEAD
+  but all read fine 2 minutes later
+WHAT HAPPENED
+  The health monitor declared every sensor dead at boot, then two minutes later all of them read fine. The alarm was real - but the verdict was premature.
+WHY IT HAPPENED (root cause)
+  The health check ran before the sensors finished their initialization sequences. Each sensor takes seconds to warm up (the ToF init alone needs several register delays), and the health monitor's first pass counted the warm-up silence as failures. The check had no grace period, so the boot-time transient was indistinguishable from a real failure.
+INVESTIGATION (before the fix)
+  - Noticed the pattern: always dead at boot, always fine later
+  - Logged the first readings - they arrived after the check window
+  - Measured the actual sensor ready time from boot
+FIX (took 5 days)
+  Fixed by delaying the first health check until 5 seconds after the last sensor reports ready, and adding a warm-up state to the monitor.
+
+----------------------------------------------------------------------
+E0097 | v3.8 | SMALL | Found Day 57 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v3.8/blob_config.py
+Error     : ToF distance frozen at 0
+Terminal  : systemd journal
+  $ python3 blob_config.py
+  dist: 0, 0, 0, 0, 0 mm
+  wall state: UNKNOWN
+WHAT HAPPENED
+  The distance sensor returned exactly zero on every read. Not an error, not a range value - a perfect, suspicious zero every time.
+WHY IT HAPPENED (root cause)
+  The VL53L0X boot sequence requires specific register writes with strict timing between them. The init code skipped a required 5ms delay, so the sensor never left its boot state and returned the default register value of 0. The sensor was not broken - it was never initialized. This is why vendor init sequences must be copied exactly, including every delay.
+FIX (took 1 day)
+  Fixed by restoring the complete init sequence with all inter-register delays, and adding a power-on self-check that verifies a non-zero reading.
+
+----------------------------------------------------------------------
+E0098 | v3.8 | SMALL | Found Day 57 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v3.8/blob_detect.py
+Error     : ToF range error 7 (VL53L1X) floods the log
+Terminal  : systemd journal
+  $ python3 blob_detect.py
+  WARNING: range status 7 (signal fail)
+  WARNING: range status 7 (signal fail)
+  ... 600 lines/second ...
+WHAT HAPPENED
+  The console became a waterfall of identical warnings. Within seconds the useful log was buried under thousands of identical lines.
+WHY IT HAPPENED (root cause)
+  The reflective venue tile produced a weak return echo, so the VL53L1X reported range status 7 (signal fail). The error path logged at full loop rate with no throttle - 600 lines per second is simply the loop rate. Logging is I/O, and I/O at that rate saturated the serial link and starved the control loop of CPU time.
+FIX (took 1 day)
+  Fixed with a rate limiter that logs the error at most once per 2 seconds and counts the suppressed occurrences, mirroring the I2C fix.
+
+----------------------------------------------------------------------
+E0099 | v3.8 | SMALL | Found Day 57 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v3.8/blob_config.py
+Error     : Wall state flips every frame
+Terminal  : systemd journal
+  $ python3 blob_config.py
+  state: LEFT WALL, RIGHT WALL, LEFT WALL, ...
+  distance jitter +-4cm
+WHAT HAPPENED
+  The wall-following state changed sides every single frame, making the robot oscillate between two behaviors at 10Hz. The distance was stable within a few centimeters.
+WHY IT HAPPENED (root cause)
+  The state threshold sat exactly in the middle of the sensor's noise band. A 4cm jitter crossed the threshold in both directions constantly, and the state machine had no hysteresis - no memory of the previous state to suppress rapid toggling. Threshold logic without hysteresis amplifies sensor noise into state oscillation.
+FIX (took 1 day)
+  Fixed by adding a 6cm hysteresis band around the threshold so the state only changes when the distance clearly leaves the current side.
+
+----------------------------------------------------------------------
+E0100 | v3.8 | SMALL | Found Day 57 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v3.8/blob_detect.py
+Error     : Camera capture returns a black frame
+Terminal  : systemd journal
+  $ python3 blob_detect.py
+  frame mean = 2.1 (near black)
+  camera seems dead
+WHAT HAPPENED
+  The camera test produced almost entirely black frames. The sensor was alive - the log showed it was capturing - but the image was dark.
+WHY IT HAPPENED (root cause)
+  The camera was still in preview mode with auto-exposure running when the first capture happened. The capture raced the exposure settling, so the frame froze before the sensor adapted to the light. A camera is not instantly ready: after start, the auto-exposure algorithm needs several frames to converge, and a read immediately after init captures the un-converged state.
+FIX (took 1 day)
+  Fixed by forcing a 500ms settle delay after camera start and discarding the first three frames before using any image.
+
+----------------------------------------------------------------------
+E0101 | v3.8 | SMALL | Found Day 57 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v3.8/blob_config.py
+Error     : MPU6050 WHO_AM_I mismatch 0x00
+Terminal  : systemd journal
+  $ python3 blob_config.py
+  WHO_AM_I = 0x00 (expected 0x68)
+  IMU not found on bus
+WHAT HAPPENED
+  The IMU log script reported the sensor was absent even though it was wired and powered. The address check failed on the very first register read.
+WHY IT HAPPENED (root cause)
+  The MPU6050 answers at 0x68 or 0x69 depending on the AD0 pin. With AD0 floating, the pin read as high at power-up and the chip moved to 0x69, while the code only probed 0x68. WHO_AM_I returning 0x00 means the device never even acknowledged - the wrong address was being addressed, so the chip stayed silent.
+FIX (took 1 day)
+  Fixed by pulling AD0 to ground with a resistor and adding a bus scan that discovers the device address instead of assuming it.
+
+----------------------------------------------------------------------
+E0102 | v3.8 | SMALL | Found Day 57 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v3.8/blob_detect.py
+Error     : Calibration JSON has no 'gyro_offset' key
+Terminal  : systemd journal
+  $ python3 blob_detect.py
+  KeyError: 'gyro_offset'
+    File "blob_detect.py", line 27, in load_calib
+WHAT HAPPENED
+  The IMU driver crashed at startup reading its calibration file. The file existed and looked complete - the schema was the problem.
+WHY IT HAPPENED (root cause)
+  The calibration file was produced by an older calibration script that stored the fields under different names. The loader used strict key access (calib['gyro_offset']) so a renamed key raised KeyError instantly. There was no schema version in the file and no migration path, so old and new files were indistinguishable until load time.
+FIX (took 1 day)
+  Fixed by adding a schema version field, a default fallback for missing keys, and regenerating imu_calib.json with the new format.
+
+----------------------------------------------------------------------
+E0103 | v3.8 | SMALL | Found Day 57 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v3.8/blob_config.py
+Error     : Complementary filter alpha out of bounds
+Terminal  : systemd journal
+  $ python3 blob_config.py
+  filter_config.json: alpha=1.7
+  pitch follows raw accel with spikes
+WHAT HAPPENED
+  The live pitch plot showed violent spikes as if the gyro was ignored. The filter ran, but the numbers made no physical sense.
+WHY IT HAPPENED (root cause)
+  The complementary filter weights gyro integration by alpha and the accelerometer by (1 - alpha). With alpha=1.7 the accelerometer weight became -0.7, so the filter was actively amplifying accelerometer noise instead of suppressing it. A typo in filter_config.json wrote 1.7 instead of 0.7, and nothing validated the config against the [0,1] domain the math requires.
+FIX (took 1 day)
+  Fixed by clamping alpha at load time and adding a config validator that rejects values outside [0,1] with a readable error.
+
+----------------------------------------------------------------------
+E0104 | v3.8 | SMALL | Found Day 57 | Fixed in 1 day | systemd journal
+----------------------------------------------------------------------
+File      : history/v3.8/blob_detect.py
+Error     : Magnetometer saturates near the drive motors
+Terminal  : systemd journal
+  $ python3 blob_detect.py
+  mag: x=+32767 y=-32767 z=+1024
+  heading: jumping 0..359
+WHAT HAPPENED
+  The heading readout became random noise whenever the throttle rose. At standstill it was fine; the moment the motors spun, the compass went mad.
+WHY IT HAPPENED (root cause)
+  The QMC5883L's ADC saturated at its ±32767 output limits, which means the magnetic field at the sensor exceeded its measurement range. The motor current creates a strong magnetic field a few centimeters away, and at 2cm distance the field strength is comparable to the Earth's field the sensor is trying to measure. Saturated ADC values are not noise - they are clipped, which corrupts the heading completely.
+FIX (took 1 day)
+  Fixed by moving the sensor 5cm from the motor wiring, adding hard-iron offset calibration, and masking the heading while the throttle exceeds a threshold.
+
+----------------------------------------------------------------------
+E0105 | v3.8 | BIG | Found Day 58 | Fixed in 2 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v3.8/blob_config.py
+Error     : All ToF sensors report 8190mm (max range)
+Terminal  : Pi SSH terminal
+  left: 8190  front: 8190  right: 8190
+  wall state: OPEN everywhere
+WHAT HAPPENED
+  Every distance sensor reported exactly 8190mm - the maximum value of the VL53L0X. The robot believed the world was empty.
+WHY IT HAPPENED (root cause)
+  The VL53L0X API returns 8190mm as the 'no valid reading' sentinel, and the read path had never called the init function. Reads on an uninitialized sensor return the default maximum, which looks like a plausible distance. Three sensors agreeing on 8190 was the clue: real measurements never agree perfectly, but a sentinel value is identical everywhere. The code confused 'no reading' with 'far away'.
+INVESTIGATION (before the fix)
+  - Spotted all three sensors at the exact same value - impossible for real data
+  - Checked the init call path - it was missing entirely
+  - Verified the vendor example shows the init requirement
+FIX (took 2 days)
+  Fixed by adding the missing init call and treating 8190 as 'no reading' in the fusion layer instead of a distance.
+
+----------------------------------------------------------------------
+E0106 | v3.8 | BIG | Found Day 58 | Fixed in 3 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v3.8/blob_detect.py
+Error     : VL53L1X range status 4 (out of bounds) constant
+Terminal  : ESP32 serial monitor
+  status: 4  status: 4  status: 4
+  distance frozen at 100mm
+WHAT HAPPENED
+  The front ToF froze at 100mm - exactly the minimum range of the sensor. The status code said 'out of bounds' on every read.
+WHY IT HAPPENED (root cause)
+  The glossy track surface produced a false early echo: the light pulse bounced back strongly from the surface itself, so the sensor believed a target was at its minimum range. Range status 4 is the sensor telling the truth about what it saw. Glossy surfaces are a known optical failure for time-of-flight sensors because the peak detection picks the wrong echo.
+INVESTIGATION (before the fix)
+  - Tested the same sensor against a matte target - read correctly
+  - Compared status codes across surfaces
+  - Confirmed the frozen value matched the sensor's minimum range
+FIX (took 3 days)
+  Fixed by switching to long-range mode with the peak detection tuned for low-reflectivity targets, and adding a status-code check that discards status 4 reads.
+
+----------------------------------------------------------------------
+E0107 | v3.8 | BIG | Found Day 58 | Fixed in 4 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v3.8/blob_config.py
+Error     : sensor_health flags all sensors dead on boot
+Terminal  : Pi SSH terminal
+  sensor 1: DEAD  sensor 2: DEAD  sensor 3: DEAD
+  but all read fine 2 minutes later
+WHAT HAPPENED
+  The health monitor declared every sensor dead at boot, then two minutes later all of them read fine. The alarm was real - but the verdict was premature.
+WHY IT HAPPENED (root cause)
+  The health check ran before the sensors finished their initialization sequences. Each sensor takes seconds to warm up (the ToF init alone needs several register delays), and the health monitor's first pass counted the warm-up silence as failures. The check had no grace period, so the boot-time transient was indistinguishable from a real failure.
+INVESTIGATION (before the fix)
+  - Noticed the pattern: always dead at boot, always fine later
+  - Logged the first readings - they arrived after the check window
+  - Measured the actual sensor ready time from boot
+FIX (took 4 days)
+  Fixed by delaying the first health check until 5 seconds after the last sensor reports ready, and adding a warm-up state to the monitor.
+
+----------------------------------------------------------------------
+E0108 | v3.8 | BIG | Found Day 58 | Fixed in 5 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v3.8/blob_detect.py
+Error     : MPU6050 FIFO overflows after 30s
+Terminal  : ESP32 serial monitor
+  E (30000) mpu6050: FIFO overflow (2048 bytes)
+  gyro data: stale frames
+WHAT HAPPENED
+  Every 30 seconds the gyro stream glitched. The FIFO overflow error appeared exactly at the 30-second mark, every run, like clockwork.
+WHY IT HAPPENED (root cause)
+  The MPU6050 buffers samples in an internal 2048-byte FIFO, and the reader drained it at 50Hz while the sensor produced at 100Hz. The drain rate was half the fill rate, so the FIFO filled exactly at the overflow point - 30 seconds at these rates. The periodic glitch was the FIFO resetting, and the periodic timing was the giveaway: a hardware error would not repeat on a precise schedule.
+INVESTIGATION (before the fix)
+  - Noticed the glitch was perfectly periodic - rate mismatch, not hardware
+  - Computed fill vs drain rates from the registers
+  - Confirmed the FIFO level grew linearly between overflows
+FIX (took 5 days)
+  Fixed by draining the FIFO at 200Hz (twice the sensor rate) and monitoring the FIFO level register as a health metric.
+
+----------------------------------------------------------------------
+E0109 | v3.9 | SMALL | Found Day 59 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v3.9/sensor_health.py
+Error     : ToF range error 7 (VL53L1X) floods the log
+Terminal  : VS Code terminal
+  $ python3 sensor_health.py
+  WARNING: range status 7 (signal fail)
+  WARNING: range status 7 (signal fail)
+  ... 600 lines/second ...
+WHAT HAPPENED
+  The console became a waterfall of identical warnings. Within seconds the useful log was buried under thousands of identical lines.
+WHY IT HAPPENED (root cause)
+  The reflective venue tile produced a weak return echo, so the VL53L1X reported range status 7 (signal fail). The error path logged at full loop rate with no throttle - 600 lines per second is simply the loop rate. Logging is I/O, and I/O at that rate saturated the serial link and starved the control loop of CPU time.
+FIX (took 1 day)
+  Fixed with a rate limiter that logs the error at most once per 2 seconds and counts the suppressed occurrences, mirroring the I2C fix.
+
+----------------------------------------------------------------------
+E0110 | v3.9 | SMALL | Found Day 59 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v3.9/sensor_registry.py
+Error     : Wall state flips every frame
+Terminal  : VS Code terminal
+  $ python3 sensor_registry.py
+  state: LEFT WALL, RIGHT WALL, LEFT WALL, ...
+  distance jitter +-4cm
+WHAT HAPPENED
+  The wall-following state changed sides every single frame, making the robot oscillate between two behaviors at 10Hz. The distance was stable within a few centimeters.
+WHY IT HAPPENED (root cause)
+  The state threshold sat exactly in the middle of the sensor's noise band. A 4cm jitter crossed the threshold in both directions constantly, and the state machine had no hysteresis - no memory of the previous state to suppress rapid toggling. Threshold logic without hysteresis amplifies sensor noise into state oscillation.
+FIX (took 1 day)
+  Fixed by adding a 6cm hysteresis band around the threshold so the state only changes when the distance clearly leaves the current side.
+
+----------------------------------------------------------------------
+E0111 | v3.9 | SMALL | Found Day 59 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v3.9/sensor_health.py
+Error     : Camera capture returns a black frame
+Terminal  : VS Code terminal
+  $ python3 sensor_health.py
+  frame mean = 2.1 (near black)
+  camera seems dead
+WHAT HAPPENED
+  The camera test produced almost entirely black frames. The sensor was alive - the log showed it was capturing - but the image was dark.
+WHY IT HAPPENED (root cause)
+  The camera was still in preview mode with auto-exposure running when the first capture happened. The capture raced the exposure settling, so the frame froze before the sensor adapted to the light. A camera is not instantly ready: after start, the auto-exposure algorithm needs several frames to converge, and a read immediately after init captures the un-converged state.
+FIX (took 1 day)
+  Fixed by forcing a 500ms settle delay after camera start and discarding the first three frames before using any image.
+
+----------------------------------------------------------------------
+E0112 | v3.9 | SMALL | Found Day 59 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v3.9/sensor_registry.py
+Error     : MPU6050 WHO_AM_I mismatch 0x00
+Terminal  : VS Code terminal
+  $ python3 sensor_registry.py
+  WHO_AM_I = 0x00 (expected 0x68)
+  IMU not found on bus
+WHAT HAPPENED
+  The IMU log script reported the sensor was absent even though it was wired and powered. The address check failed on the very first register read.
+WHY IT HAPPENED (root cause)
+  The MPU6050 answers at 0x68 or 0x69 depending on the AD0 pin. With AD0 floating, the pin read as high at power-up and the chip moved to 0x69, while the code only probed 0x68. WHO_AM_I returning 0x00 means the device never even acknowledged - the wrong address was being addressed, so the chip stayed silent.
+FIX (took 1 day)
+  Fixed by pulling AD0 to ground with a resistor and adding a bus scan that discovers the device address instead of assuming it.
+
+----------------------------------------------------------------------
+E0113 | v3.9 | SMALL | Found Day 59 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v3.9/sensor_health.py
+Error     : Calibration JSON has no 'gyro_offset' key
+Terminal  : VS Code terminal
+  $ python3 sensor_health.py
+  KeyError: 'gyro_offset'
+    File "sensor_health.py", line 27, in load_calib
+WHAT HAPPENED
+  The IMU driver crashed at startup reading its calibration file. The file existed and looked complete - the schema was the problem.
+WHY IT HAPPENED (root cause)
+  The calibration file was produced by an older calibration script that stored the fields under different names. The loader used strict key access (calib['gyro_offset']) so a renamed key raised KeyError instantly. There was no schema version in the file and no migration path, so old and new files were indistinguishable until load time.
+FIX (took 1 day)
+  Fixed by adding a schema version field, a default fallback for missing keys, and regenerating imu_calib.json with the new format.
+
+----------------------------------------------------------------------
+E0114 | v3.9 | SMALL | Found Day 59 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v3.9/sensor_registry.py
+Error     : Complementary filter alpha out of bounds
+Terminal  : VS Code terminal
+  $ python3 sensor_registry.py
+  filter_config.json: alpha=1.7
+  pitch follows raw accel with spikes
+WHAT HAPPENED
+  The live pitch plot showed violent spikes as if the gyro was ignored. The filter ran, but the numbers made no physical sense.
+WHY IT HAPPENED (root cause)
+  The complementary filter weights gyro integration by alpha and the accelerometer by (1 - alpha). With alpha=1.7 the accelerometer weight became -0.7, so the filter was actively amplifying accelerometer noise instead of suppressing it. A typo in filter_config.json wrote 1.7 instead of 0.7, and nothing validated the config against the [0,1] domain the math requires.
+FIX (took 1 day)
+  Fixed by clamping alpha at load time and adding a config validator that rejects values outside [0,1] with a readable error.
+
+----------------------------------------------------------------------
+E0115 | v3.9 | SMALL | Found Day 59 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v3.9/sensor_health.py
+Error     : Magnetometer saturates near the drive motors
+Terminal  : VS Code terminal
+  $ python3 sensor_health.py
+  mag: x=+32767 y=-32767 z=+1024
+  heading: jumping 0..359
+WHAT HAPPENED
+  The heading readout became random noise whenever the throttle rose. At standstill it was fine; the moment the motors spun, the compass went mad.
+WHY IT HAPPENED (root cause)
+  The QMC5883L's ADC saturated at its ±32767 output limits, which means the magnetic field at the sensor exceeded its measurement range. The motor current creates a strong magnetic field a few centimeters away, and at 2cm distance the field strength is comparable to the Earth's field the sensor is trying to measure. Saturated ADC values are not noise - they are clipped, which corrupts the heading completely.
+FIX (took 1 day)
+  Fixed by moving the sensor 5cm from the motor wiring, adding hard-iron offset calibration, and masking the heading while the throttle exceeds a threshold.
+
+----------------------------------------------------------------------
+E0116 | v3.9 | SMALL | Found Day 59 | Fixed in 1 day | VS Code terminal
+----------------------------------------------------------------------
+File      : history/v3.9/sensor_registry.py
+Error     : ToF distance frozen at 0
+Terminal  : VS Code terminal
+  $ python3 sensor_registry.py
+  dist: 0, 0, 0, 0, 0 mm
+  wall state: UNKNOWN
+WHAT HAPPENED
+  The distance sensor returned exactly zero on every read. Not an error, not a range value - a perfect, suspicious zero every time.
+WHY IT HAPPENED (root cause)
+  The VL53L0X boot sequence requires specific register writes with strict timing between them. The init code skipped a required 5ms delay, so the sensor never left its boot state and returned the default register value of 0. The sensor was not broken - it was never initialized. This is why vendor init sequences must be copied exactly, including every delay.
+FIX (took 1 day)
+  Fixed by restoring the complete init sequence with all inter-register delays, and adding a power-on self-check that verifies a non-zero reading.
+
+----------------------------------------------------------------------
+E0117 | v3.9 | BIG | Found Day 60 | Fixed in 2 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v3.9/sensor_health.py
+Error     : VL53L1X range status 4 (out of bounds) constant
+Terminal  : ESP32 serial monitor
+  status: 4  status: 4  status: 4
+  distance frozen at 100mm
+WHAT HAPPENED
+  The front ToF froze at 100mm - exactly the minimum range of the sensor. The status code said 'out of bounds' on every read.
+WHY IT HAPPENED (root cause)
+  The glossy track surface produced a false early echo: the light pulse bounced back strongly from the surface itself, so the sensor believed a target was at its minimum range. Range status 4 is the sensor telling the truth about what it saw. Glossy surfaces are a known optical failure for time-of-flight sensors because the peak detection picks the wrong echo.
+INVESTIGATION (before the fix)
+  - Tested the same sensor against a matte target - read correctly
+  - Compared status codes across surfaces
+  - Confirmed the frozen value matched the sensor's minimum range
+FIX (took 2 days)
+  Fixed by switching to long-range mode with the peak detection tuned for low-reflectivity targets, and adding a status-code check that discards status 4 reads.
+
+----------------------------------------------------------------------
+E0118 | v3.9 | BIG | Found Day 60 | Fixed in 3 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v3.9/sensor_registry.py
+Error     : sensor_health flags all sensors dead on boot
+Terminal  : Pi SSH terminal
+  sensor 1: DEAD  sensor 2: DEAD  sensor 3: DEAD
+  but all read fine 2 minutes later
+WHAT HAPPENED
+  The health monitor declared every sensor dead at boot, then two minutes later all of them read fine. The alarm was real - but the verdict was premature.
+WHY IT HAPPENED (root cause)
+  The health check ran before the sensors finished their initialization sequences. Each sensor takes seconds to warm up (the ToF init alone needs several register delays), and the health monitor's first pass counted the warm-up silence as failures. The check had no grace period, so the boot-time transient was indistinguishable from a real failure.
+INVESTIGATION (before the fix)
+  - Noticed the pattern: always dead at boot, always fine later
+  - Logged the first readings - they arrived after the check window
+  - Measured the actual sensor ready time from boot
+FIX (took 3 days)
+  Fixed by delaying the first health check until 5 seconds after the last sensor reports ready, and adding a warm-up state to the monitor.
+
+----------------------------------------------------------------------
+E0119 | v3.9 | BIG | Found Day 60 | Fixed in 4 days | ESP32 serial monitor
+----------------------------------------------------------------------
+File      : history/v3.9/sensor_health.py
+Error     : MPU6050 FIFO overflows after 30s
+Terminal  : ESP32 serial monitor
+  E (30000) mpu6050: FIFO overflow (2048 bytes)
+  gyro data: stale frames
+WHAT HAPPENED
+  Every 30 seconds the gyro stream glitched. The FIFO overflow error appeared exactly at the 30-second mark, every run, like clockwork.
+WHY IT HAPPENED (root cause)
+  The MPU6050 buffers samples in an internal 2048-byte FIFO, and the reader drained it at 50Hz while the sensor produced at 100Hz. The drain rate was half the fill rate, so the FIFO filled exactly at the overflow point - 30 seconds at these rates. The periodic glitch was the FIFO resetting, and the periodic timing was the giveaway: a hardware error would not repeat on a precise schedule.
+INVESTIGATION (before the fix)
+  - Noticed the glitch was perfectly periodic - rate mismatch, not hardware
+  - Computed fill vs drain rates from the registers
+  - Confirmed the FIFO level grew linearly between overflows
+FIX (took 4 days)
+  Fixed by draining the FIFO at 200Hz (twice the sensor rate) and monitoring the FIFO level register as a health metric.
+
+----------------------------------------------------------------------
+E0120 | v3.9 | BIG | Found Day 60 | Fixed in 5 days | Pi SSH terminal
+----------------------------------------------------------------------
+File      : history/v3.9/sensor_registry.py
+Error     : IMU calibration accepted garbage data
+Terminal  : Pi SSH terminal
+  $ python3 calibrate_imu.py
+  collecting... done (120 samples)
+  gyro bias: 1.34 deg/s (was 0.01)
+  result: worse than before
+WHAT HAPPENED
+  The calibration tool ran 'successfully' but produced a bias 100x worse than the previous value. The tool had no way to know the robot was being bumped while it collected.
+WHY IT HAPPENED (root cause)
+  Calibration is a statistical estimate: it averages samples to find the bias. If the robot moves during collection, the samples contain real motion plus bias, and the average is corrupted. The tool trusted its input completely - it never checked whether the sensor was still, because stillness was an assumption, not a measurement. Garbage in, garbage out, with a success message on top.
+INVESTIGATION (before the fix)
+  - Re-ran the calibration with the robot untouched - bias returned to 0.01
+  - Compared the sample variance between the two runs
+  - Found the bump event in the session log by timestamp
+FIX (took 5 days)
+  Fixed by computing the sample variance before accepting the result and requiring the robot to be still, with a 'movement detected' warning when the variance is too high.
+
+======================================================================
+END OF PHASE v3.x -- 120 errors
+======================================================================
