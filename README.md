@@ -66,6 +66,8 @@ docs/
     01_mobility.md       #   Mobility Management (4 pts)
     02_power_sense.md    #   Power & Sense Management (4 pts)
     03_obstacle.md       #   Obstacle Management (4 pts)
+  power/
+    POWER_DISTRIBUTION.md#   Power rails, budget, protection, grounding
   engineering/
     FAILURE_ANALYSIS.md  #   All bugs, root causes, fixes, prevention
 esp/                     # ESP32-S3 firmware (ESP-IDF v5.5.5)
@@ -91,11 +93,7 @@ pi/                      # Raspberry Pi software (Python)
   comm/                  #   UART packet protocol
   system/                #   Scheduler, logger, health monitor, config
   hardware/              #   Status LED, start switch
-issues/                  # Error reference catalog
-v1.x/                    # Version snapshots (v1.0 → v1.4)
-.changelog.md            # Full version history
-ARCHITECTURE.md          # System architecture + data flow
-.github/workflows/ci.yml # CI pipeline (lint, build, validate)
+  issues/phases/         #   Error catalog — v1.x → v9.x, 1080 errors
 ```
 
 ---
