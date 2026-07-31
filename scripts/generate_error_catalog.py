@@ -9,7 +9,7 @@ Every error entry now carries:
   - FIX                (with how many days it took)
 
 Output:
-  docs/issues/006-error-catalog-1000-plus.txt   (combined)
+  docs/issues/000-error-catalog.txt                  (combined)
   docs/issues/phases/v1-boot-and-ssh.txt        (per-phase split)
   ...                                           (v2..v9)
 
@@ -266,7 +266,7 @@ def main():
                            phases=len(PHASE_INFO))
 
     out_dir = "docs/issues"
-    combined = os.path.join(out_dir, "006-error-catalog-1000-plus.txt")
+    combined = os.path.join(out_dir, "000-error-catalog.txt")
     write_file(combined, header, render(entries))
 
     phases_dir = os.path.join(out_dir, "phases")
