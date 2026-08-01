@@ -169,19 +169,46 @@ class VL53L1X(SensorBase, FilteredSensorMixin):
             log.warn(f"{self.name}: verify error - {e}")
             return False
 
+    def _find_boot_address(self):
+        """
+        Locate the sensor's current I2C address after power-up.
+
+        Most VL53L1X modules boot at the factory default 0x29, but some
+        clone modules boot at 0x2C instead. This probes both candidates.
+        It must be called while every other ToF is held in XSHUT reset,
+        so only this sensor can respond and the probe is unambiguous.
+
+        Returns the address that ACKs, or None if no chip is present.
+        """
+        for candidate in (0x29, 0x2C):
+            try:
+                self._bus.read_byte_data(candidate, 0x8A)
+                return candidate
+            except Exception:
+                continue
+        return None
+
     def _program_address(self):
         """
-        Change sensor I2C address from default 0x29 to self.address.
+        Change sensor I2C address from its boot address to self.address.
 
         Register 0x8A holds the I2C slave address (8-bit format where the
-        7-bit address is shifted left by 1).
+        7-bit address is shifted left by 1). The chip's current address is
+        located first (0x29, or 0x2C on some clone modules) so sensors
+        that boot at a non-standard address are still programmed.
         """
         if self.address == 0x29:
             return
+        current = self._find_boot_address()
+        if current is None:
+            log.warn(f"{self.name}: no chip found at boot addresses "
+                     f"0x29/0x2C — address programming impossible")
+            return
         try:
-            self._bus.write_byte_data(0x29, 0x8A, self.address << 1)
+            self._bus.write_byte_data(current, 0x8A, self.address << 1)
             time.sleep(0.01)
-            log.info(f"{self.name}: address programmed 0x29 -> 0x{self.address:02X}")
+            log.info(f"{self.name}: address programmed "
+                     f"0x{current:02X} -> 0x{self.address:02X}")
         except Exception as e:
             log.warn(f"{self.name}: address programming failed - {e}")
 

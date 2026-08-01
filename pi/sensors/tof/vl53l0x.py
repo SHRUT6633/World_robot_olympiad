@@ -182,9 +182,28 @@ class VL53L0X(SensorBase, FilteredSensorMixin):
             log.warn(f"{self.name}: verify error - {e}")
             return False
 
+    def _find_boot_address(self):
+        """
+        Locate the sensor's current I2C address after power-up.
+
+        Most VL53L0X modules boot at the factory default 0x29, but some
+        clone modules boot at 0x2C instead. This probes both candidates.
+        It must be called while every other ToF is held in XSHUT reset,
+        so only this sensor can respond and the probe is unambiguous.
+
+        Returns the address that ACKs, or None if no chip is present.
+        """
+        for candidate in (0x29, 0x2C):
+            try:
+                self._bus.read_byte_data(candidate, 0x8A)
+                return candidate
+            except Exception:
+                continue
+        return None
+
     def _program_address(self):
         """
-        Change the sensor's I2C address from the default 0x29 to self.address.
+        Change the sensor's I2C address from its boot address to self.address.
 
         The VL53L0X stores its I2C address in register 0x8A. Writing
         (address << 1) sets the new 7-bit address (shifted left by 1 bit
@@ -197,16 +216,26 @@ class VL53L0X(SensorBase, FilteredSensorMixin):
           3. Hold it in reset again.
           4. Repeat for each sensor.
 
+        The chip's current address is located first (0x29, or 0x2C on
+        some clone modules) so sensors that boot at a non-standard
+        address are still programmed correctly.
+
         If the target address is 0x29 (same as default), skip (no change
         needed).
         """
         if self.address == 0x29:
             return
+        current = self._find_boot_address()
+        if current is None:
+            log.warn(f"{self.name}: no chip found at boot addresses "
+                     f"0x29/0x2C — address programming impossible")
+            return
         try:
             # Register 0x8A: I2C slave address. Write address << 1 (8-bit format).
-            self._bus.write_byte_data(0x29, 0x8A, self.address << 1)
+            self._bus.write_byte_data(current, 0x8A, self.address << 1)
             time.sleep(0.01)
-            log.info(f"{self.name}: address programmed 0x29 -> 0x{self.address:02X}")
+            log.info(f"{self.name}: address programmed "
+                     f"0x{current:02X} -> 0x{self.address:02X}")
         except Exception as e:
             log.warn(f"{self.name}: address programming failed - {e}")
 
