@@ -165,22 +165,23 @@ class VL53L0X(SensorBase, FilteredSensorMixin):
         Confirm the chip is present and correctly addressed.
 
         Reads back the I2C slave address register (0x8A). On a healthy
-        VL53L0X programmed to self.address it must read back
-        (address << 1). A missing chip, a bus fault, or a sensor that is
-        still at the default 0x29 (because XSHUT programming failed) will
-        fail this check.
+        chip programmed to self.address it must read back either the
+        shifted form (address << 1, genuine ST firmware) or the raw
+        form (address, some clone modules). A missing chip, a bus fault,
+        or a sensor that is still at the default 0x29 (because XSHUT
+        programming failed) will fail this check.
         """
         try:
             got = self._bus.read_byte_data(self.address, 0x8A)
-            expected = self.address << 1
-            if got == expected:
-                return True
-            log.warn(f"{self.name}: address reg 0x{got:02X}, "
-                     f"expected 0x{expected:02X}")
-            return False
         except Exception as e:
             log.warn(f"{self.name}: verify error - {e}")
             return False
+        if got in (self.address << 1, self.address):
+            return True
+        log.warn(f"{self.name}: address reg 0x{got:02X}, "
+                 f"expected 0x{self.address << 1:02X} or "
+                 f"0x{self.address:02X}")
+        return False
 
     def _find_boot_address(self):
         """
@@ -201,13 +202,29 @@ class VL53L0X(SensorBase, FilteredSensorMixin):
                 continue
         return None
 
+    def _answers_at(self, addr, expected_reg_8a):
+        """
+        True if a chip responds at `addr` and its address register (0x8A)
+        holds `expected_reg_8a`. During XSHUT programming every other ToF
+        is held in reset, so a match at `addr` can only be this sensor.
+        """
+        try:
+            return self._bus.read_byte_data(addr, 0x8A) == expected_reg_8a
+        except Exception:
+            return False
+
     def _program_address(self):
         """
         Change the sensor's I2C address from its boot address to self.address.
 
-        The VL53L0X stores its I2C address in register 0x8A. Writing
-        (address << 1) sets the new 7-bit address (shifted left by 1 bit
-        because the register expects the 8-bit I2C write address).
+        The VL53L0X stores its I2C address in register 0x8A. Genuine ST
+        chips encode it shifted (value = address << 1); some clone modules
+        apply the written value raw as the 7-bit address. Both variants
+        are handled here:
+
+          1. Write (address << 1) and check the chip answers at `address`.
+          2. If not, the clone variant has moved to `address << 1` — write
+             the raw address there, then check `address` again.
 
         This is essential when using multiple VL53L0X sensors on the same
         I2C bus: each sensor must have a unique address. The procedure is:
@@ -230,14 +247,37 @@ class VL53L0X(SensorBase, FilteredSensorMixin):
             log.warn(f"{self.name}: no chip found at boot addresses "
                      f"0x29/0x2C — address programming impossible")
             return
+        # Attempt 1: standard ST encoding (address << 1).
         try:
             # Register 0x8A: I2C slave address. Write address << 1 (8-bit format).
             self._bus.write_byte_data(current, 0x8A, self.address << 1)
             time.sleep(0.01)
-            log.info(f"{self.name}: address programmed "
-                     f"0x{current:02X} -> 0x{self.address:02X}")
         except Exception as e:
             log.warn(f"{self.name}: address programming failed - {e}")
+            return
+        if self._answers_at(self.address, self.address << 1):
+            log.info(f"{self.name}: address programmed "
+                     f"0x{current:02X} -> 0x{self.address:02X}")
+            return
+        # Attempt 2: clone variant applies the value raw — it now answers
+        # at `address << 1`. Re-write the raw address from there.
+        if self._answers_at(self.address << 1, self.address << 1):
+            try:
+                self._bus.write_byte_data(
+                    self.address << 1, 0x8A, self.address)
+                time.sleep(0.01)
+            except Exception as e:
+                log.warn(f"{self.name}: clone address programming failed - {e}")
+                return
+            if self._answers_at(self.address, self.address):
+                log.info(f"{self.name}: address programmed (clone) "
+                         f"0x{current:02X} -> 0x{self.address:02X}")
+                return
+            log.warn(f"{self.name}: clone chip not responding at "
+                     f"0x{self.address:02X} after re-program")
+        else:
+            log.warn(f"{self.name}: chip not found at 0x{self.address:02X} "
+                     f"or 0x{self.address << 1:02X} after write")
 
     def read_raw(self):
         """
