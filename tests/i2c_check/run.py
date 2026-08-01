@@ -12,6 +12,8 @@
 #   2. ALL OK   -> green LED blinks 3x and stays green, then the FULL
 #                  SYSTEM starts automatically (python pi/main.py).
 #   3. ANY FAIL -> red LED on, failures listed, system NOT started.
+#   4. Unexpected crash during the check itself -> red LED on, error
+#      logged, GPIO/sensors closed cleanly (no silent hang/crash).
 # =============================================================================
 
 import subprocess
@@ -40,7 +42,18 @@ def main():
     )
 
     checker = I2CChecker(config)
-    results = checker.run_all()
+
+    try:
+        results = checker.run_all()
+    except Exception as e:
+        # Something threw outside the checker's own per-sensor try/except
+        # (e.g. a bad import, a driver bug). Never let this exit silently
+        # without the red LED and a clean shutdown.
+        log.critical(f"I2C check crashed unexpectedly: {e}")
+        led.set("red")
+        checker.close()
+        led.close()
+        sys.exit(1)
 
     failed = [name for name, (ok, _) in results.items() if not ok]
 
@@ -74,6 +87,7 @@ def main():
         log.error("=" * 50)
         led.set("red")
         checker.close()
+        led.close()
         sys.exit(1)
 
 
