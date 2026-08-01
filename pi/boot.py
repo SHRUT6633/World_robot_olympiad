@@ -115,25 +115,39 @@ def power_on_self_test():
     # Camera – no config params needed for POST defaults.
     camera = PiCamera()
 
-    # ToF sensors – xshut_pin must match wiring. If xshut_pin is None, the
-    # sensor uses the default I2C address (0x29). If multiple ToFs share the
-    # bus without unique xshut pins, address conflicts will cause test failures.
+    # ToF sensors – xshut_pin AND address must match wiring and
+    # pi_config.yaml. Each sensor needs a unique address (0x30/0x31/0x32)
+    # or they collide on the I2C bus and every I2C sensor fails.
     tof_left = VL53L0X(
         "left",
+        bus=config.get("sensors", "vl53l0x_left", "i2c_bus", default=1),
+        address=config.get("sensors", "vl53l0x_left", "address", default=0x30),
         xshut_pin=config.get("sensors", "vl53l0x_left", "xshut_pin", default=None),
     )
     tof_right = VL53L0X(
         "right",
+        bus=config.get("sensors", "vl53l0x_right", "i2c_bus", default=1),
+        address=config.get("sensors", "vl53l0x_right", "address", default=0x31),
         xshut_pin=config.get("sensors", "vl53l0x_right", "xshut_pin", default=None),
     )
     tof_front = VL53L1X(
         "front",
+        bus=config.get("sensors", "vl53l1x_front", "i2c_bus", default=1),
+        address=config.get("sensors", "vl53l1x_front", "address", default=0x32),
         xshut_pin=config.get("sensors", "vl53l1x_front", "xshut_pin", default=None),
     )
 
-    # IMU and magnetometer – fixed I2C addresses.
-    imu = MPU6050()
-    mag = QMC5883L()
+    # IMU and magnetometer – addresses from config.
+    imu = MPU6050(
+        bus=config.get("sensors", "mpu6050", "i2c_bus", default=1),
+        address=config.get("sensors", "mpu6050", "address", default=0x68),
+        accel_range=config.get("sensors", "mpu6050", "accel_range", default=4),
+        gyro_range=config.get("sensors", "mpu6050", "gyro_range", default=500),
+    )
+    mag = QMC5883L(
+        bus=config.get("sensors", "qmc5883l", "i2c_bus", default=1),
+        address=config.get("sensors", "qmc5883l", "address", default=0x0D),
+    )
 
     # Fusion – UKF and complementary filter.
     # dt=0.01 is the prediction step period; must match the fusion loop rate

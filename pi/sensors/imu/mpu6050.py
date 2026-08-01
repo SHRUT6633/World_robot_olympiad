@@ -101,6 +101,11 @@ class MPU6050(SensorBase):
         # Bias vectors (subtracted from each reading).
         self.accel_bias = np.zeros(3)
         self.gyro_bias = np.zeros(3)
+        # Register values for ACCEL_CONFIG (0x1C) and GYRO_CONFIG (0x1B).
+        # These MUST match the scaling factors above or every reading is
+        # off by a fixed ratio.
+        self._accel_reg = {2: 0x00, 4: 0x08, 8: 0x10, 16: 0x18}[accel_range]
+        self._gyro_reg = {250: 0x00, 500: 0x08, 1000: 0x10, 2000: 0x18}[gyro_range]
 
     def init(self):
         """
@@ -109,52 +114,81 @@ class MPU6050(SensorBase):
         Register writes:
           1. 0x6B ← 0x00 : Wake from sleep. The MPU6050 boots in sleep
              mode to save power; must be cleared before any measurements.
-          2. 0x1C ← 0x00 : Accelerometer full-scale = ±2 g (register value 0x00).
-             NOTE: This is inconsistent with self.accel_range = ±4 g!
-             The code writes a fixed 0x00 but uses accel_range=4 in the
-             scaling factor. This is a BUG: the register should be set
-             to match the range. (Self-report — for commenting accuracy.)
-             Correct value for ±4 g: register 0x1C ← 0x08.
-          3. 0x1B ← 0x00 : Gyroscope full-scale = ±250 °/s (register value 0x00).
-             Same bug: self.gyro_range=500 but register set to ±250.
-             Correct for ±500: register 0x1B ← 0x08.
+          2. 0x1C ← accel_reg : Accelerometer full-scale register, matched
+             to self.accel_range (±4 g → 0x08).
+          3. 0x1B ← gyro_reg : Gyroscope full-scale register, matched to
+             self.gyro_range (±500 °/s → 0x08).
           4. 0x1A ← 0x03 : DLPF bandwidth ≈ 44 Hz.
+
+        The WHO_AM_I register (0x75) is read to prove the chip is present.
+        If the I2C transaction fails, the chip is not answering and init
+        raises so the SystemManager reports FAILED (a red LED then warns
+        the operator). It never silently claims OK.
         """
         try:
             import smbus2
-            self._bus = smbus2.SMBus(self.bus)
-            # 0x6B = Power Management 1. Write 0x00 to wake from sleep mode
-            # (chip boots in sleep; no measurements possible until cleared).
-            self._bus.write_byte_data(self.address, 0x6B, 0x00)
-            # 0x1C = ACCEL_CONFIG. Write 0x00 → ±2 g range (NOTE: BUG — scaling
-            # uses ±4 g but register is set to ±2 g, causing 2× scale mismatch).
-            self._bus.write_byte_data(self.address, 0x1C, 0x00)
-            # 0x1B = GYRO_CONFIG. Write 0x00 → ±250 °/s range (same bug:
-            # self.gyro_range=500 but register set to ±250 °/s).
-            self._bus.write_byte_data(self.address, 0x1B, 0x00)
-            # 0x1A = CONFIG. Write 0x03 → DLPF bandwidth ≈ 44 Hz, cutting
-            # motor-frequency vibration above the accelerometer's useful band.
-            self._bus.write_byte_data(self.address, 0x1A, 0x03)
-            self._device = True
-            log.info("MPU6050 initialized")
         except ImportError:
             log.warn("MPU6050: smbus2 not available, using mock")
             self._device = "mock"
+            return
+        try:
+            self._bus = smbus2.SMBus(self.bus)
+        except Exception as e:
+            log.warn(f"MPU6050: I2C bus unavailable ({e}), using mock")
+            self._device = "mock"
+            return
+        try:
+            # 0x6B = Power Management 1. Write 0x00 to wake from sleep mode
+            # (chip boots in sleep; no measurements possible until cleared).
+            self._bus.write_byte_data(self.address, 0x6B, 0x00)
+            # 0x1C = ACCEL_CONFIG. Register value matched to accel_range so
+            # the scaling factor in read_raw() matches the hardware range.
+            self._bus.write_byte_data(self.address, 0x1C, self._accel_reg)
+            # 0x1B = GYRO_CONFIG. Register value matched to gyro_range.
+            self._bus.write_byte_data(self.address, 0x1B, self._gyro_reg)
+            # 0x1A = CONFIG. Write 0x03 → DLPF bandwidth ≈ 44 Hz, cutting
+            # motor-frequency vibration above the accelerometer's useful band.
+            self._bus.write_byte_data(self.address, 0x1A, 0x03)
+            # 0x75 = WHO_AM_I. Any successful read proves the chip answers.
+            # (Clones return 0x68, 0x70, 0x72, 0x98, ... — the exact value
+            # varies, so a successful transaction is the presence test.)
+            try:
+                who = self._bus.read_byte_data(self.address, 0x75)
+            except Exception as e:
+                raise RuntimeError(
+                    f"MPU6050: chip not responding at 0x{self.address:02X} "
+                    f"(check wiring, power, AD0 pin) - {e}")
+            if who != 0x68:
+                log.warn(f"MPU6050: WHO_AM_I=0x{who:02X} (not 0x68) — "
+                         f"proceeding anyway")
+            self._device = True
+            log.info("MPU6050 initialized")
+        except Exception as e:
+            log.error(f"MPU6050: init failed - {e}")
+            raise
 
     def _read_word(self, reg):
         if self._device == "mock":
             import random
             return random.randint(-100, 100)
-        try:
-            # Read two consecutive I2C registers (big-endian: high byte first).
-            high = self._bus.read_byte_data(self.address, reg)
-            low = self._bus.read_byte_data(self.address, reg + 1)
-            val = (high << 8) | low
-            # Convert unsigned 16-bit to signed two's complement.
-            return val - 65536 if val > 32767 else val
-        except Exception as e:
-            self._log_error(str(e))
+        if not self._device:
             return 0
+        last_error = None
+        for attempt in range(3):
+            try:
+                # Read two consecutive I2C registers (big-endian: high byte first).
+                high = self._bus.read_byte_data(self.address, reg)
+                low = self._bus.read_byte_data(self.address, reg + 1)
+                val = (high << 8) | low
+                # Convert unsigned 16-bit to signed two's complement.
+                return val - 65536 if val > 32767 else val
+            except Exception as e:
+                # Transient I2C errors (Errno 5 NACK, Errno 121 remote I/O)
+                # are common when another device holds the bus; retry briefly.
+                last_error = e
+                time.sleep(0.005)
+        self._log_error(str(last_error))
+        return 0
 
     def read_raw(self):
         """

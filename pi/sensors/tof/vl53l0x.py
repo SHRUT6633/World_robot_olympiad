@@ -9,15 +9,7 @@
 import time
 from ..base import SensorBase, FilteredSensorMixin
 from ...system.logger import log
-
-try:
-    # gpiozero provides a simple interface to Raspberry Pi GPIO pins.
-    # OutputDevice controls digital output pins (e.g. XSHUT).
-    from gpiozero import OutputDevice
-    GPIO_AVAILABLE = True
-except ImportError:
-    # On non-RPi platforms (Windows/macOS for dev), GPIO is unavailable.
-    GPIO_AVAILABLE = False
+from . import xshut_manager
 
 
 class VL53L0X(SensorBase, FilteredSensorMixin):
@@ -84,6 +76,12 @@ class VL53L0X(SensorBase, FilteredSensorMixin):
         self.xshut_pin = xshut_pin
         self._xshut = None  # gpiozero OutputDevice handle.
         self._device = None  # "mock" (simulated) or truthy (real).
+        # Register this XSHUT pin NOW (at construction). All sensors exist
+        # before init_all() runs, so when THIS sensor programs its address,
+        # every other sensor's pin is already known and can be held in
+        # hardware reset — otherwise the un-initialised sensors would still
+        # be powered at 0x29 and receive the address write too.
+        xshut_manager.register(xshut_pin)
 
     def init(self):
         """
@@ -91,39 +89,85 @@ class VL53L0X(SensorBase, FilteredSensorMixin):
 
         Procedure:
           1. Open the I2C bus (smbus2.SMBus).
-          2. If xshut_pin is provided, pulse XSHUT low → high to wake the
-             sensor from hardware standby, then program a new I2C address.
-          3. Set self._device to indicate readiness.
+          2. If xshut_pin is provided, use the shared XSHUT sequencer:
+             every other registered ToF sensor is held in hardware reset
+             while this one is powered up, so the address write at the
+             factory-default 0x29 is only seen by THIS sensor. Without
+             this, ALL sensors still at 0x29 would be programmed to the
+             same address and corrupt the bus.
+          3. Verify the chip actually responds at its programmed address
+             (register 0x8A write-back check). If it does not, raise a
+             RuntimeError so the SystemManager reports FAILED — never
+             silently claim OK.
 
-        If smbus2 is not installed (development on Windows), or hardware
-        init fails, the driver falls back to "mock" mode and generates
-        random distances for testing.
+        If smbus2 is not installed (development on Windows), or the I2C
+        bus cannot be opened at all, the driver falls back to "mock" mode
+        and generates random distances for testing.
         """
         try:
             import smbus2
-            # Open the I2C bus. /dev/i2c-1 on RPi.
-            self._bus = smbus2.SMBus(self.bus)
-
-            if self.xshut_pin is not None and GPIO_AVAILABLE:
-                # Set XSHUT low (sensor in reset / standby).
-                self._xshut = OutputDevice(self.xshut_pin, initial_value=False)
-                time.sleep(0.01)
-                # Set XSHUT high (sensor powered on at default address 0x29).
-                self._xshut.on()
-                time.sleep(0.01)
-                # Program a new address so multiple sensors can share the bus.
-                self._program_address()
-
-            # Mark as initialised (real hardware).
-            self._device = True
-            log.info(f"{self.name}: VL53L0X @ 0x{self.address:02X} initialized")
         except ImportError:
             log.warn(f"{self.name}: smbus2 not available, using mock")
             self._device = "mock"
+            return
+        try:
+            # Open the I2C bus. /dev/i2c-1 on RPi.
+            self._bus = smbus2.SMBus(self.bus)
         except Exception as e:
-            # Catch all: hardware not connected, wrong permissions, etc.
-            log.warn(f"{self.name}: init error - {e}")
+            log.warn(f"{self.name}: I2C bus unavailable ({e}), using mock")
             self._device = "mock"
+            return
+
+        try:
+            if self.xshut_pin is not None and xshut_manager.GPIO_AVAILABLE:
+                # Hold every other ToF in hardware reset (they are all at
+                # 0x29 right now and must not see the address write below).
+                held = xshut_manager.hold_all_other_low(self.xshut_pin)
+                try:
+                    # Release ONLY this sensor.
+                    self._xshut = xshut_manager.OutputDevice(
+                        self.xshut_pin, initial_value=True)
+                    time.sleep(0.05)
+                    self._program_address()
+                finally:
+                    # Power the other sensors back on (they keep their own
+                    # already-programmed unique addresses).
+                    xshut_manager.release(held)
+
+            # Real hardware present — verify the chip answers at its
+            # programmed address before claiming OK.
+            if not self.verify():
+                raise RuntimeError(
+                    f"{self.name}: sensor not responding at "
+                    f"0x{self.address:02X} (check wiring, XSHUT pin and "
+                    f"I2C address)")
+            self._device = True
+            log.info(f"{self.name}: VL53L0X @ 0x{self.address:02X} initialized")
+        except Exception as e:
+            log.error(f"{self.name}: init failed - {e}")
+            raise
+
+    def verify(self):
+        """
+        Confirm the chip is present and correctly addressed.
+
+        Reads back the I2C slave address register (0x8A). On a healthy
+        VL53L0X programmed to self.address it must read back
+        (address << 1). A missing chip, a bus fault, or a sensor that is
+        still at the default 0x29 (because XSHUT programming failed) will
+        fail this check.
+        """
+        try:
+            got = self._bus.read_byte_data(self.address, 0x8A)
+            expected = self.address << 1
+            if got == expected:
+                return True
+            log.warn(f"{self.name}: address reg 0x{got:02X}, "
+                     f"expected 0x{expected:02X}")
+            return False
+        except Exception as e:
+            log.warn(f"{self.name}: verify error - {e}")
+            return False
 
     def _program_address(self):
         """
@@ -177,16 +221,24 @@ class VL53L0X(SensorBase, FilteredSensorMixin):
             import random
             # Random distance between 5 cm and 80 cm (typical robot range).
             return random.uniform(50, 800)
-        try:
-            # Block read from register 0x00, 12 bytes.
-            # Block read 12 bytes from result register 0x00; bytes 10-11
-            # contain the 16-bit range measurement in millimetres (MSB, LSB).
-            data = self._bus.read_i2c_block_data(self.address, 0x00, 12)
-            range_mm = (data[10] << 8) | data[11]
-            return float(range_mm)
-        except Exception as e:
-            self._log_error(f"read error - {e}")
+        if not self._device:
             return None
+        last_error = None
+        for attempt in range(3):
+            try:
+                # Block read from register 0x00, 12 bytes.
+                # Block read 12 bytes from result register 0x00; bytes 10-11
+                # contain the 16-bit range measurement in millimetres (MSB, LSB).
+                data = self._bus.read_i2c_block_data(self.address, 0x00, 12)
+                range_mm = (data[10] << 8) | data[11]
+                return float(range_mm)
+            except Exception as e:
+                # Transient I2C errors (Errno 5 NACK, Errno 121 remote I/O)
+                # are common when another sensor holds the bus; retry briefly.
+                last_error = e
+                time.sleep(0.005)
+        self._log_error(f"read error - {last_error}")
+        return None
 
     def read(self):
         """

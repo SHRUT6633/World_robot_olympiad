@@ -78,6 +78,11 @@ class PiCamera(SensorBase):
         # Open /dev/video<device> with the V4L2 backend for low latency.
         # Open /dev/video<device> with V4L2 backend for lower latency than FFMPEG.
         self._cap = cv2.VideoCapture(self.device, cv2.CAP_V4L2)
+        if not self._cap.isOpened():
+            raise RuntimeError(
+                f"Camera /dev/video{self.device} could not be opened "
+                f"(check CSI ribbon cable / USB connection and that the "
+                f"camera is enabled: sudo raspi-config → Interface Options)")
         # Request resolution and framerate; V4L2 may silently round to a
         # supported mode if the exact values are not available.
         self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
@@ -86,7 +91,17 @@ class PiCamera(SensorBase):
         # Minimise internal driver buffer to reduce latency — a large queue
         # would serve stale frames to the control loop.
         self._cap.set(cv2.CAP_PROP_BUFFERSIZE, 2)
-        log.info(f"Camera: {self.width}x{self.height} @ {self.fps}fps")
+        # Log the ACTUAL mode the driver negotiated, not the requested one,
+        # so the operator can spot a mismatch (e.g. 640x480 requested but
+        # only 160x120 delivered).
+        w = int(self._cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        h = int(self._cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        f = int(self._cap.get(cv2.CAP_PROP_FPS))
+        log.info(f"Camera: {w}x{h} @ {f}fps (/dev/video{self.device})")
+        if w != self.width or h != self.height or f != self.fps:
+            log.warn(f"Camera mode mismatch: requested "
+                     f"{self.width}x{self.height}@{self.fps}fps, "
+                     f"got {w}x{h}@{f}fps")
 
     def read_raw(self):
         """

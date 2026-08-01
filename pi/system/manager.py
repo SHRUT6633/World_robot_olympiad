@@ -72,6 +72,9 @@ class SystemManager:
         # Internal state flag — set True when run() starts, False on stop().
         self._running = False
 
+        # Names of components whose .init() raised (set by init_all()).
+        self.init_failures = []
+
         # Component registry: dict[name_str -> component_object].
         # Components are added via register() and iterated during init_all()
         # and shutdown().
@@ -116,6 +119,7 @@ class SystemManager:
     # -------------------------------------------------------------------------
     async def init_all(self):
         log.info("Initializing all components...")
+        failures = []
         for name, comp in self._components.items():
             try:
                 if hasattr(comp, "init") and callable(comp.init):
@@ -126,8 +130,15 @@ class SystemManager:
                 log.info(f"  {name}: OK")
             except Exception as e:
                 log.error(f"  {name}: FAILED - {e}")
+                failures.append(name)
+        self.init_failures = failures
         self.perf.start()
-        log.info("System initialization complete")
+        if failures:
+            log.error(f"System initialization complete with {len(failures)} "
+                      f"faulty component(s): {failures}")
+        else:
+            log.info("System initialization complete")
+        return failures
 
     # -------------------------------------------------------------------------
     # run()

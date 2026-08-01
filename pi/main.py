@@ -44,6 +44,7 @@ from pi.sensors.tof.vl53l0x import VL53L0X
 from pi.sensors.tof.vl53l1x import VL53L1X
 from pi.sensors.imu.mpu6050 import MPU6050
 from pi.sensors.magnetometer.qmc5883l import QMC5883L
+from pi.hardware.led import StatusLED
 from pi.fusion.ukf import RobotUKF
 from pi.fusion.complementary import ComplementaryFilter
 from pi.fusion.adaptive_noise import AdaptiveNoiseEstimator
@@ -128,21 +129,31 @@ async def main():
     # Two VL53L0X (short-range, ~2 m) for left/right lateral distance.
     # One VL53L1X (long-range, ~4 m) for forward distance.
     # xshut_pin: GPIO pin used to selectively enable/disable each sensor
-    #   during I2C address assignment. If xshut_pin is None, the driver uses
-    #   the default I2C address (0x29) — only works if only ONE ToF is
-    #   connected. For multiple ToFs, each must have a unique xshut_pin so
-    #   the driver can power-cycle them one at a time to assign distinct
-    #   addresses. Wiring must match these pin assignments.
+    #   during I2C address assignment. Each sensor MUST have a unique
+    #   xshut_pin AND a unique address (0x30/0x31/0x32 in pi_config.yaml).
+    #   If xshut_pin is None, the driver keeps the factory default 0x29 —
+    #   only works if ONLY ONE ToF is connected.
+    #
+    # IMPORTANT: the address from config is passed here so the drivers
+    # program each sensor to a DISTINCT address. Without this, both
+    # VL53L0X would default to 0x30, collide on the bus, and corrupt all
+    # I2C traffic (including the IMU and magnetometer).
     tof_left = VL53L0X(
         "VL53L0X_Left",
+        bus=config.get("sensors", "vl53l0x_left", "i2c_bus", default=1),
+        address=config.get("sensors", "vl53l0x_left", "address", default=0x30),
         xshut_pin=config.get("sensors", "vl53l0x_left", "xshut_pin", default=None),
     )
     tof_right = VL53L0X(
         "VL53L0X_Right",
+        bus=config.get("sensors", "vl53l0x_right", "i2c_bus", default=1),
+        address=config.get("sensors", "vl53l0x_right", "address", default=0x31),
         xshut_pin=config.get("sensors", "vl53l0x_right", "xshut_pin", default=None),
     )
     tof_front = VL53L1X(
         "VL53L1X_Front",
+        bus=config.get("sensors", "vl53l1x_front", "i2c_bus", default=1),
+        address=config.get("sensors", "vl53l1x_front", "address", default=0x32),
         xshut_pin=config.get("sensors", "vl53l1x_front", "xshut_pin", default=None),
     )
 
@@ -152,9 +163,18 @@ async def main():
     # MPU6050: 6-DoF (accel + gyro). Used for pitch/roll/yaw estimation.
     # QMC5883L: 3-axis magnetometer. Provides absolute heading reference.
     # Both communicate over I2C at fixed addresses (0x68 and 0x0D).
-    # No config keys required unless addresses differ.
-    imu = MPU6050()
-    mag = QMC5883L()
+    # Addresses/buses are read from config so wiring changes only need a
+    # YAML edit.
+    imu = MPU6050(
+        bus=config.get("sensors", "mpu6050", "i2c_bus", default=1),
+        address=config.get("sensors", "mpu6050", "address", default=0x68),
+        accel_range=config.get("sensors", "mpu6050", "accel_range", default=4),
+        gyro_range=config.get("sensors", "mpu6050", "gyro_range", default=500),
+    )
+    mag = QMC5883L(
+        bus=config.get("sensors", "qmc5883l", "i2c_bus", default=1),
+        address=config.get("sensors", "qmc5883l", "address", default=0x0D),
+    )
 
     # =========================================================================
     # Sensor Fusion Modules
@@ -431,13 +451,28 @@ async def main():
     # Initialize All Components
     # =========================================================================
     # Calls .init() on every registered component. If a component fails,
-    # its error is logged but init continues — the system may still start
-    # with degraded functionality. PerformanceMonitor is started afterward.
-    await mgr.init_all()
+    # its error is logged and the failure name is added to the returned
+    # list. The status LED then signals the result:
+    #   - All OK  → triple green flash, then solid green.
+    #   - Any fail → solid RED (operator must check the log before racing).
+    led = StatusLED(
+        green_pin=config.get("hardware", "leds", "green_pin", default=23),
+        red_pin=config.get("hardware", "leds", "red_pin", default=24),
+        blue_pin=config.get("hardware", "leds", "blue_pin", default=None),
+    )
+    failures = await mgr.init_all()
 
-    log.info("=" * 50)
-    log.info("WRO 4WS Robot - READY")
-    log.info("=" * 50)
+    if failures:
+        log.error("=" * 50)
+        log.error(f"  NOT READY — {len(failures)} FAULTY COMPONENT(S): {failures}")
+        log.error("  Fix wiring/sensors, then restart. Red LED ON.")
+        log.error("=" * 50)
+        led.set("red")
+    else:
+        led.success_sequence()
+        log.info("=" * 50)
+        log.info("WRO 4WS Robot - READY")
+        log.info("=" * 50)
 
     # =========================================================================
     # Run (Infinite Loop Until Interrupt)
@@ -450,6 +485,8 @@ async def main():
         await mgr.run()
     except KeyboardInterrupt:
         await mgr.stop()
+    finally:
+        led.close()
 
 
 # =============================================================================

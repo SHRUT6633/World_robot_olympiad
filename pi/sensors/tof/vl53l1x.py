@@ -9,12 +9,7 @@
 import time
 from ..base import SensorBase, FilteredSensorMixin
 from ...system.logger import log
-
-try:
-    from gpiozero import OutputDevice
-    GPIO_AVAILABLE = True
-except ImportError:
-    GPIO_AVAILABLE = False
+from . import xshut_manager
 
 
 class VL53L1X(SensorBase, FilteredSensorMixin):
@@ -77,6 +72,12 @@ class VL53L1X(SensorBase, FilteredSensorMixin):
         self.xshut_pin = xshut_pin
         self._xshut = None
         self._device = None
+        # Register this XSHUT pin NOW (at construction). All sensors exist
+        # before init_all() runs, so when THIS sensor programs its address,
+        # every other sensor's pin is already known and can be held in
+        # hardware reset — otherwise the un-initialised sensors would still
+        # be powered at 0x29 and receive the address write too.
+        xshut_manager.register(xshut_pin)
 
     def init(self):
         """
@@ -94,23 +95,66 @@ class VL53L1X(SensorBase, FilteredSensorMixin):
         """
         try:
             import smbus2
-            self._bus = smbus2.SMBus(self.bus)
-
-            if self.xshut_pin is not None and GPIO_AVAILABLE:
-                self._xshut = OutputDevice(self.xshut_pin, initial_value=False)
-                time.sleep(0.01)
-                self._xshut.on()
-                time.sleep(0.01)
-                self._program_address()
-
-            self._device = True
-            log.info(f"{self.name}: VL53L1X @ 0x{self.address:02X} initialized")
         except ImportError:
             log.warn(f"{self.name}: smbus2 not available, using mock")
             self._device = "mock"
+            return
+        try:
+            self._bus = smbus2.SMBus(self.bus)
         except Exception as e:
-            log.warn(f"{self.name}: init error - {e}")
+            log.warn(f"{self.name}: I2C bus unavailable ({e}), using mock")
             self._device = "mock"
+            return
+
+        try:
+            if self.xshut_pin is not None and xshut_manager.GPIO_AVAILABLE:
+                # Hold every other ToF in hardware reset (they are all at
+                # 0x29 right now and must not see the address write below).
+                held = xshut_manager.hold_all_other_low(self.xshut_pin)
+                try:
+                    # Release ONLY this sensor.
+                    self._xshut = xshut_manager.OutputDevice(
+                        self.xshut_pin, initial_value=True)
+                    time.sleep(0.05)
+                    self._program_address()
+                finally:
+                    # Power the other sensors back on (they keep their own
+                    # already-programmed unique addresses).
+                    xshut_manager.release(held)
+
+            # Real hardware present — verify the chip answers at its
+            # programmed address before claiming OK.
+            if not self.verify():
+                raise RuntimeError(
+                    f"{self.name}: sensor not responding at "
+                    f"0x{self.address:02X} (check wiring, XSHUT pin and "
+                    f"I2C address)")
+            self._device = True
+            log.info(f"{self.name}: VL53L1X @ 0x{self.address:02X} initialized")
+        except Exception as e:
+            log.error(f"{self.name}: init failed - {e}")
+            raise
+
+    def verify(self):
+        """
+        Confirm the chip is present and correctly addressed.
+
+        Reads back the I2C slave address register (0x8A). On a healthy
+        VL53L1X programmed to self.address it must read back
+        (address << 1). A missing chip, a bus fault, or a sensor that is
+        still at the default 0x29 will fail this check.
+        """
+        try:
+            got = self._bus.read_byte_data(self.address, 0x8A)
+            expected = self.address << 1
+            if got == expected:
+                return True
+            log.warn(f"{self.name}: address reg 0x{got:02X}, "
+                     f"expected 0x{expected:02X}")
+            return False
+        except Exception as e:
+            log.warn(f"{self.name}: verify error - {e}")
+            return False
 
     def _program_address(self):
         """
@@ -150,20 +194,28 @@ class VL53L1X(SensorBase, FilteredSensorMixin):
         if self._device == "mock":
             import random
             return random.uniform(100, 3000)
-        try:
-            # Block read 17 bytes from result register 0x00; bytes 14-15
-            # hold the 16-bit range (mm), byte 16 holds the range status.
-            data = self._bus.read_i2c_block_data(self.address, 0x00, 17)
-            range_mm = (data[14] << 8) | data[15]
-            status = data[16]
-            # status=0 means valid measurement; non-zero means signal too low,
-            # sigma too high, or wrap-around — discard to avoid acting on garbage.
-            if status == 0:
-                return float(range_mm)
+        if not self._device:
             return None
-        except Exception as e:
-            self._log_error(f"read error - {e}")
-            return None
+        last_error = None
+        for attempt in range(3):
+            try:
+                # Block read 17 bytes from result register 0x00; bytes 14-15
+                # hold the 16-bit range (mm), byte 16 holds the range status.
+                data = self._bus.read_i2c_block_data(self.address, 0x00, 17)
+                range_mm = (data[14] << 8) | data[15]
+                status = data[16]
+                # status=0 means valid measurement; non-zero means signal too low,
+                # sigma too high, or wrap-around — discard to avoid acting on garbage.
+                if status == 0:
+                    return float(range_mm)
+                return None
+            except Exception as e:
+                # Transient I2C errors (Errno 5 NACK, Errno 121 remote I/O)
+                # are common when another sensor holds the bus; retry briefly.
+                last_error = e
+                time.sleep(0.005)
+        self._log_error(f"read error - {last_error}")
+        return None
 
     def read(self):
         """

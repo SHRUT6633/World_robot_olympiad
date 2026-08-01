@@ -115,7 +115,17 @@ class QMC5883L(SensorBase):
         """
         try:
             import smbus2
+        except ImportError:
+            log.warn("QMC5883L: smbus2 not available, using mock")
+            self._device = "mock"
+            return
+        try:
             self._bus = smbus2.SMBus(self.bus)
+        except Exception as e:
+            log.warn(f"QMC5883L: I2C bus unavailable ({e}), using mock")
+            self._device = "mock"
+            return
+        try:
             # 0x09 = Control Reg 1: 0x1D = continuous mode, 50 Hz ODR,
             # ±2 G range, 64× oversampling (averages 64 samples per output).
             self._bus.write_byte_data(self.address, 0x09, 0x1D)
@@ -123,11 +133,23 @@ class QMC5883L(SensorBase):
             # Must re-write 0x09 after this because reset defaults 0x09 to 0x00.
             self._bus.write_byte_data(self.address, 0x0B, 0x01)
             self._bus.write_byte_data(self.address, 0x09, 0x1D)
+            # Presence check: read back Control Reg 1. A successful read
+            # proves the chip answers; a missing chip or bad wiring raises
+            # an OSError, which we surface as a FAILED init.
+            try:
+                reg = self._bus.read_byte_data(self.address, 0x09)
+            except Exception as e:
+                raise RuntimeError(
+                    f"QMC5883L: chip not responding at 0x{self.address:02X} "
+                    f"(check wiring, power, address strapping) - {e}")
+            if reg != 0x1D:
+                log.warn(f"QMC5883L: Control Reg 1 = 0x{reg:02X} "
+                         f"(expected 0x1D) — proceeding anyway")
             self._device = True
             log.info("QMC5883L initialized")
-        except ImportError:
-            log.warn("QMC5883L: smbus2 not available, using mock")
-            self._device = "mock"
+        except Exception as e:
+            log.error(f"QMC5883L: init failed - {e}")
+            raise
 
     def read_raw(self):
         """
@@ -154,21 +176,29 @@ class QMC5883L(SensorBase):
         if self._device == "mock":
             import random
             return np.array([random.uniform(-300, 300) for _ in range(3)])
-        try:
-            # Block read 6 bytes from register 0x00 (X_L, X_H, Y_L, Y_H, Z_L, Z_H).
-            data = self._bus.read_i2c_block_data(self.address, 0x00, 6)
-            # Data is little-endian: LSB first, MSB second.
-            x = (data[1] << 8) | data[0]
-            y = (data[3] << 8) | data[2]
-            z = (data[5] << 8) | data[4]
-            # Convert unsigned 16-bit to signed two's complement.
-            x = x - 65536 if x > 32767 else x
-            y = y - 65536 if y > 32767 else y
-            z = z - 65536 if z > 32767 else z
-            return np.array([x, y, z], dtype=float)
-        except Exception as e:
-            self._log_error(str(e))
+        if not self._device:
             return np.zeros(3)
+        last_error = None
+        for attempt in range(3):
+            try:
+                # Block read 6 bytes from register 0x00 (X_L, X_H, Y_L, Y_H, Z_L, Z_H).
+                data = self._bus.read_i2c_block_data(self.address, 0x00, 6)
+                # Data is little-endian: LSB first, MSB second.
+                x = (data[1] << 8) | data[0]
+                y = (data[3] << 8) | data[2]
+                z = (data[5] << 8) | data[4]
+                # Convert unsigned 16-bit to signed two's complement.
+                x = x - 65536 if x > 32767 else x
+                y = y - 65536 if y > 32767 else y
+                z = z - 65536 if z > 32767 else z
+                return np.array([x, y, z], dtype=float)
+            except Exception as e:
+                # Transient I2C errors (Errno 5 NACK, Errno 121 remote I/O)
+                # are common when another device holds the bus; retry briefly.
+                last_error = e
+                time.sleep(0.005)
+        self._log_error(str(last_error))
+        return np.zeros(3)
 
     def read(self):
         """
