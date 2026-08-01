@@ -73,13 +73,12 @@ class I2CChecker:
     # ---------------------------------------------------------------------
     # Raw bus scan (like i2cdetect -y 1) — reports which addresses ACK
     # ---------------------------------------------------------------------
-    def scan_bus(self):
+    def scan_bus(self, bus_num=1):
         try:
             import smbus2
         except ImportError:
             log.warn("scan_bus: smbus2 not available")
             return []
-        bus_num = self.config.get("sensors", "vl53l0x_left", "i2c_bus", default=1)
         try:
             dev = smbus2.SMBus(bus_num)
         except Exception as e:
@@ -96,6 +95,13 @@ class I2CChecker:
                 pass
         dev.close()
         return found
+
+    def scan_all_buses(self):
+        """Scan bus 1 (GPIO2/3 header pins 3/5) and bus 0 (pins 27/28)."""
+        return {
+            "i2c-1 (SDA=GPIO2, SCL=GPIO3)": self.scan_bus(1),
+            "i2c-0 (SDA=GPIO0, SCL=GPIO1)": self.scan_bus(0),
+        }
 
     def format_scan(self, found):
         lines = ["      0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f"]
@@ -116,12 +122,10 @@ class I2CChecker:
         log.info("=" * 50)
 
         # 1. Scan BEFORE init (all ToF still at factory 0x29)
-        try:
-            before = self.scan_bus()
-            log.info(f"Bus scan before init:\n{self.format_scan(before)}")
-        except Exception as e:
-            before = []
-            log.error(f"Bus scan failed: {e}")
+        #    Scan BOTH buses so a sensor wired to the wrong bus is found.
+        for bus_label, found in self.scan_all_buses().items():
+            log.info(f"Bus scan before init ({bus_label}):\n"
+                     f"{self.format_scan(found)}")
 
         # 2. Build + init every sensor (drivers now verify real hardware;
         #    they raise on missing chips, so FAILED is always truthful)
@@ -156,12 +160,10 @@ class I2CChecker:
                 log.error(f"  {name}: read FAILED - {e}")
                 self.results[name] = (False, str(e))
 
-        # 4. Scan AFTER init (expect 0x30 0x31 0x32 0x68 0x0D)
-        try:
-            after = self.scan_bus()
-            log.info(f"Bus scan after init:\n{self.format_scan(after)}")
-        except Exception as e:
-            log.error(f"Bus scan failed: {e}")
+        # 4. Scan AFTER init (expect 0x30 0x31 0x32 0x68 0x0D on bus 1)
+        for bus_label, found in self.scan_all_buses().items():
+            log.info(f"Bus scan after init ({bus_label}):\n"
+                     f"{self.format_scan(found)}")
 
         return self.results
 

@@ -121,6 +121,19 @@ class VL53L1X(SensorBase, FilteredSensorMixin):
                     # Power the other sensors back on (they keep their own
                     # already-programmed unique addresses).
                     xshut_manager.release(held)
+            elif self.xshut_pin is not None:
+                # xshut_pin IS configured but GPIO control is unavailable.
+                # This is a misconfiguration, not a silent fallback: without
+                # XSHUT the address can never be programmed.
+                raise RuntimeError(
+                    f"{self.name}: xshut_pin={self.xshut_pin} configured but "
+                    f"gpiozero is not installed (run: pip install gpiozero "
+                    f"rpi-lgpio) — address programming impossible")
+            else:
+                # No XSHUT pin: only works if the sensor already has its
+                # unique address programmed (e.g. pre-programmed module).
+                log.warn(f"{self.name}: no xshut_pin configured — assuming "
+                         f"sensor is already at 0x{self.address:02X}")
 
             # Real hardware present — verify the chip answers at its
             # programmed address before claiming OK.
