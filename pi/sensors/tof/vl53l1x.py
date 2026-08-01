@@ -318,21 +318,8 @@ class VL53L1X(SensorBase, FilteredSensorMixin):
         last_error = None
         for attempt in range(3):
             try:
-                # Block read 17 bytes from result register 0x00; bytes 14-15
-                # hold the 16-bit range (mm) on a VL53L1X, bytes 10-11 on a
-                # VL53L0X, byte 16 holds the range status on a VL53L1X.
-                data = self._bus.read_i2c_block_data(self.address, 0x00, 17)
-                l0x_mm = (data[10] << 8) | data[11]
-                range_mm = family.pick_range(
-                    self._bus, self.address, l0x_mm, self._family)
-                if range_mm is None:
-                    # First measurement may still be warming up (~30 ms).
-                    time.sleep(0.03)
-                    data = self._bus.read_i2c_block_data(
-                        self.address, 0x00, 17)
-                    range_mm = family.pick_range(
-                        self._bus, self.address,
-                        (data[10] << 8) | data[11], self._family)
+                range_mm = family.read_range(
+                    self._bus, self.address, self._family)
                 if range_mm is None:
                     return None
                 return float(range_mm)

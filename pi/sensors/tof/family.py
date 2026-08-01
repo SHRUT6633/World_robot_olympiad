@@ -57,37 +57,36 @@ def detect_family(bus, address):
 
 def start_l0x_continuous(bus, address):
     """
-    Start free-running continuous ranging on a VL53L0X (Pololu sequence).
+    Start free-running continuous ranging on a VL53L0X.
 
     A VL53L0X does NOT measure by itself: the result registers stay 0 until
-    the host starts the measurement. The known-good sequence has TWO prefix
-    rounds — one before writing the mode, one AFTER. The first round takes
-    the sensor out of reset and lets us read back the stop_variable (0x91);
-    the second round is part of the official StartMeasurement and is easy
-    to forget — without it the sensor stays idle (exactly the symptom the
-    probe reproduced).
+    the host writes the start sequence. The sequence is the ST "access
+    window" pattern (0x80=0x01, 0xFF=0x01, 0x00=0x00 opens access; 0x00=0x01,
+    0xFF=0x00, 0x80=0x00 closes it) followed by the mode write.
+
+    IMPORTANT (learned empirically from the probe): only ONE access-window
+    round may be used. A second round rewrites register 0x00 to 0x00, which
+    clears the measurement mode just written — the probe's single-round
+    trigger produced a live reading (255 mm) while the two-round variant
+    left the result block all-zero.
 
     Best-effort: writes are attempted and failures logged by the caller;
     nothing is raised.
     """
-    def prefix():
-        bus.write_byte_data(address, 0x80, 0x01)
-        bus.write_byte_data(address, 0xFF, 0x01)
-        bus.write_byte_data(address, 0x00, 0x00)
-        try:
-            sv = bus.read_byte_data(address, 0x91)
-        except Exception:
-            sv = 0x00
-        bus.write_byte_data(address, 0x91, sv)
-        bus.write_byte_data(address, 0x00, 0x01)
-        bus.write_byte_data(address, 0xFF, 0x00)
-        bus.write_byte_data(address, 0x80, 0x00)
-
-    prefix()
+    bus.write_byte_data(address, 0x80, 0x01)
+    bus.write_byte_data(address, 0xFF, 0x01)
+    bus.write_byte_data(address, 0x00, 0x00)
+    try:
+        sv = bus.read_byte_data(address, 0x91)
+    except Exception:
+        sv = 0x00
+    bus.write_byte_data(address, 0x91, sv)
+    bus.write_byte_data(address, 0x00, 0x01)
+    bus.write_byte_data(address, 0xFF, 0x00)
+    bus.write_byte_data(address, 0x80, 0x00)
     # Free-running continuous mode (no inter-measurement period).
     bus.write_byte_data(address, 0x00, 0x02)
-    prefix()
-    time.sleep(0.1)
+    time.sleep(0.15)
 
 
 def start_l1x(bus, address):
@@ -100,11 +99,11 @@ def start_l1x(bus, address):
     bus.write_byte_data(address, 0x20, 0x01)
 
 
-def pick_range(bus, address, l0x_mm, family_kind):
+def pick_range(bus, address, family_kind):
     """
     Return the best range reading for the detected silicon family.
 
-    Both layouts are always read (a 17-byte block at register 0x00):
+    Reads the 17-byte block at register 0x00 and parses BOTH layouts:
       - VL53L0X layout: bytes 10-11.
       - VL53L1X layout: bytes 14-15.
 
@@ -118,9 +117,10 @@ def pick_range(bus, address, l0x_mm, family_kind):
     """
     try:
         data17 = bus.read_i2c_block_data(address, 0x00, 17)
-        l1x_mm = (data17[14] << 8) | data17[15]
     except Exception:
-        return l0x_mm if l0x_mm > 0 else None
+        return None
+    l0x_mm = (data17[10] << 8) | data17[11]
+    l1x_mm = (data17[14] << 8) | data17[15]
     if family_kind in ("l1x", "unknown"):
         if l1x_mm > 0:
             return l1x_mm
@@ -129,3 +129,27 @@ def pick_range(bus, address, l0x_mm, family_kind):
     if l0x_mm > 0:
         return l0x_mm
     return l1x_mm if l1x_mm > 0 else None
+
+
+def read_range(bus, address, family_kind):
+    """
+    Read a range with a single-shot re-trigger fallback.
+
+    If both layouts read zero (continuous mode not running yet, or the
+    start sequence was refused by the chip), fire a VL53L0X single-shot
+    start (reg 0x00 = 0x01 — the documented StartSingleMeasurement mode
+    write) and re-read once. On VL53L1X silicon register 0x00 is a
+    read-only result register, so the write is safely ignored.
+
+    Returns a distance in mm, or None if nothing readable.
+    """
+    r = pick_range(bus, address, family_kind)
+    if r is not None:
+        return r
+    time.sleep(0.03)
+    try:
+        bus.write_byte_data(address, 0x00, 0x01)
+        time.sleep(0.05)
+    except Exception:
+        return None
+    return pick_range(bus, address, family_kind)
