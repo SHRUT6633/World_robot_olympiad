@@ -10,6 +10,7 @@ import time
 from ..base import SensorBase, FilteredSensorMixin
 from ...system.logger import log
 from . import xshut_manager
+from . import family
 
 
 class VL53L0X(SensorBase, FilteredSensorMixin):
@@ -76,6 +77,7 @@ class VL53L0X(SensorBase, FilteredSensorMixin):
         self.xshut_pin = xshut_pin
         self._xshut = None  # gpiozero OutputDevice handle.
         self._device = None  # "mock" (simulated) or truthy (real).
+        self._family = "unknown"  # "l0x" / "l1x" / "unknown", set at init.
         # Register this XSHUT pin NOW (at construction). All sensors exist
         # before init_all() runs, so when THIS sensor programs its address,
         # every other sensor's pin is already known and can be held in
@@ -155,6 +157,7 @@ class VL53L0X(SensorBase, FilteredSensorMixin):
                     f"0x{self.address:02X} (check wiring, XSHUT pin and "
                     f"I2C address)")
             self._device = True
+            self._family = family.detect_family(self._bus, self.address)
             self._start_measurement()
             log.info(f"{self.name}: VL53L0X @ 0x{self.address:02X} initialized")
         except Exception as e:
@@ -177,11 +180,14 @@ class VL53L0X(SensorBase, FilteredSensorMixin):
         except Exception as e:
             log.warn(f"{self.name}: verify error - {e}")
             return False
-        if got in (self.address << 1, self.address):
+        # Genuine ST chips store address << 1; some clones store the raw
+        # address; 0x00 = unconfigured (the chip still answers at its boot
+        # address — accepted, the data check still gates real readings).
+        if got in (self.address << 1, self.address, 0x00):
             return True
         log.warn(f"{self.name}: address reg 0x{got:02X}, "
-                 f"expected 0x{self.address << 1:02X} or "
-                 f"0x{self.address:02X}")
+                 f"expected 0x{self.address << 1:02X}, "
+                 f"0x{self.address:02X} or 0x00")
         return False
 
     def _find_boot_address(self):
@@ -282,32 +288,39 @@ class VL53L0X(SensorBase, FilteredSensorMixin):
 
     def _start_measurement(self):
         """
-        Start free-running continuous ranging (Pololu sequence).
+        Start measurement according to the DETECTED silicon family.
 
-        A freshly powered VL53L0X does NOT measure by itself — the result
-        registers stay 0 until the host starts the measurement. This writes
-        the standard ST sequence (with the stop_variable read-back) and then
-        puts the sensor into free-running continuous mode (reg 0x00 = 0x02),
-        so every later read returns a fresh distance.
+        The module label cannot be trusted: the "VL53L1X" front module was
+        identified as a genuine VL53L0X (0xC0=0xEE), and the module at the
+        L0X address streamed live data with no trigger at all (VL53L1X
+        behaviour). So:
 
-        Best-effort: if a write fails (some clones differ), we log and
-        continue — the read path falls back to re-triggering single-shot.
+          - "l0x": run the full Pololu continuous sequence (two prefix
+            rounds — the second round is required and was the missing
+            piece when the probe's single-round attempt stayed at 0).
+          - "l1x": write SYSTEM__MODE_START (safety net; it measures on
+            its own anyway).
+          - "unknown": try the L0X sequence first, then the L1X start.
+
+        Best-effort: failures are logged, never raised.
         """
         try:
-            self._bus.write_byte_data(self.address, 0x80, 0x01)
-            self._bus.write_byte_data(self.address, 0xFF, 0x01)
-            self._bus.write_byte_data(self.address, 0x00, 0x00)
-            try:
-                sv = self._bus.read_byte_data(self.address, 0x91)
-            except Exception:
-                sv = 0x00
-            self._bus.write_byte_data(self.address, 0x91, sv)
-            self._bus.write_byte_data(self.address, 0x00, 0x01)
-            self._bus.write_byte_data(self.address, 0xFF, 0x00)
-            self._bus.write_byte_data(self.address, 0x80, 0x00)
-            self._bus.write_byte_data(self.address, 0x00, 0x02)
-            time.sleep(0.05)
-            log.info(f"{self.name}: ranging started (continuous)")
+            if self._family == "l1x":
+                family.start_l1x(self._bus, self.address)
+                log.info(f"{self.name}: VL53L1X silicon detected — "
+                         f"L1X layout/trigger")
+            else:
+                family.start_l0x_continuous(self._bus, self.address)
+                if self._family == "unknown":
+                    try:
+                        family.start_l1x(self._bus, self.address)
+                    except Exception:
+                        pass
+                    log.warn(f"{self.name}: silicon ID unknown — "
+                             f"applied both triggers")
+                else:
+                    log.info(f"{self.name}: VL53L0X silicon detected — "
+                             f"ranging started (continuous)")
         except Exception as e:
             log.warn(f"{self.name}: start measurement failed - {e}")
 
@@ -344,22 +357,20 @@ class VL53L0X(SensorBase, FilteredSensorMixin):
                 # Block read 12 bytes from result register 0x00; bytes 10-11
                 # contain the 16-bit range measurement in millimetres (MSB, LSB).
                 data = self._bus.read_i2c_block_data(self.address, 0x00, 12)
-                range_mm = (data[10] << 8) | data[11]
-                if range_mm == 0:
-                    # Some clone modules (and mislabelled VL53L1X boards)
-                    # place the range at bytes 14-15 instead. Check that
-                    # layout before assuming a zero reading.
-                    data17 = self._bus.read_i2c_block_data(
-                        self.address, 0x00, 17)
-                    range_mm = (data17[14] << 8) | data17[15]
-                if range_mm == 0:
-                    # Continuous mode may not have started on this clone —
-                    # fire a single-shot measurement and re-read once.
-                    self._bus.write_byte_data(self.address, 0x00, 0x01)
+                l0x_mm = (data[10] << 8) | data[11]
+                range_mm = family.pick_range(
+                    self._bus, self.address, l0x_mm, self._family)
+                if range_mm is None:
+                    # Continuous mode may still be warming up (first
+                    # measurement ~30 ms) — wait once and re-read.
                     time.sleep(0.03)
                     data = self._bus.read_i2c_block_data(
                         self.address, 0x00, 12)
-                    range_mm = (data[10] << 8) | data[11]
+                    range_mm = family.pick_range(
+                        self._bus, self.address,
+                        (data[10] << 8) | data[11], self._family)
+                if range_mm is None:
+                    return 0.0
                 return float(range_mm)
             except Exception as e:
                 # Transient I2C errors (Errno 5 NACK, Errno 121 remote I/O)
