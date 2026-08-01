@@ -143,6 +143,7 @@ class VL53L1X(SensorBase, FilteredSensorMixin):
                     f"0x{self.address:02X} (check wiring, XSHUT pin and "
                     f"I2C address)")
             self._device = True
+            self._start_measurement()
             log.info(f"{self.name}: VL53L1X @ 0x{self.address:02X} initialized")
         except Exception as e:
             log.error(f"{self.name}: init failed - {e}")
@@ -251,22 +252,58 @@ class VL53L1X(SensorBase, FilteredSensorMixin):
             log.warn(f"{self.name}: chip not found at 0x{self.address:02X} "
                      f"or 0x{self.address << 1:02X} after write")
 
+    def _start_measurement(self):
+        """
+        Start ranging with triggers for BOTH chip families.
+
+        The module configured as VL53L1X may in fact be a VL53L0X-clone
+        (the raw-address behaviour proves the two modules share firmware
+        quirks). A freshly powered ToF does not measure by itself, so:
+
+          1. Write the VL53L0X free-running continuous sequence — on a
+             genuine VL53L1X these registers (0x80/0xFF/0x91) are
+             reserved/read-only, so it is a safe no-op; on a clone it
+             starts real measurement.
+          2. Write the VL53L1X SYSTEM__MODE_START (0x20 = 0x01) — starts
+             ranging on a genuine VL53L1X; on a VL53L0X-clone it only
+             lowers the (unused) signal limit register.
+
+        Best-effort: failures are logged, never raised.
+        """
+        try:
+            self._bus.write_byte_data(self.address, 0x80, 0x01)
+            self._bus.write_byte_data(self.address, 0xFF, 0x01)
+            self._bus.write_byte_data(self.address, 0x00, 0x00)
+            try:
+                sv = self._bus.read_byte_data(self.address, 0x91)
+            except Exception:
+                sv = 0x00
+            self._bus.write_byte_data(self.address, 0x91, sv)
+            self._bus.write_byte_data(self.address, 0x00, 0x01)
+            self._bus.write_byte_data(self.address, 0xFF, 0x00)
+            self._bus.write_byte_data(self.address, 0x80, 0x00)
+            self._bus.write_byte_data(self.address, 0x00, 0x02)
+            self._bus.write_byte_data(self.address, 0x20, 0x01)
+            time.sleep(0.05)
+            log.info(f"{self.name}: ranging started (dual trigger)")
+        except Exception as e:
+            log.warn(f"{self.name}: start measurement failed - {e}")
+
     def read_raw(self):
         """
         Read raw range + status from the sensor.
 
         Protocol:
           1. Block read 17 bytes from register 0x00.
-          2. Bytes 14–15: 16-bit range in millimetres.
-          3. Byte 16: Range status.
-             - 0 = measurement valid.
-             - Non-zero = signal too low, sigma estimator too high,
-               wrap-around detected, or other error.
+          2. Bytes 14-15: 16-bit range in millimetres (VL53L1X layout).
+             Bytes 10-11: 16-bit range in millimetres (VL53L0X layout —
+             used when the 'VL53L1X' module is actually a VL53L0X clone).
+          3. Byte 16: range status (VL53L1X layout); 0 = valid.
 
         The status check is critical: unlike the VL53L0X, the VL53L1X
         will return 0 or a garbage value when the target is out of range.
-        We return None if status != 0 so the control loop does not act
-        on invalid data.
+        We return None if no layout yields a valid reading, so the
+        control loop does not act on invalid data.
 
         Mock mode: returns random values in [100, 3000] mm.
         """
@@ -275,6 +312,28 @@ class VL53L1X(SensorBase, FilteredSensorMixin):
             return random.uniform(100, 3000)
         if not self._device:
             return None
+        last_error = None
+        for attempt in range(3):
+            try:
+                # Block read 17 bytes from result register 0x00; bytes 14-15
+                # hold the 16-bit range (mm) on a VL53L1X, bytes 10-11 on a
+                # VL53L0X, byte 16 holds the range status on a VL53L1X.
+                data = self._bus.read_i2c_block_data(self.address, 0x00, 17)
+                l1x_mm = (data[14] << 8) | data[15]
+                l0x_mm = (data[10] << 8) | data[11]
+                status = data[16]
+                if l1x_mm > 0 and status == 0:
+                    return float(l1x_mm)
+                if l0x_mm > 0:
+                    return float(l0x_mm)
+                return None
+            except Exception as e:
+                # Transient I2C errors (Errno 5 NACK, Errno 121 remote I/O)
+                # are common when another sensor holds the bus; retry briefly.
+                last_error = e
+                time.sleep(0.005)
+        self._log_error(f"read error - {last_error}")
+        return None
         last_error = None
         for attempt in range(3):
             try:

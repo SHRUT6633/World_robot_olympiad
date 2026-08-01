@@ -155,6 +155,7 @@ class VL53L0X(SensorBase, FilteredSensorMixin):
                     f"0x{self.address:02X} (check wiring, XSHUT pin and "
                     f"I2C address)")
             self._device = True
+            self._start_measurement()
             log.info(f"{self.name}: VL53L0X @ 0x{self.address:02X} initialized")
         except Exception as e:
             log.error(f"{self.name}: init failed - {e}")
@@ -279,6 +280,37 @@ class VL53L0X(SensorBase, FilteredSensorMixin):
             log.warn(f"{self.name}: chip not found at 0x{self.address:02X} "
                      f"or 0x{self.address << 1:02X} after write")
 
+    def _start_measurement(self):
+        """
+        Start free-running continuous ranging (Pololu sequence).
+
+        A freshly powered VL53L0X does NOT measure by itself — the result
+        registers stay 0 until the host starts the measurement. This writes
+        the standard ST sequence (with the stop_variable read-back) and then
+        puts the sensor into free-running continuous mode (reg 0x00 = 0x02),
+        so every later read returns a fresh distance.
+
+        Best-effort: if a write fails (some clones differ), we log and
+        continue — the read path falls back to re-triggering single-shot.
+        """
+        try:
+            self._bus.write_byte_data(self.address, 0x80, 0x01)
+            self._bus.write_byte_data(self.address, 0xFF, 0x01)
+            self._bus.write_byte_data(self.address, 0x00, 0x00)
+            try:
+                sv = self._bus.read_byte_data(self.address, 0x91)
+            except Exception:
+                sv = 0x00
+            self._bus.write_byte_data(self.address, 0x91, sv)
+            self._bus.write_byte_data(self.address, 0x00, 0x01)
+            self._bus.write_byte_data(self.address, 0xFF, 0x00)
+            self._bus.write_byte_data(self.address, 0x80, 0x00)
+            self._bus.write_byte_data(self.address, 0x00, 0x02)
+            time.sleep(0.05)
+            log.info(f"{self.name}: ranging started (continuous)")
+        except Exception as e:
+            log.warn(f"{self.name}: start measurement failed - {e}")
+
     def read_raw(self):
         """
         Read the raw distance measurement from the sensor.
@@ -313,6 +345,21 @@ class VL53L0X(SensorBase, FilteredSensorMixin):
                 # contain the 16-bit range measurement in millimetres (MSB, LSB).
                 data = self._bus.read_i2c_block_data(self.address, 0x00, 12)
                 range_mm = (data[10] << 8) | data[11]
+                if range_mm == 0:
+                    # Some clone modules (and mislabelled VL53L1X boards)
+                    # place the range at bytes 14-15 instead. Check that
+                    # layout before assuming a zero reading.
+                    data17 = self._bus.read_i2c_block_data(
+                        self.address, 0x00, 17)
+                    range_mm = (data17[14] << 8) | data17[15]
+                if range_mm == 0:
+                    # Continuous mode may not have started on this clone —
+                    # fire a single-shot measurement and re-read once.
+                    self._bus.write_byte_data(self.address, 0x00, 0x01)
+                    time.sleep(0.03)
+                    data = self._bus.read_i2c_block_data(
+                        self.address, 0x00, 12)
+                    range_mm = (data[10] << 8) | data[11]
                 return float(range_mm)
             except Exception as e:
                 # Transient I2C errors (Errno 5 NACK, Errno 121 remote I/O)
