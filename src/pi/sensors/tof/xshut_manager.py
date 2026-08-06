@@ -16,6 +16,10 @@ except ImportError:
     # On non-RPi platforms (Windows/macOS for dev), GPIO is unavailable.
     GPIO_AVAILABLE = False
 
+# Power settle after an XSHUT pin is raised (proven timing from the
+# working standalone code — must not be reduced).
+POWER_DELAY = 0.125
+
 # Every XSHUT pin registered by any ToF driver. Used so that while one
 # sensor is being programmed at the factory-default address (0x29), ALL
 # other sensors are held in hardware reset — otherwise the address write
@@ -47,6 +51,36 @@ def hold_all_other_low(own_pin):
     return held
 
 
+def set_all_off():
+    # Turn EVERY registered XSHUT pin OFF (hardware reset for all ToF
+    # sensors at once). Used at the start of init so no sensor can see
+    # another's address write. Returns a list of (pin, OutputDevice)
+    # handles to release later.
+    held = []
+    if not GPIO_AVAILABLE:
+        return held
+    for p in _registered_pins:
+        try:
+            dev = OutputDevice(p, initial_value=False)
+            held.append((p, dev))
+        except Exception:
+            pass
+    return held
+
+
+def close_all(held):
+    # Close OutputDevice handles WITHOUT powering the sensors back on
+    # (they stay in reset). Frees the GPIO ownership so the per-sensor
+    # init() can take the pins over with hold_all_other_low().
+    if not GPIO_AVAILABLE:
+        return
+    for _, dev in held:
+        try:
+            dev.close()
+        except Exception:
+            pass
+
+
 def release(held):
     # Power the held sensors back on. They keep the unique address that
     # was programmed during their own init() (addresses are retained in
@@ -56,7 +90,7 @@ def release(held):
     for p, dev in held:
         try:
             dev.on()
-            time.sleep(0.01)
+            time.sleep(POWER_DELAY)
             dev.close()
         except Exception:
             pass

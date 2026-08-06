@@ -1012,6 +1012,9 @@ void app_main(void) {
      * app_main returns, FreeRTOS will trigger an assertion (or idle task
      * hook) that typically resets the chip. */
     while (1) {
+        /* The main task was subscribed to the TWDT in watchdog_init();
+         * it must reset its own subscription or the watchdog fires. */
+        esp_task_wdt_reset();
         vTaskDelay(pdMS_TO_TICKS(1000));  /* Sleep for 1 second, repeat forever */
     }
 }

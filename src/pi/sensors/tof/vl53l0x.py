@@ -12,6 +12,9 @@ from ...system.logger import log
 from . import xshut_manager
 from . import family
 
+POWER_DELAY = 0.125      # s — settle time after powering a sensor via XSHUT
+ADDRESS_DELAY = 0.0625   # s — settle time after an I2C address write
+
 
 class VL53L0X(SensorBase, FilteredSensorMixin):
     """
@@ -129,7 +132,7 @@ class VL53L0X(SensorBase, FilteredSensorMixin):
                     # Release ONLY this sensor.
                     self._xshut = xshut_manager.OutputDevice(
                         self.xshut_pin, initial_value=True)
-                    time.sleep(0.05)
+                    time.sleep(POWER_DELAY)
                     self._program_address()
                 finally:
                     # Power the other sensors back on (they keep their own
@@ -258,7 +261,7 @@ class VL53L0X(SensorBase, FilteredSensorMixin):
         try:
             # Register 0x8A: I2C slave address. Write address << 1 (8-bit format).
             self._bus.write_byte_data(current, 0x8A, self.address << 1)
-            time.sleep(0.01)
+            time.sleep(ADDRESS_DELAY)
         except Exception as e:
             log.warn(f"{self.name}: address programming failed - {e}")
             return
@@ -272,7 +275,7 @@ class VL53L0X(SensorBase, FilteredSensorMixin):
             try:
                 self._bus.write_byte_data(
                     self.address << 1, 0x8A, self.address)
-                time.sleep(0.01)
+                time.sleep(ADDRESS_DELAY)
             except Exception as e:
                 log.warn(f"{self.name}: clone address programming failed - {e}")
                 return

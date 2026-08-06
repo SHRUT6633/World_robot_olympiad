@@ -34,6 +34,7 @@ log.init()
 
 from pi.sensors.tof.vl53l0x import VL53L0X
 from pi.sensors.tof.vl53l1x import VL53L1X
+from pi.sensors.tof import xshut_manager
 from pi.sensors.imu.mpu6050 import MPU6050
 from pi.comm.uart import UARTCommunicator
 
@@ -74,16 +75,19 @@ SIDE_ESCAPE_MM = 250            # steer away when a side gap opens this wide
 
 
 def connect_esp32():
+    # Keep trying until the connection is established. Never give up and
+    # never continue into the sensor phase without the ESP32 link.
     uart = UARTCommunicator(port=UART_PORT, baudrate=UART_BAUD)
-    uart.init()
-    for attempt in range(3):
+    attempt = 0
+    while True:
+        attempt += 1
+        uart.init()
         if uart._serial is not None:
-            log.info(f"ESP32 Connected (attempt {attempt + 1})")
+            log.info(f"ESP32 Connected (attempt {attempt})")
             return uart
-        log.warn(f"ESP32 connection attempt {attempt + 1}/3 failed, retrying...")
+        log.warn(f"ESP32 connection attempt {attempt} failed, retrying...")
+        uart.close()
         time.sleep(POWER_DELAY)
-    log.warn("ESP32 NOT connected — running with UART disabled")
-    return uart
 
 
 def clamp_servo(angle):
@@ -106,12 +110,29 @@ def main():
                   gyro_range=500)
     uart = connect_esp32()
 
+    # ---- ToF init: FIRST all OFF, THEN one by one ----
+    # Every sensor starts in hardware reset so no address write is ever
+    # seen by a sensor that is not being programmed.
+    log.info("ToF init: turning ALL sensors OFF (XSHUT low)")
+    held_all = xshut_manager.set_all_off()
+    time.sleep(POWER_DELAY)
+
+    # Front: power ON -> give address 0x30 -> start measuring -> take data
+    xshut_manager.close_all(held_all)
     front.init()
     time.sleep(POWER_DELAY)
+    log.info(f"Front first read: {front.read()} mm")
+
+    # Left: power ON -> give address 0x31 -> start measuring -> take data
     left.init()
     time.sleep(POWER_DELAY)
+    log.info(f"Left first read: {left.read()} mm")
+
+    # Right: power ON -> give address 0x32 -> start measuring -> take data
     right.init()
     time.sleep(POWER_DELAY)
+    log.info(f"Right first read: {right.read()} mm")
+
     imu.init()
 
     log.info("=" * 50)
