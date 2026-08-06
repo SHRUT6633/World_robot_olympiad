@@ -36,7 +36,6 @@ from pi.sensors.tof.vl53l0x import VL53L0X
 from pi.sensors.tof.vl53l1x import VL53L1X
 from pi.sensors.imu.mpu6050 import MPU6050
 from pi.comm.uart import UARTCommunicator
-from pi.comm.protocol import Packet
 
 # -----------------------------------------------------------------------------
 # Proven timing constants (unchanged from the working standalone code)
@@ -153,8 +152,7 @@ def main():
 
             servo = clamp_servo(servo)
 
-            pkt = Packet.make_steering_command(uart._tx_counter, servo, speed)
-            uart.send(pkt)
+            uart.send_steering(servo, speed)
 
             log.info(f"front={d_front:6.0f}mm left={d_left:6.0f}mm "
                      f"right={d_right:6.0f}mm yaw={yaw_rate:7.2f} "
