@@ -34,9 +34,16 @@ log.init()
 
 from pi.sensors.tof.vl53l0x import VL53L0X
 from pi.sensors.tof.vl53l1x import VL53L1X
-from pi.sensors.tof import xshut_manager
 from pi.sensors.imu.mpu6050 import MPU6050
 from pi.comm.uart import UARTCommunicator
+
+# GPIO output used to power/address the ToF sensors one at a time, exactly
+# like the proven standalone code (other/history/v3.4/read_tof.py).
+try:
+    from gpiozero import OutputDevice
+    GPIO_AVAILABLE = True
+except ImportError:
+    GPIO_AVAILABLE = False
 
 # -----------------------------------------------------------------------------
 # Proven timing constants (unchanged from the working standalone code)
@@ -114,43 +121,65 @@ def clamp_servo(angle):
 
 
 def main():
-    # Construct ALL sensors first: each registers its XSHUT pin with the
-    # shared manager, so the address programming of one sensor can hold
-    # every other sensor in hardware reset. Timing between the steps below
-    # keeps the proven POWER_DELAY / ADDRESS_DELAY pacing.
-    front = VL53L1X("VL53L1X_Front", bus=I2C_BUS, address=FRONT_ADDRESS,
-                    xshut_pin=FRONT_XSHUT)
-    left = VL53L0X("VL53L0X_Left", bus=I2C_BUS, address=LEFT_ADDRESS,
-                   xshut_pin=LEFT_XSHUT)
-    right = VL53L0X("VL53L0X_Right", bus=I2C_BUS, address=RIGHT_ADDRESS,
-                    xshut_pin=RIGHT_XSHUT)
+    # ---- ToF init: FIRST all OFF, THEN one by one ----
+    # This is the EXACT sequence from the proven code
+    # (other/history/v3.4/read_tof.py): every XSHUT pin starts LOW (all
+    # sensors in reset), then each sensor is powered ON one at a time,
+    # given its unique I2C address, and starts measuring.
+    #
+    # We bypass the driver-init internal hold/release (which re-opens GPIO
+    # pins and lets them float). Instead the pins stay driven by gpiozero
+    # OutputDevice handles for the whole run — the proven one-at-a-time
+    # pattern.
+    if GPIO_AVAILABLE:
+        log.info("ToF init: turning ALL sensors OFF (XSHUT low)")
+        xshut_f = OutputDevice(FRONT_XSHUT, initial_value=False)
+        xshut_l = OutputDevice(LEFT_XSHUT, initial_value=False)
+        xshut_r = OutputDevice(RIGHT_XSHUT, initial_value=False)
+        time.sleep(POWER_DELAY)
+
+        # Front (VL53L1X): power ON -> address 0x30 -> start -> read
+        xshut_f.on()
+        time.sleep(POWER_DELAY)
+        front = VL53L1X("VL53L1X_Front", bus=I2C_BUS, address=FRONT_ADDRESS,
+                        xshut_pin=None)
+        front.init()
+        time.sleep(POWER_DELAY)
+        log.info(f"Front first read: {front.read()} mm")
+
+        # Left (VL53L0X): power ON -> address 0x31 -> start -> read
+        xshut_l.on()
+        time.sleep(POWER_DELAY)
+        left = VL53L0X("VL53L0X_Left", bus=I2C_BUS, address=LEFT_ADDRESS,
+                       xshut_pin=None)
+        left.init()
+        time.sleep(POWER_DELAY)
+        log.info(f"Left first read: {left.read()} mm")
+
+        # Right (VL53L0X): power ON -> address 0x32 -> start -> read
+        xshut_r.on()
+        time.sleep(POWER_DELAY)
+        right = VL53L0X("VL53L0X_Right", bus=I2C_BUS, address=RIGHT_ADDRESS,
+                        xshut_pin=None)
+        right.init()
+        time.sleep(POWER_DELAY)
+        log.info(f"Right first read: {right.read()} mm")
+    else:
+        # No GPIO (dev box): construct sensors with pins so drivers can at
+        # least try their internal sequence.
+        front = VL53L1X("VL53L1X_Front", bus=I2C_BUS, address=FRONT_ADDRESS,
+                        xshut_pin=FRONT_XSHUT)
+        left = VL53L0X("VL53L0X_Left", bus=I2C_BUS, address=LEFT_ADDRESS,
+                       xshut_pin=LEFT_XSHUT)
+        right = VL53L0X("VL53L0X_Right", bus=I2C_BUS, address=RIGHT_ADDRESS,
+                        xshut_pin=RIGHT_XSHUT)
+        front.init()
+        left.init()
+        right.init()
+
     imu = MPU6050(bus=I2C_BUS, address=IMU_ADDRESS, accel_range=4,
                   gyro_range=500)
     uart = connect_esp32()
-
-    # ---- ToF init: FIRST all OFF, THEN one by one ----
-    # Every sensor starts in hardware reset so no address write is ever
-    # seen by a sensor that is not being programmed.
-    log.info("ToF init: turning ALL sensors OFF (XSHUT low)")
-    held_all = xshut_manager.set_all_off()
-    time.sleep(POWER_DELAY)
-
-    # Front: power ON -> give address 0x30 -> start measuring -> take data
-    xshut_manager.close_all(held_all)
-    front.init()
-    time.sleep(POWER_DELAY)
-    log.info(f"Front first read: {front.read()} mm")
-
-    # Left: power ON -> give address 0x31 -> start measuring -> take data
-    left.init()
-    time.sleep(POWER_DELAY)
-    log.info(f"Left first read: {left.read()} mm")
-
-    # Right: power ON -> give address 0x32 -> start measuring -> take data
-    right.init()
-    time.sleep(POWER_DELAY)
-    log.info(f"Right first read: {right.read()} mm")
-
     imu.init()
 
     log.info("=" * 50)
