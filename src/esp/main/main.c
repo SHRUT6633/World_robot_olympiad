@@ -42,6 +42,7 @@
 #include "freertos/task.h"          /* xTaskCreate, vTaskDelay — needed for all background tasks */
 #include "esp_log.h"                /* ESP_LOGI, ESP_LOGW, ESP_LOGE — tagged logging over USB/JTAG */
 #include "driver/uart.h"            /* UART driver — uart_param_config, uart_read_bytes, etc. */
+#include "driver/usb_serial_jtag.h" /* Native USB CDC-ACM — protocol over USB cable */
 #include "driver/gpio.h"            /* GPIO driver — gpio_config, gpio_set_level */
 #include "driver/ledc.h"            /* LEDC PWM driver — used by servo_pwm.c / l298n.c for PWM generation */
 #include "esp_timer.h"              /* esp_timer_get_time() — microsecond-resolution timer for timeouts and uptime */
@@ -403,10 +404,10 @@ static void led_blue(void)      { led_both_on(); }  /* Alias: "blue" = both LEDs
  * so that the protocol traffic is completely separate from debug output.
  * --------------------------------------------------------------------------- */
 
-#define UART_PORT_NUM      UART_NUM_1  /* UART peripheral index.  Must not
-                                         * conflict with UART_NUM_0 (console).
-                                         * If changed, re-check pin
-                                         * assignments. */
+#define UART_PORT_NUM      UART_NUM_0  /* UART peripheral index.  UART0 (GPIO43/44)
+                                         * is wired to the board's USB-UART bridge
+                                         * (CH343) — so the protocol now runs over
+                                         * the USB cable instead of GPIO RX/TX. */
 #define UART_BAUD_RATE     115200      /* Bit rate in bits per second.  Must
                                          * match the Pi's baudrate exactly.
                                          * Common alternative: 921600 for lower
@@ -421,14 +422,10 @@ static void led_blue(void)      { led_both_on(); }  /* Alias: "blue" = both LEDs
                                          * Increase if the Pi sends bursts of
                                          * packets faster than the RX task can
                                          * consume them (unlikely at 115200). */
-#define UART_TX_GPIO       17          /* UART1 TX pin (ESP → Pi).  Ensure
-                                         * this GPIO is not used by PSRAM,
-                                         * flash, or other peripherals.
-                                         * GPIO17 is a safe general-purpose I/O
-                                         * on ESP32-S3. */
-#define UART_RX_GPIO       18          /* UART1 RX pin (Pi → ESP).  Same
-                                         * constraints as TX.  If swapped, no
-                                         * data will arrive. */
+#define UART_TX_GPIO       43          /* UART0 TX pin (ESP → USB bridge).
+                                         * Default GPIO43 on ESP32-S3. */
+#define UART_RX_GPIO       44          /* UART0 RX pin (USB bridge → ESP).
+                                         * Default GPIO44 on ESP32-S3. */
 
 /* ---------------------------------------------------------------------------
  * UART initialisation
@@ -456,6 +453,19 @@ static void uart_init(void) {
     uart_set_pin(UART_PORT_NUM, UART_TX_GPIO, UART_RX_GPIO, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
     uart_driver_install(UART_PORT_NUM, UART_BUF_SIZE, UART_BUF_SIZE, 0, NULL, 0);
     ESP_LOGI(TAG, "UART initialized: %d baud", UART_BAUD_RATE);
+
+    /* Also expose the protocol on the native USB Serial/JTAG (ttyACM0).
+     * This lets the Pi talk over a USB cable with no extra driver (CDC-ACM
+     * is built into every Linux kernel), in addition to the CH343 bridge on
+     * UART0 (ttyUSB0). Both transports carry the same packet stream. */
+    usb_serial_jtag_driver_config_t usj_cfg = {
+        .tx_buffer_size = UART_BUF_SIZE,
+        .rx_buffer_size = UART_BUF_SIZE,
+    };
+    if (usb_serial_jtag_driver_install(&usj_cfg) != ESP_OK) {
+        ESP_LOGW(TAG, "USB Serial/JTAG already in use (skipping)");
+    }
+    ESP_LOGI(TAG, "USB Serial/JTAG ready: protocol on ttyACM0 + UART0");
 }
 
 /* ============================================================================
@@ -500,6 +510,9 @@ static void send_packet(uint8_t msg_type, const uint8_t *payload, uint8_t len) {
      * in the DMA buffer.  For short packets this is effectively instant
      * at 115200 baud (~280 µs for 32 bytes). */
     uart_write_bytes(UART_PORT_NUM, (const char*)buf, idx);
+    /* Mirror the same packet over the native USB Serial/JTAG (ttyACM0) so
+     * the Pi can receive it over a USB cable. */
+    usb_serial_jtag_write_bytes(buf, idx, pdMS_TO_TICKS(10));
     g_state.packets_sent++;                   /* Diagnostic counter */
 }
 
@@ -698,6 +711,11 @@ static void uart_rx_task(void *arg) {
          * If the UART baud rate were increased to 921600, the timeout might
          * need to be reduced to avoid falling behind the hardware FIFO. */
         int len = uart_read_bytes(UART_PORT_NUM, rx_buf, UART_BUF_SIZE, pdMS_TO_TICKS(10));
+        if (len <= 0) {
+            /* Nothing on UART0/CH343 — also check the native USB CDC-ACM
+             * port (ttyACM0), so the Pi can drive the robot over USB. */
+            len = usb_serial_jtag_read_bytes(rx_buf, UART_BUF_SIZE, pdMS_TO_TICKS(10));
+        }
         if (len > 0) {
             /* Iterate over every received byte */
             for (int i = 0; i < len; i++) {

@@ -16,13 +16,11 @@
 static const char *TAG = "UART_RX";
 
 /* UART port number used for receiving packets from the remote
- * controller / Raspberry Pi. UART_NUM_1 corresponds to the
- * ESP32's second UART (typically GPIO 9 / GPIO 10 or remapped).
- *
- * If the board uses a different UART (e.g. UART_NUM_0 for console),
- * change this variable accordingly.
+ * controller / Raspberry Pi. UART_NUM_0 corresponds to the
+ * ESP32-S3's first UART (GPIO43/44), wired to the board's USB-UART
+ * bridge (CH343) — the protocol now travels over the USB cable.
  */
-static int s_uart_port = UART_NUM_1;
+static int s_uart_port = UART_NUM_0;
 
 /* uart_receiver_init
  * Logs that the UART receiver is ready.

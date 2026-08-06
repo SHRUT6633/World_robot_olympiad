@@ -57,8 +57,13 @@ RIGHT_XSHUT = 27
 IMU_ADDRESS = 0x68
 I2C_BUS = 1
 
-UART_PORT = "/dev/serial0"
+UART_PORT = "/dev/ttyACM0"
 UART_BAUD = 115200
+
+# Candidate USB serial devices for the ESP32.  /dev/ttyACM0 is the
+# ESP32-S3's native USB CDC-ACM port; /dev/ttyUSB0 is the CH343 bridge
+# on the board.  The first one that opens is used.
+UART_PORT_CANDIDATES = ["/dev/ttyACM0", "/dev/ttyUSB0", "/dev/serial0"]
 
 # -----------------------------------------------------------------------------
 # Drive parameters
@@ -82,22 +87,24 @@ def connect_esp32():
     fix_shown = False
     while True:
         attempt += 1
-        uart.init()
-        if uart._serial is not None:
-            log.info(f"ESP32 Connected (attempt {attempt})")
-            return uart
-        err = uart._last_error
-        if err is not None and not fix_shown:
-            fix_shown = True
-            if "Permission denied" in str(err):
-                log.warn("UART permission fix (run once on the Pi):")
-                log.warn("  sudo usermod -a -G dialout $USER")
-                log.warn("  sudo reboot")
-                log.warn("Or run this script with:  sudo python3 -m pi.simple_main")
-            else:
-                log.warn(f"UART error: {err}")
+        for port in UART_PORT_CANDIDATES:
+            uart.port = port
+            uart.init()
+            if uart._serial is not None:
+                log.info(f"ESP32 Connected (attempt {attempt}) on {port}")
+                return uart
+            err = uart._last_error
+            if err is not None and not fix_shown:
+                fix_shown = True
+                if "Permission denied" in str(err):
+                    log.warn("UART permission fix (run once on the Pi):")
+                    log.warn("  sudo usermod -a -G dialout $USER")
+                    log.warn("  sudo reboot")
+                    log.warn("Or run this script with:  sudo python3 -m pi.simple_main")
+                else:
+                    log.warn(f"UART error: {err}")
+            uart.close()
         log.warn(f"ESP32 connection attempt {attempt} failed, retrying...")
-        uart.close()
         time.sleep(POWER_DELAY)
 
 
