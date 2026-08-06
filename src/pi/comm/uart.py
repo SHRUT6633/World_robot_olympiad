@@ -20,6 +20,7 @@ class UARTCommunicator:
         self.baudrate = baudrate  # Communication speed in baud
         self.timeout = timeout_ms / 1000.0  # Read/write timeout in seconds
         self._serial = None       # pyserial Serial object (None until init() succeeds)
+        self._last_error = None   # Last init() exception (or None on success)
         self._running = False     # Whether the communicator is active
         self._tx_counter = 0      # Outgoing packet counter (increments per send, wraps at 256)
         self._rx_counter = 0      # Incoming packet counter
@@ -41,8 +42,10 @@ class UARTCommunicator:
                 timeout=self.timeout,
                 write_timeout=self.timeout,
             )
+            self._last_error = None
             log.info(f"UART: {self.port} @ {self.baudrate} baud")
         except Exception as e:
+            self._last_error = e
             log.warn(f"UART init failed: {e}")
 
     def send(self, pkt: Packet):

@@ -79,12 +79,23 @@ def connect_esp32():
     # never continue into the sensor phase without the ESP32 link.
     uart = UARTCommunicator(port=UART_PORT, baudrate=UART_BAUD)
     attempt = 0
+    fix_shown = False
     while True:
         attempt += 1
         uart.init()
         if uart._serial is not None:
             log.info(f"ESP32 Connected (attempt {attempt})")
             return uart
+        err = uart._last_error
+        if err is not None and not fix_shown:
+            fix_shown = True
+            if "Permission denied" in str(err):
+                log.warn("UART permission fix (run once on the Pi):")
+                log.warn("  sudo usermod -a -G dialout $USER")
+                log.warn("  sudo reboot")
+                log.warn("Or run this script with:  sudo python3 -m pi.simple_main")
+            else:
+                log.warn(f"UART error: {err}")
         log.warn(f"ESP32 connection attempt {attempt} failed, retrying...")
         uart.close()
         time.sleep(POWER_DELAY)
